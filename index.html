@@ -206,7 +206,7 @@ a{color:var(--accent)}
   <div class="stack">
     <button class="btn btn-primary" id="b-go">Iniciar gravação</button>
   </div>
-  <p class="hint">O botão de replay salva os últimos segundos <b>antes</b> do toque — nunca depois.</p>
+  <p class="hint">O botão de replay salva os últimos segundos <b>antes</b> do toque — nunca depois. O vídeo pode vir com alguns segundos extras no início, mas o lance fica sempre no final.</p>
 </section>
 
 <!-- GRAVAÇÃO -->
@@ -426,19 +426,22 @@ function teardownPool(){
   state.pool = [];
 }
 
-/* Agendador: garante sempre um gravador "novo" a cada X segundos
-   e descarta o mais antigo quando o segundo já cobre a janela.   */
+/* Agendador: um gravador novo a cada X/2 segundos.
+   Isso mantém até 3 gravadores defasados e garante que o mais
+   antigo tenha entre X e 1,5X de história — o clipe salvo fica
+   no máximo 50% acima do tempo escolhido, nunca o dobro.       */
 function startScheduler(){
   clearInterval(state.schedId);
   state.schedId = setInterval(() => {
     if (!state.active || !state.stream) return;
     const now = Date.now();
     const X = state.duration * 1000;
+    const R = X / 2;                                   // passo de rotação
     if (!state.pool.length){ spawnRecorder(); return; }
     const newest = state.pool[state.pool.length - 1];
-    if (now - newest.start >= X) spawnRecorder();
+    if (now - newest.start >= R) spawnRecorder();
     while (state.pool.length > 2 && now - state.pool[1].start >= X) discard(state.pool[0]);
-  }, 500);
+  }, 400);
 }
 
 /* ---------- timer + anel de buffer ---------- */
