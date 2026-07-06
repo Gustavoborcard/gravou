@@ -101,34 +101,34 @@ h2{font-size:24px;font-weight:800;letter-spacing:-.01em}
 
 /* botão principal com anel de buffer (assinatura visual) */
 #btn-save{
-  position:fixed;z-index:6;left:50%;bottom:calc(28px + var(--safe-b));transform:translateX(-50%);
-  width:112px;height:112px;border-radius:50%;border:none;cursor:pointer;padding:5px;
+  position:fixed;z-index:6;left:50%;bottom:calc(26px + var(--safe-b));transform:translateX(-50%);
+  width:min(160px,42vw);height:min(160px,42vw);border-radius:50%;border:none;cursor:pointer;padding:6px;
   background:conic-gradient(var(--accent) calc(var(--buf,0)*1%), rgba(255,255,255,.18) 0);
   transition:transform .08s ease;
 }
 #btn-save:active{transform:translateX(-50%) scale(.94)}
 #btn-save .inner{
-  width:100%;height:100%;border-radius:50%;background:rgba(10,14,11,.72);backdrop-filter:blur(8px);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--text);
+  width:100%;height:100%;border-radius:50%;background:rgba(10,14,11,.74);backdrop-filter:blur(8px);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--text);
   position:relative;overflow:hidden;
 }
-#btn-save .rw{font-size:24px;line-height:1;color:var(--accent);font-weight:900}
-#btn-save .lbl{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
-#btn-save .secs{font-size:18px;font-weight:900;color:var(--accent)}
+#btn-save .rw{font-size:30px;line-height:1;color:var(--accent);font-weight:900}
+#btn-save .lbl{font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
+#btn-save .secs{font-size:24px;font-weight:900;color:var(--accent)}
 .ripple{position:absolute;border-radius:50%;background:rgba(255,197,61,.45);transform:scale(0);animation:rip .5s ease-out;pointer-events:none}
 @keyframes rip{to{transform:scale(3.2);opacity:0}}
 
 @media (orientation:landscape){
-  #btn-save{left:auto;right:calc(24px + env(safe-area-inset-right,0px));bottom:50%;transform:translateY(50%)}
+  #btn-save{left:auto;right:calc(22px + env(safe-area-inset-right,0px));bottom:50%;transform:translateY(50%);width:min(150px,34vh);height:min(150px,34vh)}
   #btn-save:active{transform:translateY(50%) scale(.94)}
   .rec-top{justify-content:flex-start;padding-left:calc(16px + env(safe-area-inset-left,0px))}
-  #btn-flip{top:auto;bottom:calc(24px + var(--safe-b));right:calc(54px + env(safe-area-inset-right,0px))}
+  #btn-flip{top:auto;bottom:calc(24px + var(--safe-b));right:calc(60px + env(safe-area-inset-right,0px))}
   #btn-end{top:calc(16px + var(--safe-t));left:auto;right:calc(16px + env(safe-area-inset-right,0px))}
 }
 
 /* ---- toast ---- */
 #toast{
-  position:fixed;left:50%;transform:translateX(-50%) translateY(20px);bottom:calc(160px + var(--safe-b));
+  position:fixed;left:50%;transform:translateX(-50%) translateY(20px);bottom:calc(205px + var(--safe-b));
   z-index:20;background:var(--surface-2);color:var(--text);border-radius:14px;padding:14px 20px;
   font-size:15px;font-weight:600;max-width:88vw;text-align:center;opacity:0;pointer-events:none;
   transition:opacity .25s ease, transform .25s ease;box-shadow:0 8px 30px rgba(0,0,0,.5);
@@ -258,30 +258,33 @@ a{color:var(--accent)}
 
 <script>
 /* =========================================================
-   Gravou — buffer circular de replay
-   O botão NÃO inicia gravação: apenas recorta os últimos X
-   segundos já capturados (start = toque − X ; end = toque).
+   Gravou v2 — gravadores alternados
+   Em vez de recortar pedaços (que gera arquivo inválido no
+   iOS), mantemos gravadores paralelos defasados. No toque,
+   finalizamos o mais antigo: o arquivo é completo, válido e
+   termina exatamente no momento do toque — nunca depois.
+   O clipe cobre pelo menos os últimos X segundos.
    ========================================================= */
 "use strict";
 
 const $ = id => document.getElementById(id);
 const DURATIONS = [10,15,20,30,45,60];
-const MAX_WINDOW = 60;            // maior janela possível (s)
 
 const state = {
   duration: 20,
-  facing: "user",                 // frontal por padrão
+  facing: "user",              // frontal por padrão
   stream: null,
-  recorder: null,
   mime: "",
-  ext: "webm",
-  chunks: [],                     // [{blob, t}]  — chunks[0] = header do contêiner
-  recStart: 0,                    // início do buffer atual (troca de câmera zera)
-  sessionStart: 0,                // início da sessão (timer do badge)
+  ext: "mp4",
+  pool: [],                    // gravadores ativos [{rec, stream, chunks, start}]
+  seq: 0,
+  schedId: null,
+  sessionStart: 0,
   timerId: null,
   wakeLock: null,
   saving: false,
-  replayCount: 0
+  replayCount: 0,
+  active: false
 };
 
 /* ---------- navegação entre telas ---------- */
@@ -355,9 +358,11 @@ function pickMime(){
   return ["", "webm"];
 }
 
-/* ---------- iniciar / stream ---------- */
+/* ---------- iniciar ---------- */
 async function startRecording(){
   updateDurLabels();
+  const [mime, ext] = pickMime();
+  state.mime = mime; state.ext = ext;
   try{
     await openStream(state.facing);
   }catch(err){
@@ -365,14 +370,17 @@ async function startRecording(){
     else show("s-nocam");
     return;
   }
+  state.active = true;
   state.sessionStart = Date.now();
+  startScheduler();
   startTimer();
   requestWakeLock();
   show("rec-screen");
 }
 
 async function openStream(facing){
-  stopRecorderAndStream();
+  teardownPool();
+  if (state.stream){ state.stream.getTracks().forEach(t => t.stop()); state.stream = null; }
   const stream = await navigator.mediaDevices.getUserMedia({
     video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
     audio: true
@@ -381,35 +389,56 @@ async function openStream(facing){
   const v = $("cam");
   v.srcObject = stream;
   v.classList.toggle("mirror", facing === "user");   // espelha só a frontal
-  startRecorder(stream);
+  spawnRecorder();                                   // primeiro gravador do buffer
 }
 
-function startRecorder(stream){
-  const [mime, ext] = pickMime();
-  state.mime = mime; state.ext = ext;
-  state.chunks = [];
-  state.recStart = Date.now();
-  const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
-  rec.ondataavailable = e => {
-    if (!e.data || !e.data.size) return;
-    state.chunks.push({ blob: e.data, t: Date.now() });
-    pruneChunks();
+/* ---------- pool de gravadores ---------- */
+function spawnRecorder(){
+  if (!state.stream) return;
+  const s = state.stream.clone();                    // cada gravador tem seu clone
+  let rec;
+  try{
+    rec = state.mime ? new MediaRecorder(s, { mimeType: state.mime }) : new MediaRecorder(s);
+  }catch(_){
+    rec = new MediaRecorder(s);
+  }
+  const item = { id: ++state.seq, rec, stream: s, chunks: [], start: Date.now(), mode: "buffer" };
+  rec.ondataavailable = e => { if (e.data && e.data.size) item.chunks.push(e.data); };
+  rec.onstop = () => {
+    item.stream.getTracks().forEach(t => t.stop());
+    if (item.mode === "save") finishSave(item);
+    item.chunks = [];
   };
   rec.onerror = () => toast("Não foi possível salvar", "err");
-  rec.start(1000);                 // 1 chunk por segundo
-  state.recorder = rec;
+  rec.start();                                       // sem timeslice: arquivo único e válido
+  state.pool.push(item);
 }
 
-function pruneChunks(){
-  // chunks[0] guarda o header do contêiner e nunca é removido
-  const cutoff = Date.now() - (MAX_WINDOW + 5) * 1000;
-  while (state.chunks.length > 2 && state.chunks[1].t < cutoff) state.chunks.splice(1, 1);
+function discard(item){
+  item.mode = "discard";
+  const i = state.pool.indexOf(item);
+  if (i >= 0) state.pool.splice(i, 1);
+  try{ if (item.rec.state !== "inactive") item.rec.stop(); }catch(_){}
 }
 
-function stopRecorderAndStream(){
-  try{ if (state.recorder && state.recorder.state !== "inactive") state.recorder.stop(); }catch(_){}
-  state.recorder = null;
-  if (state.stream){ state.stream.getTracks().forEach(t => t.stop()); state.stream = null; }
+function teardownPool(){
+  [...state.pool].forEach(discard);
+  state.pool = [];
+}
+
+/* Agendador: garante sempre um gravador "novo" a cada X segundos
+   e descarta o mais antigo quando o segundo já cobre a janela.   */
+function startScheduler(){
+  clearInterval(state.schedId);
+  state.schedId = setInterval(() => {
+    if (!state.active || !state.stream) return;
+    const now = Date.now();
+    const X = state.duration * 1000;
+    if (!state.pool.length){ spawnRecorder(); return; }
+    const newest = state.pool[state.pool.length - 1];
+    if (now - newest.start >= X) spawnRecorder();
+    while (state.pool.length > 2 && now - state.pool[1].start >= X) discard(state.pool[0]);
+  }, 500);
 }
 
 /* ---------- timer + anel de buffer ---------- */
@@ -419,8 +448,8 @@ function startTimer(){
     const s = Math.floor((Date.now() - state.sessionStart) / 1000);
     $("timer").textContent =
       String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
-    // anel: quanto do passado já está disponível para o replay
-    const avail = Math.min((Date.now() - state.recStart) / 1000, state.duration);
+    const oldest = state.pool[0];
+    const avail = oldest ? Math.min((Date.now() - oldest.start) / 1000, state.duration) : 0;
     $("btn-save").style.setProperty("--buf", (avail / state.duration) * 100);
   }, 250);
 }
@@ -457,40 +486,55 @@ function ripple(e){
   const rect = inner.getBoundingClientRect();
   const size = Math.max(rect.width, rect.height);
   r.style.width = r.style.height = size + "px";
-  r.style.left = (e.clientX - rect.left - size / 2) + "px";
-  r.style.top  = (e.clientY - rect.top  - size / 2) + "px";
+  r.style.left = ((e.clientX || rect.left + rect.width/2) - rect.left - size / 2) + "px";
+  r.style.top  = ((e.clientY || rect.top + rect.height/2) - rect.top  - size / 2) + "px";
   inner.appendChild(r);
   setTimeout(() => r.remove(), 550);
   vibrate(60);
 }
 function vibrate(ms){ try{ navigator.vibrate && navigator.vibrate(ms); }catch(_){} }
 
-async function saveReplay(){
-  if (state.saving) return;                    // evita toques duplos durante o share
-  const tapAt = Date.now();                    // fim do replay = momento do toque
-  const cutoff = tapAt - state.duration * 1000;
-
-  // recorta apenas o que existe ANTES do toque
-  const parts = state.chunks
-    .filter((c, i) => c.t <= tapAt && (i === 0 || c.t >= cutoff))
-    .map(c => c.blob);
-
-  if (!parts.length){ toast("Ainda não há vídeo para salvar", "err"); return; }
+function saveReplay(){
+  if (state.saving){ return; }                 // um replay por vez
+  const oldest = state.pool[0];
+  if (!oldest){ toast("Ainda não há vídeo para salvar", "err"); return; }
 
   state.saving = true;
   toast("Salvando replay…", "info", 0);
-  state.replayCount++;
 
+  // finaliza o gravador mais antigo NO MOMENTO do toque:
+  // o arquivo termina aqui — nada depois do toque entra no vídeo
+  oldest.mode = "save";
+  const i = state.pool.indexOf(oldest);
+  if (i >= 0) state.pool.splice(i, 1);
+  try{
+    oldest.rec.stop();                         // onstop → finishSave(item)
+  }catch(_){
+    state.saving = false;
+    toast("Não foi possível salvar", "err");
+  }
+
+  // repõe o buffer imediatamente: a gravação nunca para
+  if (!state.pool.length) spawnRecorder();
+}
+
+async function finishSave(item){
   let blob;
   try{
-    blob = new Blob(parts, { type: state.mime || "video/webm" });
+    blob = new Blob(item.chunks, { type: state.mime || (state.ext === "mp4" ? "video/mp4" : "video/webm") });
   }catch(err){
     state.saving = false;
     toast(err && err.name === "QuotaExceededError"
       ? "Armazenamento insuficiente no celular" : "Não foi possível salvar", "err");
     return;
   }
+  if (!blob.size){
+    state.saving = false;
+    toast("Ainda não há vídeo para salvar", "err");
+    return;
+  }
 
+  state.replayCount++;
   const stamp = new Date();
   const name = "gravou-replay-" +
     String(stamp.getHours()).padStart(2,"0") +
@@ -500,7 +544,6 @@ async function saveReplay(){
 
   await deliver(blob, name);
   state.saving = false;
-  // a gravação nunca para: o buffer continua rodando o tempo todo
 }
 
 async function deliver(blob, name){
@@ -540,8 +583,11 @@ $("btn-end").onclick = () => { vibrate(30); $("modal").classList.add("open"); };
 $("m-stay").onclick = () => $("modal").classList.remove("open");
 $("m-end").onclick = () => {
   $("modal").classList.remove("open");
+  state.active = false;
+  clearInterval(state.schedId);
   clearInterval(state.timerId);
-  stopRecorderAndStream();
+  teardownPool();
+  if (state.stream){ state.stream.getTracks().forEach(t => t.stop()); state.stream = null; }
   if (state.wakeLock){ try{ state.wakeLock.release(); }catch(_){} state.wakeLock = null; }
   hideToast();
   show("s-ended");
