@@ -80,14 +80,14 @@ h2{font-size:24px;font-weight:800;letter-spacing:-.01em}
 #rec-screen.dimmed #cam{opacity:.05}
 #rec-screen.dimmed .rec-top{opacity:.08}
 #rec-screen.dimmed #btn-flip{opacity:.08}
-/* botão: só o anel aceso, brilho total — visível à luz do dia */
+/* botão: anel aceso + rótulos em meio-brilho; miolo preto (OLED off) */
 #rec-screen.dimmed #btn-save{opacity:1}
 #rec-screen.dimmed #btn-save .inner{background:rgba(0,0,0,.92)}
 #rec-screen.dimmed #btn-save .rw,
-#rec-screen.dimmed #btn-save .lbl,
-#rec-screen.dimmed #btn-save .secs{opacity:0}
+#rec-screen.dimmed #btn-save .secs{opacity:.6}
+#rec-screen.dimmed #btn-save .lbl{opacity:.5;color:var(--accent)}
 #btn-save .inner{transition:background .6s ease}
-#btn-save .rw,#btn-save .lbl,#btn-save .secs{transition:opacity .6s ease}
+#btn-save .rw,#btn-save .lbl,#btn-save .secs{transition:opacity .6s ease, color .6s ease}
 .rec-top,#btn-flip{transition:opacity .6s ease}
 
 .rec-top{
