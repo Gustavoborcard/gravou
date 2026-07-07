@@ -385,23 +385,58 @@ function releaseCamera(){
   if (state.stream){ state.stream.getTracks().forEach(t => t.stop()); state.stream = null; }
 }
 
+/* Procura uma lente ultra-wide (grande angular) para o lado pedido.
+   iPhones e vários Androids expõem essa lente como câmera separada. */
+async function pickWidestDeviceId(facing){
+  try{
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const cams = devs.filter(d => d.kind === "videoinput" && d.label);
+    if (!cams.length) return null;
+    const isBack  = l => /back|rear|tras|environment/i.test(l);
+    const isFront = l => /front|frontal|user|face/i.test(l);
+    const side = cams.filter(d => facing === "environment" ? isBack(d.label) : isFront(d.label));
+    const wide = side.find(d => /ultra[\s-]?wide|0[.,]5|grande?[\s-]?angular|wide[\s-]?angle/i.test(d.label));
+    return wide ? wide.deviceId : null;
+  }catch(_){ return null; }
+}
+
+/* Aplica o menor zoom que a câmera oferecer (máximo ângulo de visão). */
+async function applyWidestZoom(stream){
+  try{
+    const track = stream.getVideoTracks()[0];
+    if (!track || !track.getCapabilities) return;
+    const caps = track.getCapabilities();
+    if (caps.zoom && typeof caps.zoom.min === "number"){
+      await track.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] });
+    }
+  }catch(_){ /* sem suporte a zoom: segue com o padrão */ }
+}
+
 async function openStream(facing){
   releaseCamera();
   await sleep(300);                                  // Android: espera a câmera ser liberada
+  const wideId = await pickWidestDeviceId(facing);
+  const attempts = [];
+  if (wideId) attempts.push({ deviceId: { exact: wideId } });   // 1º: lente ultra-wide
+  attempts.push({ facingMode: facing });                        // 2º: câmera padrão do lado
   let stream = null, lastErr = null;
-  for (let attempt = 0; attempt < 2 && !stream; attempt++){
-    try{
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: true
-      });
-    }catch(err){
-      lastErr = err;
-      if (err && err.name === "NotAllowedError") throw err;   // negado: não adianta repetir
-      await sleep(500);                              // câmera ainda ocupada: tenta de novo
+  for (const videoBase of attempts){
+    for (let tryN = 0; tryN < 2 && !stream; tryN++){
+      try{
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: Object.assign({ width: { ideal: 1280 }, height: { ideal: 720 } }, videoBase),
+          audio: true
+        });
+      }catch(err){
+        lastErr = err;
+        if (err && err.name === "NotAllowedError") throw err;   // negado: não adianta repetir
+        await sleep(500);                            // câmera ainda ocupada: tenta de novo
+      }
     }
+    if (stream) break;
   }
   if (!stream) throw lastErr || new Error("camera");
+  await applyWidestZoom(stream);                     // menor zoom = maior ângulo
   state.stream = stream;
   const v = $("cam");
   v.srcObject = stream;
