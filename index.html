@@ -521,6 +521,22 @@ async function startRecording(){
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+/* Girou o celular: as dimensões de um vídeo são fixadas quando o
+   gravador começa, então só reiniciamos o buffer de gravadores.
+   Nada de mexer na câmera/stream — o navegador já gira os quadros. */
+let rotateTimer = null;
+function onRotate(){
+  clearTimeout(rotateTimer);
+  rotateTimer = setTimeout(() => {
+    if (!state.active || !state.stream || state.saving) return;
+    teardownPool();
+    spawnRecorder();
+    toast("Tela girada — o replay recomeça a contar", "info", 2200);
+  }, 700);                                           // espera a rotação estabilizar
+}
+try{ screen.orientation.addEventListener("change", onRotate); }catch(_){}
+window.addEventListener("orientationchange", onRotate);
+
 function releaseCamera(){
   teardownPool();
   if (state.stream){ state.stream.getTracks().forEach(t => t.stop()); state.stream = null; }
