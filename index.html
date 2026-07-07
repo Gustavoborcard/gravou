@@ -73,8 +73,15 @@ h2{font-size:24px;font-weight:800;letter-spacing:-.01em}
 /* ---- tela de gravação ---- */
 #rec-screen{padding:0;display:none}
 #rec-screen.active{display:block}
-#cam{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+#cam{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;background:#000;transition:opacity .6s ease}
 #cam.mirror{transform:scaleX(-1)}
+
+/* modo jogo: em telas OLED, pixel preto = pixel desligado */
+#rec-screen.dimmed #cam{opacity:.05}
+#rec-screen.dimmed .rec-top,
+#rec-screen.dimmed #btn-flip{opacity:.15}
+#rec-screen.dimmed #btn-save{opacity:.35}
+.rec-top,#btn-flip{transition:opacity .6s ease}
 
 .rec-top{
   position:fixed;top:calc(12px + var(--safe-t));left:0;right:0;
@@ -109,7 +116,7 @@ h2{font-size:24px;font-weight:800;letter-spacing:-.01em}
   position:fixed;z-index:6;left:50%;bottom:calc(22px + var(--safe-b));transform:translateX(-50%);
   width:min(300px,78vw,44vh);height:min(300px,78vw,44vh);border-radius:50%;border:none;cursor:pointer;padding:14px;
   background:conic-gradient(var(--accent) calc(var(--buf,0)*1%), rgba(255,255,255,.28) 0);
-  transition:transform .08s ease;
+  transition:transform .08s ease, opacity .6s ease;
 }
 #btn-save:active{transform:translateX(-50%) scale(.95)}
 #btn-save .inner{
@@ -408,6 +415,7 @@ function stopSession(){
   state.active = false;
   clearInterval(state.schedId);
   clearInterval(state.timerId);
+  disarmDim();
   releaseCamera();
   if (state.wakeLock){ try{ state.wakeLock.release(); }catch(_){} state.wakeLock = null; }
   hideToast();
@@ -517,9 +525,33 @@ async function startRecording(){
   startTimer();
   requestWakeLock();
   show("rec-screen");
+  armDim();
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- modo jogo (economia de bateria) ----------
+   Após 20s sem toque, o preview escurece quase totalmente
+   (em OLED, pixels pretos ficam desligados). A gravação e o
+   botão de replay continuam 100% funcionais no escuro.      */
+const DIM_AFTER = 20000;
+let dimTimer = null, dimNoticeShown = false;
+function setDim(on){
+  $("rec-screen").classList.toggle("dimmed", on);
+  if (on && !dimNoticeShown){
+    dimNoticeShown = true;
+    toast("Tela em economia — toque para acender", "info", 2500);
+  }
+}
+function armDim(){
+  clearTimeout(dimTimer);
+  setDim(false);
+  dimTimer = setTimeout(() => { if (state.active) setDim(true); }, DIM_AFTER);
+}
+function disarmDim(){ clearTimeout(dimTimer); setDim(false); }
+document.addEventListener("pointerdown", () => {
+  if (state.active && $("rec-screen").classList.contains("active")) armDim();
+});
 
 /* Girou o celular: as dimensões de um vídeo são fixadas quando o
    gravador começa, então só reiniciamos o buffer de gravadores.
@@ -604,7 +636,7 @@ async function openStream(cam){
     for (let tryN = 0; tryN < 2 && !stream; tryN++){
       try{
         stream = await navigator.mediaDevices.getUserMedia({
-          video: Object.assign({ width: { ideal: 1280 }, height: { ideal: 720 } }, videoBase),
+          video: Object.assign({ width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, videoBase),
           audio: true
         });
       }catch(err){
@@ -656,10 +688,13 @@ function spawnRecorder(){
   if (!state.stream) return;
   const s = state.stream.clone();                    // cada gravador tem seu clone
   let rec;
+  const opts = { videoBitsPerSecond: 2500000 };      // 2,5 Mbps: menos bateria, arquivos 3x menores
+  if (state.mime) opts.mimeType = state.mime;
   try{
-    rec = state.mime ? new MediaRecorder(s, { mimeType: state.mime }) : new MediaRecorder(s);
+    rec = new MediaRecorder(s, opts);
   }catch(_){
-    rec = new MediaRecorder(s);
+    try{ rec = state.mime ? new MediaRecorder(s, { mimeType: state.mime }) : new MediaRecorder(s); }
+    catch(__){ rec = new MediaRecorder(s); }
   }
   const item = { id: ++state.seq, rec, stream: s, chunks: [], start: Date.now(), mode: "buffer" };
   rec.ondataavailable = e => { if (e.data && e.data.size) item.chunks.push(e.data); };
