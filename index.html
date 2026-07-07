@@ -857,12 +857,12 @@ async function saveAll(){
     // 1) uma única caixa de compartilhamento com todos os vídeos
     if (navigator.canShare && navigator.canShare({ files })){
       try{
-        toast("Use a opção salvar no celular", "info", 0);
+        hideToast();                                   // a caixa do sistema fala por si
         await navigator.share({ files, title: "O lance foi tão bom que virou replay no Gravou 🔥", text: "O lance foi tão bom que virou replay no Gravou 🔥" });
         await vault.clear();
         refreshVaultUI();
         flashOK();
-        toast(items.length + " replays salvos na galeria", "ok");
+        toast("Tudo certo! " + items.length + " replay" + (items.length > 1 ? "s" : "") + " entregue" + (items.length > 1 ? "s" : ""), "ok");
         return;
       }catch(err){
         if (err && err.name === "AbortError"){ hideToast(); return; }   // cancelou: mantém guardados
@@ -915,10 +915,10 @@ async function deliver(blob, name){
   // 1) compartilhamento nativo → "Salvar vídeo" vai direto para a galeria
   if (navigator.canShare && navigator.canShare({ files: [file] })){
     try{
-      toast("Use a opção salvar no celular", "info", 0);
+      hideToast();                                   // a caixa do sistema fala por si
       await navigator.share({ files: [file], title: "O lance foi tão bom que virou replay no Gravou 🔥", text: "O lance foi tão bom que virou replay no Gravou 🔥" });
       flashOK();
-      toast("Replay salvo na galeria", "ok");
+      toast("Tudo certo! Replay entregue", "ok");
       return;
     }catch(err){
       if (err && err.name === "AbortError"){ hideToast(); return; }  // usuário cancelou
