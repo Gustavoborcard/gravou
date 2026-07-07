@@ -378,16 +378,34 @@ async function startRecording(){
   show("rec-screen");
 }
 
-async function openStream(facing){
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function releaseCamera(){
   teardownPool();
   if (state.stream){ state.stream.getTracks().forEach(t => t.stop()); state.stream = null; }
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
-    audio: true
-  });
+}
+
+async function openStream(facing){
+  releaseCamera();
+  await sleep(300);                                  // Android: espera a câmera ser liberada
+  let stream = null, lastErr = null;
+  for (let attempt = 0; attempt < 2 && !stream; attempt++){
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: true
+      });
+    }catch(err){
+      lastErr = err;
+      if (err && err.name === "NotAllowedError") throw err;   // negado: não adianta repetir
+      await sleep(500);                              // câmera ainda ocupada: tenta de novo
+    }
+  }
+  if (!stream) throw lastErr || new Error("camera");
   state.stream = stream;
   const v = $("cam");
   v.srcObject = stream;
+  try{ await v.play(); }catch(_){}
   v.classList.toggle("mirror", facing === "user");   // espelha só a frontal
   spawnRecorder();                                   // primeiro gravador do buffer
 }
@@ -419,6 +437,8 @@ function discard(item){
   const i = state.pool.indexOf(item);
   if (i >= 0) state.pool.splice(i, 1);
   try{ if (item.rec.state !== "inactive") item.rec.stop(); }catch(_){}
+  // libera a câmera imediatamente (Android exige liberação síncrona)
+  try{ item.stream.getTracks().forEach(t => t.stop()); }catch(_){}
 }
 
 function teardownPool(){
@@ -466,17 +486,27 @@ document.addEventListener("visibilitychange", () => {
 });
 
 /* ---------- trocar câmera ---------- */
+let flipping = false;
 $("btn-flip").onclick = async () => {
+  if (flipping || state.saving) return;              // evita toques duplos durante a troca
+  flipping = true;
   vibrate(30);
-  state.facing = state.facing === "user" ? "environment" : "user";
+  const prev = state.facing;
+  state.facing = prev === "user" ? "environment" : "user";
   try{
     await openStream(state.facing);
     toast("Câmera trocada — o replay recomeça a contar", "info", 2200);
   }catch(_){
-    state.facing = state.facing === "user" ? "environment" : "user";
-    toast("Não foi possível trocar a câmera", "err");
-    try{ await openStream(state.facing); }catch(__){ show("s-nocam"); }
+    // não conseguiu a outra câmera: volta para a anterior sem deixar tela preta
+    state.facing = prev;
+    try{
+      await openStream(prev);
+      toast("Este aparelho não liberou a outra câmera", "err");
+    }catch(__){
+      show("s-nocam");
+    }
   }
+  flipping = false;
 };
 
 /* ---------- salvar replay ---------- */
@@ -589,8 +619,7 @@ $("m-end").onclick = () => {
   state.active = false;
   clearInterval(state.schedId);
   clearInterval(state.timerId);
-  teardownPool();
-  if (state.stream){ state.stream.getTracks().forEach(t => t.stop()); state.stream = null; }
+  releaseCamera();
   if (state.wakeLock){ try{ state.wakeLock.release(); }catch(_){} state.wakeLock = null; }
   hideToast();
   show("s-ended");
