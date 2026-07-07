@@ -272,7 +272,9 @@ const DURATIONS = [10,15,20,30,45,60];
 
 const state = {
   duration: 20,
-  facing: "user",              // frontal por padrão
+  facing: "user",              // frontal por padrão (usado na 1ª abertura)
+  cams: [],                    // câmeras disponíveis [{deviceId, label, side}]
+  camIndex: -1,                // índice da câmera atual em state.cams
   stream: null,
   mime: "",
   ext: "mp4",
@@ -364,7 +366,7 @@ async function startRecording(){
   const [mime, ext] = pickMime();
   state.mime = mime; state.ext = ext;
   try{
-    await openStream(state.facing);
+    await openStream();
   }catch(err){
     if (err && err.name === "NotAllowedError") show("s-denied");
     else show("s-nocam");
@@ -385,19 +387,32 @@ function releaseCamera(){
   if (state.stream){ state.stream.getTracks().forEach(t => t.stop()); state.stream = null; }
 }
 
-/* Procura uma lente ultra-wide (grande angular) para o lado pedido.
-   iPhones e vários Androids expõem essa lente como câmera separada. */
-async function pickWidestDeviceId(facing){
+/* Monta a lista de câmeras do aparelho (inclui webcams USB).
+   Ordena preferindo a lente mais aberta de cada lado e classifica
+   o lado (frontal/traseira/externa) pelo rótulo.                 */
+async function buildCameraList(){
+  let cams = [];
   try{
     const devs = await navigator.mediaDevices.enumerateDevices();
-    const cams = devs.filter(d => d.kind === "videoinput" && d.label);
-    if (!cams.length) return null;
-    const isBack  = l => /back|rear|tras|environment/i.test(l);
-    const isFront = l => /front|frontal|user|face/i.test(l);
-    const side = cams.filter(d => facing === "environment" ? isBack(d.label) : isFront(d.label));
-    const wide = side.find(d => /ultra[\s-]?wide|0[.,]5|grande?[\s-]?angular|wide[\s-]?angle/i.test(d.label));
-    return wide ? wide.deviceId : null;
-  }catch(_){ return null; }
+    cams = devs.filter(d => d.kind === "videoinput");
+  }catch(_){ cams = []; }
+
+  const sideOf = l => {
+    if (/front|frontal|user|face/i.test(l)) return "front";
+    if (/back|rear|tras|environment|wide|tele|ultra/i.test(l)) return "back";
+    return "extern";                                  // USB / desconhecida
+  };
+  const isWide = l => /ultra[\s-]?wide|0[.,]5|grande?[\s-]?angular|wide[\s-]?angle/i.test(l);
+
+  state.cams = cams.map((d, i) => ({
+    deviceId: d.deviceId,
+    label: d.label || ("Câmera " + (i + 1)),
+    side: sideOf(d.label || ""),
+    wide: isWide(d.label || "")
+  }));
+
+  // dentro de cada lado, a lente ultra-wide vem primeiro
+  state.cams.sort((a, b) => (b.wide - a.wide));
 }
 
 /* Aplica o menor zoom que a câmera oferecer (máximo ângulo de visão). */
@@ -412,13 +427,23 @@ async function applyWidestZoom(stream){
   }catch(_){ /* sem suporte a zoom: segue com o padrão */ }
 }
 
-async function openStream(facing){
+/* Abre uma câmera. Sem argumento: usa facingMode (1ª abertura).
+   Com um item de state.cams: abre aquele dispositivo específico. */
+async function openStream(cam){
   releaseCamera();
   await sleep(300);                                  // Android: espera a câmera ser liberada
-  const wideId = await pickWidestDeviceId(facing);
+
   const attempts = [];
-  if (wideId) attempts.push({ deviceId: { exact: wideId } });   // 1º: lente ultra-wide
-  attempts.push({ facingMode: facing });                        // 2º: câmera padrão do lado
+  let mirror = false;
+  if (cam && cam.deviceId){
+    attempts.push({ deviceId: { exact: cam.deviceId } });
+    mirror = cam.side === "front";
+  }else{
+    // primeira abertura: pede a frontal padrão
+    attempts.push({ facingMode: state.facing });
+    mirror = state.facing === "user";
+  }
+
   let stream = null, lastErr = null;
   for (const videoBase of attempts){
     for (let tryN = 0; tryN < 2 && !stream; tryN++){
@@ -436,14 +461,40 @@ async function openStream(facing){
     if (stream) break;
   }
   if (!stream) throw lastErr || new Error("camera");
+
   await applyWidestZoom(stream);                     // menor zoom = maior ângulo
   state.stream = stream;
+
+  // agora que temos permissão, os rótulos ficam visíveis: (re)monta a lista
+  if (!state.cams.length || !state.cams.some(c => c.label && !/^Câmera \d+$/.test(c.label))){
+    await buildCameraList();
+  }
+  // sincroniza o índice atual com o dispositivo realmente aberto
+  const activeId = stream.getVideoTracks()[0].getSettings().deviceId;
+  const idx = state.cams.findIndex(c => c.deviceId === activeId);
+  if (idx >= 0) state.camIndex = idx;
+
   const v = $("cam");
   v.srcObject = stream;
   try{ await v.play(); }catch(_){}
-  v.classList.toggle("mirror", facing === "user");   // espelha só a frontal
+  v.classList.toggle("mirror", mirror);              // espelha só a frontal
+  updateFlipVisibility();
   spawnRecorder();                                   // primeiro gravador do buffer
 }
+
+function updateFlipVisibility(){
+  // esconde o botão de trocar se só houver uma câmera
+  $("btn-flip").style.display = state.cams.length > 1 ? "flex" : "none";
+}
+
+// detecta webcam USB conectada/removida durante a gravação
+try{
+  navigator.mediaDevices.addEventListener("devicechange", async () => {
+    if (!state.active) return;
+    await buildCameraList();
+    updateFlipVisibility();
+  });
+}catch(_){}
 
 /* ---------- pool de gravadores ---------- */
 function spawnRecorder(){
@@ -520,23 +571,29 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && $("rec-screen").classList.contains("active")) requestWakeLock();
 });
 
-/* ---------- trocar câmera ---------- */
+/* ---------- trocar câmera (cicla por todas, inclui USB) ---------- */
 let flipping = false;
 $("btn-flip").onclick = async () => {
   if (flipping || state.saving) return;              // evita toques duplos durante a troca
+  if (state.cams.length < 2){ toast("Só há uma câmera disponível", "info"); return; }
   flipping = true;
   vibrate(30);
-  const prev = state.facing;
-  state.facing = prev === "user" ? "environment" : "user";
+
+  const prevIndex = state.camIndex;
+  const next = (state.camIndex + 1 + state.cams.length) % state.cams.length;
+  const cam = state.cams[next];
+
   try{
-    await openStream(state.facing);
-    toast("Câmera trocada — o replay recomeça a contar", "info", 2200);
+    await openStream(cam);
+    const nm = cam.side === "extern" ? (cam.label.length > 22 ? "Câmera externa" : cam.label)
+             : cam.side === "front"  ? "Câmera frontal"
+             : cam.wide ? "Grande angular" : "Câmera traseira";
+    toast(nm + " — o replay recomeça a contar", "info", 2200);
   }catch(_){
-    // não conseguiu a outra câmera: volta para a anterior sem deixar tela preta
-    state.facing = prev;
+    // falhou: volta para a câmera anterior sem deixar tela preta
     try{
-      await openStream(prev);
-      toast("Este aparelho não liberou a outra câmera", "err");
+      await openStream(state.cams[prevIndex] || undefined);
+      toast("Não foi possível abrir essa câmera", "err");
     }catch(__){
       show("s-nocam");
     }
