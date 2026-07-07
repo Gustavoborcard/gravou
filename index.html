@@ -858,7 +858,7 @@ async function saveAll(){
     if (navigator.canShare && navigator.canShare({ files })){
       try{
         toast("Use a opção salvar no celular", "info", 0);
-        await navigator.share({ files, title: "Replays Gravou" });
+        await navigator.share({ files });
         await vault.clear();
         refreshVaultUI();
         flashOK();
@@ -916,7 +916,7 @@ async function deliver(blob, name){
   if (navigator.canShare && navigator.canShare({ files: [file] })){
     try{
       toast("Use a opção salvar no celular", "info", 0);
-      await navigator.share({ files: [file], title: "Replay Gravou" });
+      await navigator.share({ files: [file] });
       flashOK();
       toast("Replay salvo na galeria", "ok");
       return;
