@@ -168,6 +168,7 @@ a{color:var(--accent)}
   <p class="tagline">Fez um golaço? <b>Toque no botão</b> e o <b>Gravou</b> salva os últimos segundos <b>antes</b> do toque, direto na galeria.</p>
   <div class="stack">
     <button class="btn btn-primary" id="b-start">Começar</button>
+    <button class="btn btn-ghost" id="b-recover" style="display:none">Salvar replays pendentes</button>
   </div>
   <p class="hint">Sem cadastro. Funciona offline.</p>
 </section>
@@ -220,6 +221,7 @@ a{color:var(--accent)}
   <div class="rec-top">
     <div class="badge"><span class="rec-dot"></span>Gravando</div>
     <div class="badge time-chip" id="chip-dur">20s</div>
+    <div class="badge" id="chip-count" style="display:none">🎬 <span id="count-n">0</span></div>
   </div>
   <button class="icon-btn" id="btn-end" aria-label="Encerrar gravação">
     <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
@@ -240,10 +242,12 @@ a{color:var(--accent)}
 <section class="screen" id="s-ended">
   <div class="status-icon ok">✓</div>
   <h2>Gravação encerrada</h2>
-  <p class="tagline">Seus replays salvos continuam na galeria do celular.</p>
+  <p class="tagline" id="ended-msg">Nenhum replay guardado nesta gravação.</p>
   <div class="stack">
-    <button class="btn btn-primary" id="b-again">Gravar de novo</button>
+    <button class="btn btn-primary" id="b-saveall" style="display:none">Salvar todos os replays</button>
+    <button class="btn btn-ghost" id="b-again">Gravar de novo</button>
     <button class="btn btn-ghost" id="b-home">Início</button>
+    <button class="btn btn-ghost" id="b-discard" style="display:none;color:#FF9BA0">Descartar replays</button>
   </div>
 </section>
 
@@ -254,7 +258,7 @@ a{color:var(--accent)}
 <div id="modal">
   <div class="sheet">
     <h2>Encerrar gravação?</h2>
-    <p>Os replays que você já salvou continuam na galeria. O que não foi salvo será descartado.</p>
+    <p id="modal-msg">Seus replays guardados não serão apagados — você poderá salvar todos na próxima tela.</p>
     <div class="stack" style="margin-top:0">
       <button class="btn btn-danger" id="m-end">Encerrar</button>
       <button class="btn btn-ghost" id="m-stay">Continuar gravando</button>
@@ -272,6 +276,64 @@ a{color:var(--accent)}
    O clipe cobre pelo menos os últimos X segundos.
    ========================================================= */
 "use strict";
+
+/* ---------- cofre local de replays (IndexedDB) ----------
+   Os replays ficam guardados no aparelho durante a partida e
+   são salvos todos de uma vez no final — sem interromper o jogo. */
+const vault = {
+  _db: null,
+  async db(){
+    if (this._db) return this._db;
+    this._db = await new Promise((res, rej) => {
+      const rq = indexedDB.open("gravou", 1);
+      rq.onupgradeneeded = () => rq.result.createObjectStore("replays", { autoIncrement: true });
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => rej(rq.error);
+    });
+    return this._db;
+  },
+  async add(item){
+    const db = await this.db();
+    return new Promise((res, rej) => {
+      const tx = db.transaction("replays", "readwrite");
+      tx.objectStore("replays").add(item);
+      tx.oncomplete = res;
+      tx.onerror = () => rej(tx.error);
+    });
+  },
+  async all(){
+    const db = await this.db();
+    return new Promise((res, rej) => {
+      const rq = db.transaction("replays", "readonly").objectStore("replays").getAll();
+      rq.onsuccess = () => res(rq.result || []);
+      rq.onerror = () => rej(rq.error);
+    });
+  },
+  async count(){
+    try{
+      const db = await this.db();
+      return await new Promise((res, rej) => {
+        const rq = db.transaction("replays", "readonly").objectStore("replays").count();
+        rq.onsuccess = () => res(rq.result || 0);
+        rq.onerror = () => rej(rq.error);
+      });
+    }catch(_){ return 0; }
+  },
+  async clear(){
+    const db = await this.db();
+    return new Promise((res, rej) => {
+      const tx = db.transaction("replays", "readwrite");
+      tx.objectStore("replays").clear();
+      tx.oncomplete = res;
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+};
+
+function updateCountChip(n){
+  $("count-n").textContent = n;
+  $("chip-count").style.display = n > 0 ? "flex" : "none";
+}
 
 const $ = id => document.getElementById(id);
 const DURATIONS = [10,15,20,30,45,60];
@@ -334,7 +396,17 @@ $("b-retry-perm").onclick = requestPermission;
 $("b-retry-cam").onclick = requestPermission;
 $("b-go").onclick = startRecording;
 $("b-again").onclick = () => show("s-time");
-$("b-home").onclick = () => show("s-home");
+$("b-home").onclick = async () => { await refreshVaultUI(); show("s-home"); };
+$("b-saveall").onclick = saveAll;
+$("b-recover").onclick = saveAll;
+$("b-discard").onclick = async () => {
+  await vault.clear();
+  await refreshVaultUI();
+  toast("Replays descartados", "info");
+};
+
+// ao abrir o app: verifica se há replays de uma sessão anterior
+refreshVaultUI();
 
 async function requestPermission(){
   try{
@@ -381,6 +453,7 @@ async function startRecording(){
   }
   state.active = true;
   state.sessionStart = Date.now();
+  updateCountChip(await vault.count());
   startScheduler();
   startTimer();
   requestWakeLock();
@@ -641,7 +714,6 @@ function saveReplay(){
   if (!oldest){ toast("Ainda não há vídeo para salvar", "err"); return; }
 
   state.saving = true;
-  toast("Salvando replay…", "info", 0);
 
   // finaliza o gravador mais antigo NO MOMENTO do toque:
   // o arquivo termina aqui — nada depois do toque entra no vídeo
@@ -683,8 +755,81 @@ async function finishSave(item){
     String(stamp.getSeconds()).padStart(2,"0") +
     "-" + state.replayCount + "." + state.ext;
 
-  await deliver(blob, name);
+  try{
+    await vault.add({ name, type: blob.type, blob, t: Date.now() });
+    updateCountChip(await vault.count());
+    flashOK();
+    toast("Replay " + state.replayCount + " guardado", "ok", 1800);
+  }catch(err){
+    // cofre indisponível (raro): cai para o salvamento imediato
+    await deliver(blob, name);
+  }
   state.saving = false;
+}
+
+/* ---------- salvar todos os replays de uma vez ---------- */
+let savingAll = false;
+async function saveAll(){
+  if (savingAll) return;
+  savingAll = true;
+  try{
+    const items = await vault.all();
+    if (!items.length){ toast("Nenhum replay para salvar", "info"); return; }
+    toast("Salvando " + items.length + " replays…", "info", 0);
+    const files = items.map(i => new File([i.blob], i.name, { type: i.type }));
+
+    // 1) uma única caixa de compartilhamento com todos os vídeos
+    if (navigator.canShare && navigator.canShare({ files })){
+      try{
+        toast("Use a opção salvar no celular", "info", 0);
+        await navigator.share({ files, title: "Replays Gravou" });
+        await vault.clear();
+        refreshVaultUI();
+        flashOK();
+        toast(items.length + " replays salvos na galeria", "ok");
+        return;
+      }catch(err){
+        if (err && err.name === "AbortError"){ hideToast(); return; }   // cancelou: mantém guardados
+        // muitos arquivos podem exceder o limite do share: cai para downloads
+      }
+    }
+
+    // 2) downloads em sequência
+    for (const it of items){
+      const url = URL.createObjectURL(it.blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = it.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      await sleep(600);                              // dá tempo do navegador aceitar cada um
+    }
+    await vault.clear();
+    refreshVaultUI();
+    flashOK();
+    toast(items.length + " vídeos baixados — veja a notificação de downloads", "ok", 5000);
+  }catch(err){
+    toast("Não foi possível salvar", "err");
+  }finally{
+    savingAll = false;
+  }
+}
+
+async function refreshVaultUI(){
+  const n = await vault.count();
+  // tela de encerramento
+  $("ended-msg").textContent = n > 0
+    ? "Você tem " + n + " replay" + (n > 1 ? "s" : "") + " guardado" + (n > 1 ? "s" : "") + " para salvar na galeria."
+    : "Nenhum replay guardado nesta gravação.";
+  $("b-saveall").style.display = n > 0 ? "block" : "none";
+  $("b-saveall").textContent = "Salvar todos os replays (" + n + ")";
+  $("b-discard").style.display = n > 0 ? "block" : "none";
+  // botão de recuperação na tela inicial
+  $("b-recover").style.display = n > 0 ? "block" : "none";
+  $("b-recover").textContent = "Salvar " + n + " replay" + (n > 1 ? "s" : "") + " pendente" + (n > 1 ? "s" : "");
+  updateCountChip(n);
+  return n;
 }
 
 async function deliver(blob, name){
@@ -724,7 +869,7 @@ async function deliver(blob, name){
 /* ---------- encerrar ---------- */
 $("btn-end").onclick = () => { vibrate(30); $("modal").classList.add("open"); };
 $("m-stay").onclick = () => $("modal").classList.remove("open");
-$("m-end").onclick = () => {
+$("m-end").onclick = async () => {
   $("modal").classList.remove("open");
   state.active = false;
   clearInterval(state.schedId);
@@ -732,6 +877,7 @@ $("m-end").onclick = () => {
   releaseCamera();
   if (state.wakeLock){ try{ state.wakeLock.release(); }catch(_){} state.wakeLock = null; }
   hideToast();
+  await refreshVaultUI();
   show("s-ended");
 };
 
