@@ -244,7 +244,7 @@ a{color:var(--accent)}
   <h2>Seus replays</h2>
   <p class="tagline" id="ended-msg">Nenhum replay guardado.</p>
   <div class="stack">
-    <button class="btn btn-primary" id="b-saveall" style="display:none">Salvar no celular</button>
+    <button class="btn btn-primary" id="b-saveall" style="display:none">Salvar ou compartilhar</button>
     <button class="btn btn-ghost" id="b-again">Voltar a gravar</button>
     <button class="btn btn-ghost" id="b-home">Início</button>
     <button class="btn btn-ghost" id="b-discard" style="display:none;color:#FF9BA0">Descartar tudo</button>
@@ -528,8 +528,27 @@ function isPortrait(){
 function idealDims(){
   // pede à câmera o formato do jeito que o celular está agora
   return isPortrait()
-    ? { width: { ideal: 720 },  height: { ideal: 1280 } }
-    : { width: { ideal: 1280 }, height: { ideal: 720 } };
+    ? { width: { ideal: 720 },  height: { ideal: 1280 }, aspectRatio: { ideal: 9/16 } }
+    : { width: { ideal: 1280 }, height: { ideal: 720 },  aspectRatio: { ideal: 16/9 } };
+}
+
+/* Confere se a câmera entregou o formato certo; se veio deitado
+   com o celular em pé (ou vice-versa), tenta corrigir no stream. */
+async function ensureOrientation(stream){
+  try{
+    const track = stream.getVideoTracks()[0];
+    if (!track || !track.getSettings) return;
+    const want = isPortrait();
+    let s = track.getSettings();
+    if (!s.width || !s.height) return;
+    if ((s.height >= s.width) === want) return;      // já está certo
+    await track.applyConstraints(idealDims());
+    s = track.getSettings();
+    if ((s.height >= s.width) !== want){
+      // a câmera não aceita esse formato: avisa uma vez, sem quebrar
+      toast("Esta câmera só grava na horizontal", "info", 2600);
+    }
+  }catch(_){}
 }
 
 /* Quando o celular gira durante a gravação, os gravadores atuais
@@ -635,6 +654,7 @@ async function openStream(cam){
   }
   if (!stream) throw lastErr || new Error("camera");
 
+  await ensureOrientation(stream);                   // formato certo p/ vertical/horizontal
   await applyWidestZoom(stream);                     // menor zoom = maior ângulo
   state.stream = stream;
 
@@ -850,9 +870,10 @@ async function finishSave(item){
 
   try{
     await vault.add({ name, type: blob.type, blob, t: Date.now() });
-    updateCountChip(await vault.count());
+    const n = await vault.count();                   // fonte única da verdade
+    updateCountChip(n);
     flashOK();
-    toast("Replay " + state.replayCount + " guardado", "ok", 1800);
+    toast("Replay " + n + " guardado", "ok", 1800);
   }catch(err){
     // cofre indisponível (raro): cai para o salvamento imediato
     await deliver(blob, name);
@@ -916,7 +937,7 @@ async function refreshVaultUI(){
     ? "Você tem " + n + " replay" + (n > 1 ? "s" : "") + " guardado" + (n > 1 ? "s" : "") + "."
     : "Nenhum replay guardado.";
   $("b-saveall").style.display = n > 0 ? "block" : "none";
-  $("b-saveall").textContent = "Salvar no celular (" + n + ")";
+  $("b-saveall").textContent = "Salvar ou compartilhar (" + n + ")";
   $("b-discard").style.display = n > 0 ? "block" : "none";
   // botão "Continuar" na tela inicial
   $("b-recover").style.display = n > 0 ? "block" : "none";
