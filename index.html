@@ -98,7 +98,11 @@ h2{font-size:24px;font-weight:800;letter-spacing:-.01em}
 .icon-btn:active{background:rgba(10,14,11,.75)}
 .icon-btn svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 #btn-flip{top:calc(70px + var(--safe-t));right:16px}
-#btn-end{top:calc(70px + var(--safe-t));left:16px;color:#FF9BA0}
+#chip-count{
+  pointer-events:auto;cursor:pointer;font:inherit;font-size:14px;font-weight:800;color:var(--text);
+  border:1.5px solid rgba(255,197,61,.55);
+}
+#chip-count:active{transform:scale(.95)}
 
 /* botão principal com anel de buffer (assinatura visual) */
 #btn-save{
@@ -129,7 +133,6 @@ h2{font-size:24px;font-weight:800;letter-spacing:-.01em}
   #btn-save:active{transform:translateY(50%) scale(.95)}
   .rec-top{justify-content:flex-start;padding-left:calc(16px + env(safe-area-inset-left,0px))}
   #btn-flip{top:auto;bottom:calc(24px + var(--safe-b));left:calc(16px + env(safe-area-inset-left,0px));right:auto}
-  #btn-end{top:calc(16px + var(--safe-t));left:auto;right:calc(16px + env(safe-area-inset-right,0px))}
 }
 
 /* ---- toast ---- */
@@ -167,8 +170,8 @@ a{color:var(--accent)}
   <div class="logo">Gravou<span class="dot">.</span></div>
   <p class="tagline">Fez um golaço? <b>Toque no botão</b> e o <b>Gravou</b> salva os últimos segundos <b>antes</b> do toque, direto na galeria.</p>
   <div class="stack">
-    <button class="btn btn-primary" id="b-start">Começar</button>
-    <button class="btn btn-ghost" id="b-recover" style="display:none">Salvar replays pendentes</button>
+    <button class="btn btn-primary" id="b-start">Nova gravação</button>
+    <button class="btn btn-ghost" id="b-recover" style="display:none">Continuar</button>
   </div>
   <p class="hint">Sem cadastro. Funciona offline.</p>
 </section>
@@ -221,11 +224,8 @@ a{color:var(--accent)}
   <div class="rec-top">
     <div class="badge"><span class="rec-dot"></span>Gravando</div>
     <div class="badge time-chip" id="chip-dur">20s</div>
-    <div class="badge" id="chip-count" style="display:none">🎬 <span id="count-n">0</span></div>
+    <button class="badge" id="chip-count">🎬 <span id="count-n">0</span></button>
   </div>
-  <button class="icon-btn" id="btn-end" aria-label="Encerrar gravação">
-    <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-  </button>
   <button class="icon-btn" id="btn-flip" aria-label="Trocar câmera">
     <svg viewBox="0 0 24 24"><path d="M20 8h-3l-2-3H9L7 8H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1z"/><path d="M9.5 13.5a2.5 2.5 0 0 1 4.3-1.7M14.5 13.5a2.5 2.5 0 0 1-4.3 1.7"/><path d="M14 11.5l.6-.9.9.6M10 15.5l-.6.9-.9-.6"/></svg>
   </button>
@@ -238,30 +238,30 @@ a{color:var(--accent)}
   </button>
 </section>
 
-<!-- GRAVAÇÃO ENCERRADA -->
+<!-- CENTRAL DE REPLAYS -->
 <section class="screen" id="s-ended">
-  <div class="status-icon ok">✓</div>
-  <h2>Gravação encerrada</h2>
-  <p class="tagline" id="ended-msg">Nenhum replay guardado nesta gravação.</p>
+  <div class="status-icon ok">🎬</div>
+  <h2>Seus replays</h2>
+  <p class="tagline" id="ended-msg">Nenhum replay guardado.</p>
   <div class="stack">
-    <button class="btn btn-primary" id="b-saveall" style="display:none">Salvar todos os replays</button>
-    <button class="btn btn-ghost" id="b-again">Gravar de novo</button>
+    <button class="btn btn-primary" id="b-saveall" style="display:none">Salvar no celular</button>
+    <button class="btn btn-ghost" id="b-again">Voltar a gravar</button>
     <button class="btn btn-ghost" id="b-home">Início</button>
-    <button class="btn btn-ghost" id="b-discard" style="display:none;color:#FF9BA0">Descartar replays</button>
+    <button class="btn btn-ghost" id="b-discard" style="display:none;color:#FF9BA0">Descartar tudo</button>
   </div>
 </section>
 
 <div id="toast"></div>
 <div id="flash"></div>
 
-<!-- MODAL ENCERRAR -->
+<!-- CONFIRMAÇÃO -->
 <div id="modal">
   <div class="sheet">
-    <h2>Encerrar gravação?</h2>
-    <p id="modal-msg">Seus replays guardados não serão apagados — você poderá salvar todos na próxima tela.</p>
+    <h2 id="modal-title">Tem certeza?</h2>
+    <p id="modal-msg"></p>
     <div class="stack" style="margin-top:0">
-      <button class="btn btn-danger" id="m-end">Encerrar</button>
-      <button class="btn btn-ghost" id="m-stay">Continuar gravando</button>
+      <button class="btn btn-danger" id="m-yes">Confirmar</button>
+      <button class="btn btn-ghost" id="m-no">Cancelar</button>
     </div>
   </div>
 </div>
@@ -332,7 +332,6 @@ const vault = {
 
 function updateCountChip(n){
   $("count-n").textContent = n;
-  $("chip-count").style.display = n > 0 ? "flex" : "none";
 }
 
 const $ = id => document.getElementById(id);
@@ -388,21 +387,80 @@ DURATIONS.forEach(d => {
   chipsBox.appendChild(c);
 });
 
+/* ---------- confirmação genérica ---------- */
+let confirmFn = null;
+function openConfirm(title, msg, actionLabel, fn){
+  $("modal-title").textContent = title;
+  $("modal-msg").textContent = msg;
+  $("m-yes").textContent = actionLabel;
+  confirmFn = fn;
+  $("modal").classList.add("open");
+}
+$("m-no").onclick = () => { confirmFn = null; $("modal").classList.remove("open"); };
+$("m-yes").onclick = async () => {
+  $("modal").classList.remove("open");
+  const fn = confirmFn; confirmFn = null;
+  if (fn) await fn();
+};
+
+/* ---------- parar sessão (câmera/energia) ---------- */
+function stopSession(){
+  state.active = false;
+  clearInterval(state.schedId);
+  clearInterval(state.timerId);
+  releaseCamera();
+  if (state.wakeLock){ try{ state.wakeLock.release(); }catch(_){} state.wakeLock = null; }
+  hideToast();
+}
+
 /* ---------- fluxo ---------- */
-$("b-start").onclick = () => show("s-perm");
+$("b-start").onclick = async () => {
+  const n = await vault.count();
+  if (n > 0){
+    openConfirm(
+      "Começar do zero?",
+      "Você tem " + n + " replay" + (n > 1 ? "s" : "") + " não salvo" + (n > 1 ? "s" : "") +
+      ". Uma nova gravação descarta o que está guardado.",
+      "Descartar e começar",
+      async () => { await vault.clear(); await refreshVaultUI(); show("s-perm"); }
+    );
+    return;
+  }
+  show("s-perm");
+};
 $("b-perm-back").onclick = () => show("s-home");
 $("b-perm").onclick = requestPermission;
 $("b-retry-perm").onclick = requestPermission;
 $("b-retry-cam").onclick = requestPermission;
 $("b-go").onclick = startRecording;
-$("b-again").onclick = () => show("s-time");
+$("b-again").onclick = () => {
+  // volta a gravar: replays ficam intactos; usa a duração já escolhida
+  if (state.everRecorded) startRecording();
+  else show("s-time");
+};
 $("b-home").onclick = async () => { await refreshVaultUI(); show("s-home"); };
 $("b-saveall").onclick = saveAll;
-$("b-recover").onclick = saveAll;
+$("b-recover").onclick = async () => { await refreshVaultUI(); show("s-ended"); };
 $("b-discard").onclick = async () => {
-  await vault.clear();
+  const n = await vault.count();
+  openConfirm(
+    "Descartar tudo?",
+    n + " replay" + (n > 1 ? "s" : "") + " ser" + (n > 1 ? "ão" : "á") + " apagado" + (n > 1 ? "s" : "") + " definitivamente.",
+    "Descartar",
+    async () => {
+      await vault.clear();
+      await refreshVaultUI();
+      toast("Replays descartados", "info");
+    }
+  );
+};
+
+// contador 🎬 abre a central de replays (pausa a câmera para poupar bateria)
+$("chip-count").onclick = async () => {
+  vibrate(20);
+  stopSession();
   await refreshVaultUI();
-  toast("Replays descartados", "info");
+  show("s-ended");
 };
 
 // ao abrir o app: verifica se há replays de uma sessão anterior
@@ -452,6 +510,7 @@ async function startRecording(){
     return;
   }
   state.active = true;
+  state.everRecorded = true;
   state.sessionStart = Date.now();
   updateCountChip(await vault.count());
   startScheduler();
@@ -461,6 +520,40 @@ async function startRecording(){
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- orientação ---------- */
+function isPortrait(){
+  try{ return window.matchMedia("(orientation: portrait)").matches; }catch(_){ return true; }
+}
+function idealDims(){
+  // pede à câmera o formato do jeito que o celular está agora
+  return isPortrait()
+    ? { width: { ideal: 720 },  height: { ideal: 1280 } }
+    : { width: { ideal: 1280 }, height: { ideal: 720 } };
+}
+
+/* Quando o celular gira durante a gravação, os gravadores atuais
+   ficariam presos ao formato antigo (a orientação é fixada quando
+   cada arquivo começa). Reiniciamos o buffer no novo formato.     */
+let rotateTimer = null;
+function onRotate(){
+  clearTimeout(rotateTimer);
+  rotateTimer = setTimeout(async () => {
+    if (!state.active || !state.stream) return;
+    try{
+      const track = state.stream.getVideoTracks()[0];
+      if (track && track.applyConstraints){
+        await track.applyConstraints(idealDims());   // melhor esforço: gira o próprio stream
+      }
+    }catch(_){ /* alguns aparelhos não aceitam: o navegador já rotaciona os quadros */ }
+    teardownPool();
+    spawnRecorder();                                 // novo buffer já no formato certo
+    toast("Tela girada — o replay recomeça a contar", "info", 2200);
+  }, 600);                                           // espera a rotação estabilizar
+}
+try{ screen.orientation.addEventListener("change", onRotate); }catch(_){}
+window.addEventListener("orientationchange", onRotate);
+
 
 function releaseCamera(){
   teardownPool();
@@ -529,7 +622,7 @@ async function openStream(cam){
     for (let tryN = 0; tryN < 2 && !stream; tryN++){
       try{
         stream = await navigator.mediaDevices.getUserMedia({
-          video: Object.assign({ width: { ideal: 1280 }, height: { ideal: 720 } }, videoBase),
+          video: Object.assign(idealDims(), videoBase),
           audio: true
         });
       }catch(err){
@@ -818,16 +911,16 @@ async function saveAll(){
 
 async function refreshVaultUI(){
   const n = await vault.count();
-  // tela de encerramento
+  // central de replays
   $("ended-msg").textContent = n > 0
-    ? "Você tem " + n + " replay" + (n > 1 ? "s" : "") + " guardado" + (n > 1 ? "s" : "") + " para salvar na galeria."
-    : "Nenhum replay guardado nesta gravação.";
+    ? "Você tem " + n + " replay" + (n > 1 ? "s" : "") + " guardado" + (n > 1 ? "s" : "") + "."
+    : "Nenhum replay guardado.";
   $("b-saveall").style.display = n > 0 ? "block" : "none";
-  $("b-saveall").textContent = "Salvar todos os replays (" + n + ")";
+  $("b-saveall").textContent = "Salvar no celular (" + n + ")";
   $("b-discard").style.display = n > 0 ? "block" : "none";
-  // botão de recuperação na tela inicial
+  // botão "Continuar" na tela inicial
   $("b-recover").style.display = n > 0 ? "block" : "none";
-  $("b-recover").textContent = "Salvar " + n + " replay" + (n > 1 ? "s" : "") + " pendente" + (n > 1 ? "s" : "");
+  $("b-recover").textContent = "Continuar — " + n + " replay" + (n > 1 ? "s" : "") + " guardado" + (n > 1 ? "s" : "");
   updateCountChip(n);
   return n;
 }
@@ -865,21 +958,6 @@ async function deliver(blob, name){
       ? "Armazenamento insuficiente no celular" : "Não foi possível salvar", "err");
   }
 }
-
-/* ---------- encerrar ---------- */
-$("btn-end").onclick = () => { vibrate(30); $("modal").classList.add("open"); };
-$("m-stay").onclick = () => $("modal").classList.remove("open");
-$("m-end").onclick = async () => {
-  $("modal").classList.remove("open");
-  state.active = false;
-  clearInterval(state.schedId);
-  clearInterval(state.timerId);
-  releaseCamera();
-  if (state.wakeLock){ try{ state.wakeLock.release(); }catch(_){} state.wakeLock = null; }
-  hideToast();
-  await refreshVaultUI();
-  show("s-ended");
-};
 
 /* ---------- PWA: manifest inline ---------- */
 (function(){
