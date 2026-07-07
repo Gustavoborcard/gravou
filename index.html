@@ -73,7 +73,7 @@ h2{font-size:24px;font-weight:800;letter-spacing:-.01em}
 /* ---- tela de gravação ---- */
 #rec-screen{padding:0;display:none}
 #rec-screen.active{display:block}
-#cam{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+#cam{position:fixed;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
 #cam.mirror{transform:scaleX(-1)}
 
 .rec-top{
@@ -526,10 +526,11 @@ function isPortrait(){
   try{ return window.matchMedia("(orientation: portrait)").matches; }catch(_){ return true; }
 }
 function idealDims(){
-  // pede à câmera o formato do jeito que o celular está agora
+  // 4:3 é o formato nativo da maioria dos sensores: usa o sensor
+  // inteiro e entrega o maior ângulo real de filmagem
   return isPortrait()
-    ? { width: { ideal: 720 },  height: { ideal: 1280 }, aspectRatio: { ideal: 9/16 } }
-    : { width: { ideal: 1280 }, height: { ideal: 720 },  aspectRatio: { ideal: 16/9 } };
+    ? { width: { ideal: 1080 }, height: { ideal: 1440 }, aspectRatio: { ideal: 3/4 } }
+    : { width: { ideal: 1440 }, height: { ideal: 1080 }, aspectRatio: { ideal: 4/3 } };
 }
 
 /* Confere se a câmera entregou o formato certo; se veio deitado
