@@ -73,7 +73,7 @@ h2{font-size:24px;font-weight:800;letter-spacing:-.01em}
 /* ---- tela de gravação ---- */
 #rec-screen{padding:0;display:none}
 #rec-screen.active{display:block}
-#cam{position:fixed;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+#cam{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
 #cam.mirror{transform:scaleX(-1)}
 
 .rec-top{
@@ -81,8 +81,7 @@ h2{font-size:24px;font-weight:800;letter-spacing:-.01em}
   display:flex;align-items:center;justify-content:center;gap:10px;z-index:5;pointer-events:none;
 }
 .badge{
-  display:flex;align-items:center;gap:8px;background:rgba(10,14,11,.88);
-  border:1px solid rgba(255,255,255,.12);
+  display:flex;align-items:center;gap:8px;background:rgba(10,14,11,.6);backdrop-filter:blur(10px);
   border-radius:999px;padding:8px 14px;font-size:14px;font-weight:700;
 }
 .rec-dot{width:9px;height:9px;border-radius:50%;background:var(--rec);animation:blink 1.1s ease infinite}
@@ -98,41 +97,33 @@ h2{font-size:24px;font-weight:800;letter-spacing:-.01em}
 .icon-btn:active{background:rgba(10,14,11,.75)}
 .icon-btn svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 #btn-flip{top:calc(70px + var(--safe-t));right:16px}
-#chip-count{
-  pointer-events:auto;cursor:pointer;font:inherit;font-size:14px;font-weight:800;color:var(--text);
-  border:1.5px solid rgba(255,197,61,.55);
-}
-#chip-count:active{transform:scale(.95)}
+#btn-end{top:calc(70px + var(--safe-t));left:16px;color:#FF9BA0}
 
 /* botão principal com anel de buffer (assinatura visual) */
 #btn-save{
   position:fixed;z-index:6;left:50%;bottom:calc(22px + var(--safe-b));transform:translateX(-50%);
-  width:min(300px,78vw,44vh);height:min(300px,78vw,44vh);border-radius:50%;border:none;cursor:pointer;padding:14px;
-  background:conic-gradient(var(--accent) calc(var(--buf,0)*1%), rgba(255,255,255,.28) 0);
+  width:min(300px,78vw,44vh);height:min(300px,78vw,44vh);border-radius:50%;border:none;cursor:pointer;padding:9px;
+  background:conic-gradient(var(--accent) calc(var(--buf,0)*1%), rgba(255,255,255,.18) 0);
   transition:transform .08s ease;
 }
 #btn-save:active{transform:translateX(-50%) scale(.95)}
 #btn-save .inner{
-  width:100%;height:100%;border-radius:50%;background:rgba(10,14,11,.34);
+  width:100%;height:100%;border-radius:50%;background:rgba(10,14,11,.74);backdrop-filter:blur(8px);
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--text);
   position:relative;overflow:hidden;
 }
-#btn-save .rw{font-size:52px;line-height:1;color:var(--accent);font-weight:900;text-shadow:0 1px 8px rgba(0,0,0,.9)}
-#btn-save .lbl{font-size:19px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;text-shadow:0 1px 8px rgba(0,0,0,.9)}
-#btn-save .secs{font-size:42px;font-weight:900;color:var(--accent);text-shadow:0 1px 8px rgba(0,0,0,.9)}
+#btn-save .rw{font-size:52px;line-height:1;color:var(--accent);font-weight:900}
+#btn-save .lbl{font-size:19px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
+#btn-save .secs{font-size:42px;font-weight:900;color:var(--accent)}
 .ripple{position:absolute;border-radius:50%;background:rgba(255,197,61,.45);transform:scale(0);animation:rip .5s ease-out;pointer-events:none}
 @keyframes rip{to{transform:scale(3.2);opacity:0}}
-
-/* flash de confirmação: certeza binária de que salvou */
-#flash{position:fixed;inset:0;z-index:25;pointer-events:none;opacity:0;background:var(--ok)}
-#flash.go{animation:flashgo .45s ease-out}
-@keyframes flashgo{0%{opacity:.85}100%{opacity:0}}
 
 @media (orientation:landscape){
   #btn-save{left:auto;right:calc(18px + env(safe-area-inset-right,0px));bottom:50%;transform:translateY(50%);width:min(280px,72vh,44vw);height:min(280px,72vh,44vw)}
   #btn-save:active{transform:translateY(50%) scale(.95)}
   .rec-top{justify-content:flex-start;padding-left:calc(16px + env(safe-area-inset-left,0px))}
   #btn-flip{top:auto;bottom:calc(24px + var(--safe-b));left:calc(16px + env(safe-area-inset-left,0px));right:auto}
+  #btn-end{top:calc(16px + var(--safe-t));left:auto;right:calc(16px + env(safe-area-inset-right,0px))}
 }
 
 /* ---- toast ---- */
@@ -167,13 +158,13 @@ a{color:var(--accent)}
 
 <!-- HOME -->
 <section class="screen active" id="s-home">
+  <div class="eyebrow">Replay da pelada</div>
   <div class="logo">Gravou<span class="dot">.</span></div>
-  <p class="tagline">Fez um golaço? <b>Toque no botão</b> e o <b>Gravou</b> salva os últimos segundos <b>antes</b> do toque, direto na galeria.</p>
+  <p class="tagline">Fez um golaço? Toca no botão e o <b>Gravou</b> salva os últimos segundos <b>antes</b> do toque, direto na galeria.</p>
   <div class="stack">
-    <button class="btn btn-primary" id="b-start">Nova gravação</button>
-    <button class="btn btn-ghost" id="b-recover" style="display:none">Continuar</button>
+    <button class="btn btn-primary" id="b-start">Começar</button>
   </div>
-  <p class="hint">Sem cadastro. Funciona offline.</p>
+  <p class="hint">Sem cadastro. Funciona offline. Os vídeos ficam só no seu celular.</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -215,17 +206,19 @@ a{color:var(--accent)}
   <div class="stack">
     <button class="btn btn-primary" id="b-go">Iniciar gravação</button>
   </div>
-  <p class="hint">O <b>+</b> é porque o vídeo pode vir com alguns segundos extras no início. O replay salva só o que aconteceu <b>antes</b> do toque — nunca depois.</p>
+  <p class="hint">O botão de replay salva os últimos segundos <b>antes</b> do toque — nunca depois. O vídeo pode vir com alguns segundos extras no início, mas o lance fica sempre no final.</p>
 </section>
 
 <!-- GRAVAÇÃO -->
 <section class="screen" id="rec-screen">
   <video id="cam" autoplay playsinline muted></video>
   <div class="rec-top">
-    <div class="badge"><span class="rec-dot"></span>Gravando</div>
+    <div class="badge"><span class="rec-dot"></span>Gravando <span id="timer">00:00</span></div>
     <div class="badge time-chip" id="chip-dur">20s</div>
-    <button class="badge" id="chip-count">🎬 <span id="count-n">0</span></button>
   </div>
+  <button class="icon-btn" id="btn-end" aria-label="Encerrar gravação">
+    <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+  </button>
   <button class="icon-btn" id="btn-flip" aria-label="Trocar câmera">
     <svg viewBox="0 0 24 24"><path d="M20 8h-3l-2-3H9L7 8H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1z"/><path d="M9.5 13.5a2.5 2.5 0 0 1 4.3-1.7M14.5 13.5a2.5 2.5 0 0 1-4.3 1.7"/><path d="M14 11.5l.6-.9.9.6M10 15.5l-.6.9-.9-.6"/></svg>
   </button>
@@ -238,30 +231,27 @@ a{color:var(--accent)}
   </button>
 </section>
 
-<!-- CENTRAL DE REPLAYS -->
+<!-- GRAVAÇÃO ENCERRADA -->
 <section class="screen" id="s-ended">
-  <div class="status-icon ok">🎬</div>
-  <h2>Seus replays</h2>
-  <p class="tagline" id="ended-msg">Nenhum replay guardado.</p>
+  <div class="status-icon ok">✓</div>
+  <h2>Gravação encerrada</h2>
+  <p class="tagline">Seus replays salvos continuam na galeria do celular.</p>
   <div class="stack">
-    <button class="btn btn-primary" id="b-saveall" style="display:none">Salvar ou compartilhar</button>
-    <button class="btn btn-ghost" id="b-again">Voltar a gravar</button>
+    <button class="btn btn-primary" id="b-again">Gravar de novo</button>
     <button class="btn btn-ghost" id="b-home">Início</button>
-    <button class="btn btn-ghost" id="b-discard" style="display:none;color:#FF9BA0">Descartar tudo</button>
   </div>
 </section>
 
 <div id="toast"></div>
-<div id="flash"></div>
 
-<!-- CONFIRMAÇÃO -->
+<!-- MODAL ENCERRAR -->
 <div id="modal">
   <div class="sheet">
-    <h2 id="modal-title">Tem certeza?</h2>
-    <p id="modal-msg"></p>
+    <h2>Encerrar gravação?</h2>
+    <p>Os replays que você já salvou continuam na galeria. O que não foi salvo será descartado.</p>
     <div class="stack" style="margin-top:0">
-      <button class="btn btn-danger" id="m-yes">Confirmar</button>
-      <button class="btn btn-ghost" id="m-no">Cancelar</button>
+      <button class="btn btn-danger" id="m-end">Encerrar</button>
+      <button class="btn btn-ghost" id="m-stay">Continuar gravando</button>
     </div>
   </div>
 </div>
@@ -276,63 +266,6 @@ a{color:var(--accent)}
    O clipe cobre pelo menos os últimos X segundos.
    ========================================================= */
 "use strict";
-
-/* ---------- cofre local de replays (IndexedDB) ----------
-   Os replays ficam guardados no aparelho durante a partida e
-   são salvos todos de uma vez no final — sem interromper o jogo. */
-const vault = {
-  _db: null,
-  async db(){
-    if (this._db) return this._db;
-    this._db = await new Promise((res, rej) => {
-      const rq = indexedDB.open("gravou", 1);
-      rq.onupgradeneeded = () => rq.result.createObjectStore("replays", { autoIncrement: true });
-      rq.onsuccess = () => res(rq.result);
-      rq.onerror = () => rej(rq.error);
-    });
-    return this._db;
-  },
-  async add(item){
-    const db = await this.db();
-    return new Promise((res, rej) => {
-      const tx = db.transaction("replays", "readwrite");
-      tx.objectStore("replays").add(item);
-      tx.oncomplete = res;
-      tx.onerror = () => rej(tx.error);
-    });
-  },
-  async all(){
-    const db = await this.db();
-    return new Promise((res, rej) => {
-      const rq = db.transaction("replays", "readonly").objectStore("replays").getAll();
-      rq.onsuccess = () => res(rq.result || []);
-      rq.onerror = () => rej(rq.error);
-    });
-  },
-  async count(){
-    try{
-      const db = await this.db();
-      return await new Promise((res, rej) => {
-        const rq = db.transaction("replays", "readonly").objectStore("replays").count();
-        rq.onsuccess = () => res(rq.result || 0);
-        rq.onerror = () => rej(rq.error);
-      });
-    }catch(_){ return 0; }
-  },
-  async clear(){
-    const db = await this.db();
-    return new Promise((res, rej) => {
-      const tx = db.transaction("replays", "readwrite");
-      tx.objectStore("replays").clear();
-      tx.oncomplete = res;
-      tx.onerror = () => rej(tx.error);
-    });
-  }
-};
-
-function updateCountChip(n){
-  $("count-n").textContent = n;
-}
 
 const $ = id => document.getElementById(id);
 const DURATIONS = [10,15,20,30,45,60];
@@ -366,8 +299,7 @@ function show(id){
 let toastId = null;
 function toast(msg, kind = "info", ms = 2600){
   const t = $("toast");
-  const icon = kind === "ok" ? "✓ " : kind === "err" ? "✕ " : "";
-  t.textContent = icon + msg;
+  t.textContent = msg;
   t.className = "show " + kind;
   clearTimeout(toastId);
   if (ms > 0) toastId = setTimeout(() => t.classList.remove("show"), ms);
@@ -379,7 +311,7 @@ const chipsBox = $("chips");
 DURATIONS.forEach(d => {
   const c = document.createElement("button");
   c.className = "chip" + (d === state.duration ? " sel" : "");
-  c.textContent = d + "s+";
+  c.textContent = d + "s";
   c.onclick = () => {
     state.duration = d;
     chipsBox.querySelectorAll(".chip").forEach(x => x.classList.toggle("sel", x === c));
@@ -387,84 +319,15 @@ DURATIONS.forEach(d => {
   chipsBox.appendChild(c);
 });
 
-/* ---------- confirmação genérica ---------- */
-let confirmFn = null;
-function openConfirm(title, msg, actionLabel, fn){
-  $("modal-title").textContent = title;
-  $("modal-msg").textContent = msg;
-  $("m-yes").textContent = actionLabel;
-  confirmFn = fn;
-  $("modal").classList.add("open");
-}
-$("m-no").onclick = () => { confirmFn = null; $("modal").classList.remove("open"); };
-$("m-yes").onclick = async () => {
-  $("modal").classList.remove("open");
-  const fn = confirmFn; confirmFn = null;
-  if (fn) await fn();
-};
-
-/* ---------- parar sessão (câmera/energia) ---------- */
-function stopSession(){
-  state.active = false;
-  clearInterval(state.schedId);
-  clearInterval(state.timerId);
-  releaseCamera();
-  if (state.wakeLock){ try{ state.wakeLock.release(); }catch(_){} state.wakeLock = null; }
-  hideToast();
-}
-
 /* ---------- fluxo ---------- */
-$("b-start").onclick = async () => {
-  const n = await vault.count();
-  if (n > 0){
-    openConfirm(
-      "Começar do zero?",
-      "Você tem " + n + " replay" + (n > 1 ? "s" : "") + " não salvo" + (n > 1 ? "s" : "") +
-      ". Uma nova gravação descarta o que está guardado.",
-      "Descartar e começar",
-      async () => { await vault.clear(); await refreshVaultUI(); show("s-perm"); }
-    );
-    return;
-  }
-  show("s-perm");
-};
+$("b-start").onclick = () => show("s-perm");
 $("b-perm-back").onclick = () => show("s-home");
 $("b-perm").onclick = requestPermission;
 $("b-retry-perm").onclick = requestPermission;
 $("b-retry-cam").onclick = requestPermission;
 $("b-go").onclick = startRecording;
-$("b-again").onclick = () => {
-  // volta a gravar: replays ficam intactos; usa a duração já escolhida
-  if (state.everRecorded) startRecording();
-  else show("s-time");
-};
-$("b-home").onclick = async () => { await refreshVaultUI(); show("s-home"); };
-$("b-saveall").onclick = saveAll;
-$("b-recover").onclick = async () => { await refreshVaultUI(); show("s-ended"); };
-$("b-discard").onclick = async () => {
-  const n = await vault.count();
-  openConfirm(
-    "Descartar tudo?",
-    n + " replay" + (n > 1 ? "s" : "") + " ser" + (n > 1 ? "ão" : "á") + " apagado" + (n > 1 ? "s" : "") + " definitivamente.",
-    "Descartar",
-    async () => {
-      await vault.clear();
-      await refreshVaultUI();
-      toast("Replays descartados", "info");
-    }
-  );
-};
-
-// contador 🎬 abre a central de replays (pausa a câmera para poupar bateria)
-$("chip-count").onclick = async () => {
-  vibrate(20);
-  stopSession();
-  await refreshVaultUI();
-  show("s-ended");
-};
-
-// ao abrir o app: verifica se há replays de uma sessão anterior
-refreshVaultUI();
+$("b-again").onclick = () => show("s-time");
+$("b-home").onclick = () => show("s-home");
 
 async function requestPermission(){
   try{
@@ -479,8 +342,8 @@ async function requestPermission(){
 }
 
 function updateDurLabels(){
-  $("save-secs").textContent = state.duration + "s+";
-  $("chip-dur").textContent = state.duration + "s+";
+  $("save-secs").textContent = state.duration + "s";
+  $("chip-dur").textContent = state.duration + "s";
 }
 
 /* ---------- MIME / compatibilidade ---------- */
@@ -510,9 +373,7 @@ async function startRecording(){
     return;
   }
   state.active = true;
-  state.everRecorded = true;
   state.sessionStart = Date.now();
-  updateCountChip(await vault.count());
   startScheduler();
   startTimer();
   requestWakeLock();
@@ -520,60 +381,6 @@ async function startRecording(){
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-/* ---------- orientação ---------- */
-function isPortrait(){
-  try{ return window.matchMedia("(orientation: portrait)").matches; }catch(_){ return true; }
-}
-function idealDims(){
-  // 4:3 é o formato nativo da maioria dos sensores: usa o sensor
-  // inteiro e entrega o maior ângulo real de filmagem
-  return isPortrait()
-    ? { width: { ideal: 1080 }, height: { ideal: 1440 }, aspectRatio: { ideal: 3/4 } }
-    : { width: { ideal: 1440 }, height: { ideal: 1080 }, aspectRatio: { ideal: 4/3 } };
-}
-
-/* Confere se a câmera entregou o formato certo; se veio deitado
-   com o celular em pé (ou vice-versa), tenta corrigir no stream. */
-async function ensureOrientation(stream){
-  try{
-    const track = stream.getVideoTracks()[0];
-    if (!track || !track.getSettings) return;
-    const want = isPortrait();
-    let s = track.getSettings();
-    if (!s.width || !s.height) return;
-    if ((s.height >= s.width) === want) return;      // já está certo
-    await track.applyConstraints(idealDims());
-    s = track.getSettings();
-    if ((s.height >= s.width) !== want){
-      // a câmera não aceita esse formato: avisa uma vez, sem quebrar
-      toast("Esta câmera só grava na horizontal", "info", 2600);
-    }
-  }catch(_){}
-}
-
-/* Quando o celular gira durante a gravação, os gravadores atuais
-   ficariam presos ao formato antigo (a orientação é fixada quando
-   cada arquivo começa). Reiniciamos o buffer no novo formato.     */
-let rotateTimer = null;
-function onRotate(){
-  clearTimeout(rotateTimer);
-  rotateTimer = setTimeout(async () => {
-    if (!state.active || !state.stream) return;
-    try{
-      const track = state.stream.getVideoTracks()[0];
-      if (track && track.applyConstraints){
-        await track.applyConstraints(idealDims());   // melhor esforço: gira o próprio stream
-      }
-    }catch(_){ /* alguns aparelhos não aceitam: o navegador já rotaciona os quadros */ }
-    teardownPool();
-    spawnRecorder();                                 // novo buffer já no formato certo
-    toast("Tela girada — o replay recomeça a contar", "info", 2200);
-  }, 600);                                           // espera a rotação estabilizar
-}
-try{ screen.orientation.addEventListener("change", onRotate); }catch(_){}
-window.addEventListener("orientationchange", onRotate);
-
 
 function releaseCamera(){
   teardownPool();
@@ -642,7 +449,7 @@ async function openStream(cam){
     for (let tryN = 0; tryN < 2 && !stream; tryN++){
       try{
         stream = await navigator.mediaDevices.getUserMedia({
-          video: Object.assign(idealDims(), videoBase),
+          video: Object.assign({ width: { ideal: 1280 }, height: { ideal: 720 } }, videoBase),
           audio: true
         });
       }catch(err){
@@ -655,7 +462,6 @@ async function openStream(cam){
   }
   if (!stream) throw lastErr || new Error("camera");
 
-  await ensureOrientation(stream);                   // formato certo p/ vertical/horizontal
   await applyWidestZoom(stream);                     // menor zoom = maior ângulo
   state.stream = stream;
 
@@ -744,21 +550,17 @@ function startScheduler(){
   }, 400);
 }
 
-/* ---------- anel de buffer ---------- */
+/* ---------- timer + anel de buffer ---------- */
 function startTimer(){
   clearInterval(state.timerId);
   state.timerId = setInterval(() => {
+    const s = Math.floor((Date.now() - state.sessionStart) / 1000);
+    $("timer").textContent =
+      String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
     const oldest = state.pool[0];
     const avail = oldest ? Math.min((Date.now() - oldest.start) / 1000, state.duration) : 0;
     $("btn-save").style.setProperty("--buf", (avail / state.duration) * 100);
   }, 250);
-}
-
-function flashOK(){
-  const f = $("flash");
-  f.classList.remove("go");
-  void f.offsetWidth;                                // reinicia a animação
-  f.classList.add("go");
 }
 
 /* ---------- wake lock (tela ligada) ---------- */
@@ -770,13 +572,6 @@ document.addEventListener("visibilitychange", () => {
 });
 
 /* ---------- trocar câmera (cicla por todas, inclui USB) ---------- */
-function camName(cam){
-  if (!cam) return "Câmera";
-  if (cam.side === "extern") return cam.label && cam.label.length <= 22 ? cam.label : "Câmera externa";
-  if (cam.side === "front") return "Câmera frontal";
-  return cam.wide ? "Grande angular" : "Câmera traseira";
-}
-
 let flipping = false;
 $("btn-flip").onclick = async () => {
   if (flipping || state.saving) return;              // evita toques duplos durante a troca
@@ -787,11 +582,13 @@ $("btn-flip").onclick = async () => {
   const prevIndex = state.camIndex;
   const next = (state.camIndex + 1 + state.cams.length) % state.cams.length;
   const cam = state.cams[next];
-  toast("Abrindo " + camName(cam).toLowerCase() + "…", "info", 0);
 
   try{
     await openStream(cam);
-    toast(camName(cam) + " — o replay recomeça a contar", "info", 2200);
+    const nm = cam.side === "extern" ? (cam.label.length > 22 ? "Câmera externa" : cam.label)
+             : cam.side === "front"  ? "Câmera frontal"
+             : cam.wide ? "Grande angular" : "Câmera traseira";
+    toast(nm + " — o replay recomeça a contar", "info", 2200);
   }catch(_){
     // falhou: volta para a câmera anterior sem deixar tela preta
     try{
@@ -828,6 +625,7 @@ function saveReplay(){
   if (!oldest){ toast("Ainda não há vídeo para salvar", "err"); return; }
 
   state.saving = true;
+  toast("Salvando replay…", "info", 0);
 
   // finaliza o gravador mais antigo NO MOMENTO do toque:
   // o arquivo termina aqui — nada depois do toque entra no vídeo
@@ -869,82 +667,8 @@ async function finishSave(item){
     String(stamp.getSeconds()).padStart(2,"0") +
     "-" + state.replayCount + "." + state.ext;
 
-  try{
-    await vault.add({ name, type: blob.type, blob, t: Date.now() });
-    const n = await vault.count();                   // fonte única da verdade
-    updateCountChip(n);
-    flashOK();
-    toast("Replay " + n + " guardado", "ok", 1800);
-  }catch(err){
-    // cofre indisponível (raro): cai para o salvamento imediato
-    await deliver(blob, name);
-  }
+  await deliver(blob, name);
   state.saving = false;
-}
-
-/* ---------- salvar todos os replays de uma vez ---------- */
-let savingAll = false;
-async function saveAll(){
-  if (savingAll) return;
-  savingAll = true;
-  try{
-    const items = await vault.all();
-    if (!items.length){ toast("Nenhum replay para salvar", "info"); return; }
-    toast("Salvando " + items.length + " replays…", "info", 0);
-    const files = items.map(i => new File([i.blob], i.name, { type: i.type }));
-
-    // 1) uma única caixa de compartilhamento com todos os vídeos
-    if (navigator.canShare && navigator.canShare({ files })){
-      try{
-        toast("Use a opção salvar no celular", "info", 0);
-        await navigator.share({ files, title: "Replays Gravou" });
-        await vault.clear();
-        refreshVaultUI();
-        flashOK();
-        toast(items.length + " replays salvos na galeria", "ok");
-        return;
-      }catch(err){
-        if (err && err.name === "AbortError"){ hideToast(); return; }   // cancelou: mantém guardados
-        // muitos arquivos podem exceder o limite do share: cai para downloads
-      }
-    }
-
-    // 2) downloads em sequência
-    for (const it of items){
-      const url = URL.createObjectURL(it.blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = it.name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      await sleep(600);                              // dá tempo do navegador aceitar cada um
-    }
-    await vault.clear();
-    refreshVaultUI();
-    flashOK();
-    toast(items.length + " vídeos baixados — veja a notificação de downloads", "ok", 5000);
-  }catch(err){
-    toast("Não foi possível salvar", "err");
-  }finally{
-    savingAll = false;
-  }
-}
-
-async function refreshVaultUI(){
-  const n = await vault.count();
-  // central de replays
-  $("ended-msg").textContent = n > 0
-    ? "Você tem " + n + " replay" + (n > 1 ? "s" : "") + " guardado" + (n > 1 ? "s" : "") + "."
-    : "Nenhum replay guardado.";
-  $("b-saveall").style.display = n > 0 ? "block" : "none";
-  $("b-saveall").textContent = "Salvar ou compartilhar (" + n + ")";
-  $("b-discard").style.display = n > 0 ? "block" : "none";
-  // botão "Continuar" na tela inicial
-  $("b-recover").style.display = n > 0 ? "block" : "none";
-  $("b-recover").textContent = "Continuar — " + n + " replay" + (n > 1 ? "s" : "") + " guardado" + (n > 1 ? "s" : "");
-  updateCountChip(n);
-  return n;
 }
 
 async function deliver(blob, name){
@@ -955,7 +679,6 @@ async function deliver(blob, name){
     try{
       toast("Use a opção salvar no celular", "info", 0);
       await navigator.share({ files: [file], title: "Replay Gravou" });
-      flashOK();
       toast("Replay salvo na galeria", "ok");
       return;
     }catch(err){
@@ -973,13 +696,26 @@ async function deliver(blob, name){
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
-    flashOK();
     toast("Vídeo baixado — abra a notificação de download e toque em salvar na galeria", "ok", 5000);
   }catch(err){
     toast(err && err.name === "QuotaExceededError"
       ? "Armazenamento insuficiente no celular" : "Não foi possível salvar", "err");
   }
 }
+
+/* ---------- encerrar ---------- */
+$("btn-end").onclick = () => { vibrate(30); $("modal").classList.add("open"); };
+$("m-stay").onclick = () => $("modal").classList.remove("open");
+$("m-end").onclick = () => {
+  $("modal").classList.remove("open");
+  state.active = false;
+  clearInterval(state.schedId);
+  clearInterval(state.timerId);
+  releaseCamera();
+  if (state.wakeLock){ try{ state.wakeLock.release(); }catch(_){} state.wakeLock = null; }
+  hideToast();
+  show("s-ended");
+};
 
 /* ---------- PWA: manifest inline ---------- */
 (function(){
