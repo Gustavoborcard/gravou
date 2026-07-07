@@ -53,7 +53,7 @@ body{
 .btn-ghost{background:var(--surface-2);color:var(--text)}
 .btn-danger{background:var(--rec);color:#fff}
 .stack{display:flex;flex-direction:column;gap:12px;margin-top:36px;width:100%;max-width:320px}
-.stack .btn{width:100%}
+.stack .btn{width:100%;white-space:nowrap}
 
 /* ---- chips de tempo ---- */
 .chips{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:320px;margin-top:28px}
@@ -168,12 +168,12 @@ a{color:var(--accent)}
 <!-- HOME -->
 <section class="screen active" id="s-home">
   <div class="logo">Gravou<span class="dot">.</span></div>
-  <p class="tagline">Fez um golaço? <b>Toque no botão</b> e o <b>Gravou</b> salva os últimos segundos <b>antes</b> do toque, direto na galeria.</p>
+  <p class="tagline">Fez um golaço? <b>Toque no botão</b> e o <b>Gravou</b> guarda os últimos segundos para salvar ou compartilhar depois.</p>
   <div class="stack">
-    <button class="btn btn-primary" id="b-start">Nova gravação</button>
+    <button class="btn btn-primary" id="b-start">Começar agora</button>
     <button class="btn btn-ghost" id="b-recover" style="display:none">Continuar</button>
   </div>
-  <p class="hint">Sem cadastro. Funciona offline.</p>
+  <p class="hint">É só abrir, gravar e usar — mesmo offline.</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -901,9 +901,10 @@ async function refreshVaultUI(){
   $("b-saveall").style.display = n > 0 ? "block" : "none";
   $("b-saveall").textContent = "Salvar ou compartilhar (" + n + ")";
   $("b-discard").style.display = n > 0 ? "block" : "none";
-  // botão "Continuar" na tela inicial
+  // tela inicial: rótulos dinâmicos
   $("b-recover").style.display = n > 0 ? "block" : "none";
-  $("b-recover").textContent = "Continuar — " + n + " replay" + (n > 1 ? "s" : "") + " guardado" + (n > 1 ? "s" : "");
+  $("b-recover").textContent = "Continuar (" + n + " replay" + (n > 1 ? "s" : "") + ")";
+  $("b-start").textContent = n > 0 ? "Nova gravação" : "Começar agora";
   updateCountChip(n);
   return n;
 }
