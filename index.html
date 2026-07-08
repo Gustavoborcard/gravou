@@ -118,6 +118,48 @@ h2{font-size:24px;font-weight:800;letter-spacing:-.01em}
 }
 #chip-count:active{transform:scale(.95)}
 
+/* chip do controle remoto */
+#chip-remote{
+  pointer-events:auto;cursor:pointer;font:inherit;font-size:14px;font-weight:800;color:var(--text-dim);
+  border:1.5px solid rgba(255,255,255,.18);
+}
+#chip-remote.lit{color:var(--accent);border-color:rgba(255,197,61,.55)}
+#chip-remote:active{transform:scale(.95)}
+
+/* overlay de pareamento */
+#pair{position:fixed;inset:0;z-index:30;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.6)}
+#pair.open{display:flex}
+#pair-code{
+  font-size:44px;font-weight:900;letter-spacing:.12em;color:var(--accent);
+  font-variant-numeric:tabular-nums;margin:14px 0 6px;
+}
+#pair-status{font-size:14px;color:var(--text-dim);margin-bottom:16px;line-height:1.5}
+@media (orientation:landscape){#pair{align-items:center}#pair .sheet{border-radius:22px;margin:0 20px}}
+
+/* modo controle */
+.link-btn{background:none;border:none;color:var(--text-dim);font:inherit;font-size:14px;
+  text-decoration:underline;cursor:pointer;margin-top:18px;padding:8px}
+#ctl-code{
+  width:100%;max-width:280px;background:var(--surface);border:1.5px solid var(--line);color:var(--text);
+  border-radius:16px;font:inherit;font-size:28px;font-weight:800;letter-spacing:.15em;text-align:center;
+  padding:16px;margin-top:24px;font-variant-numeric:tabular-nums;
+}
+#ctl-code:focus{outline:none;border-color:var(--accent)}
+#ctl-status{font-size:15px;color:var(--text-dim);margin-top:14px;min-height:22px}
+#btn-ctl{
+  width:min(300px,78vw,44vh);height:min(300px,78vw,44vh);border-radius:50%;border:none;cursor:pointer;padding:14px;
+  background:conic-gradient(var(--accent) 100%, rgba(255,255,255,.28) 0);
+  transition:transform .08s ease;margin-top:28px;display:none;
+}
+#btn-ctl:active{transform:scale(.95)}
+#btn-ctl .inner{
+  width:100%;height:100%;border-radius:50%;background:rgba(10,14,11,.6);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--text);
+  position:relative;overflow:hidden;
+}
+#btn-ctl .rw{font-size:52px;line-height:1;color:var(--accent);font-weight:900}
+#btn-ctl .lbl{font-size:19px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
+
 /* botão principal com anel de buffer (assinatura visual) */
 #btn-save{
   position:fixed;z-index:6;left:50%;bottom:calc(22px + var(--safe-b));transform:translateX(-50%);
@@ -188,6 +230,7 @@ a{color:var(--accent)}
     <button class="btn btn-ghost" id="b-recover" style="display:none">Continuar</button>
   </div>
   <p class="hint">É só abrir, gravar e usar — mesmo offline.</p>
+  <button class="link-btn" id="b-remote">Usar este celular como controle</button>
 </section>
 
 <!-- PERMISSÃO -->
@@ -239,6 +282,7 @@ a{color:var(--accent)}
     <div class="badge"><span class="rec-dot"></span>Gravando</div>
     <div class="badge time-chip" id="chip-dur">20s</div>
     <button class="badge" id="chip-count">🎬 <span id="count-n">0</span></button>
+    <button class="badge" id="chip-remote" aria-label="Controle remoto">📡</button>
   </div>
   <button class="icon-btn" id="btn-flip" aria-label="Trocar câmera">
     <svg viewBox="0 0 24 24"><path d="M20 8h-3l-2-3H9L7 8H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1z"/><path d="M9.5 13.5a2.5 2.5 0 0 1 4.3-1.7M14.5 13.5a2.5 2.5 0 0 1-4.3 1.7"/><path d="M14 11.5l.6-.9.9.6M10 15.5l-.6.9-.9-.6"/></svg>
@@ -264,6 +308,36 @@ a{color:var(--accent)}
     <button class="btn btn-ghost" id="b-discard" style="display:none;color:#FF9BA0">Descartar tudo</button>
   </div>
 </section>
+
+<!-- MODO CONTROLE -->
+<section class="screen" id="s-remote">
+  <div class="eyebrow">Controle remoto</div>
+  <h2 id="ctl-title">Conectar à câmera</h2>
+  <input id="ctl-code" type="tel" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="off">
+  <div class="stack" id="ctl-actions">
+    <button class="btn btn-primary" id="b-ctl-connect">Conectar</button>
+    <button class="btn btn-ghost" id="b-ctl-back">Voltar</button>
+  </div>
+  <p id="ctl-status"></p>
+  <button id="btn-ctl" aria-label="Salvar replay na câmera">
+    <span class="inner">
+      <span class="rw">⟲</span>
+      <span class="lbl">Salvar replay</span>
+    </span>
+  </button>
+</section>
+
+<!-- PAREAMENTO (código na câmera) -->
+<div id="pair">
+  <div class="sheet">
+    <h2>Controle remoto</h2>
+    <div id="pair-code">— — —</div>
+    <p id="pair-status">No outro celular, abra o Gravou e toque em "Usar este celular como controle".</p>
+    <div class="stack" style="margin-top:0">
+      <button class="btn btn-ghost" id="pair-close">Fechar</button>
+    </div>
+  </div>
+</div>
 
 <div id="toast"></div>
 <div id="flash"></div>
@@ -444,6 +518,7 @@ function stopSession(){
   clearInterval(state.schedId);
   clearInterval(state.timerId);
   disarmDim();
+  try{ stopRemote(); }catch(_){}
   releaseCamera();
   if (state.wakeLock){ try{ state.wakeLock.release(); }catch(_){} state.wakeLock = null; }
   hideToast();
@@ -554,6 +629,7 @@ async function startRecording(){
   requestWakeLock();
   show("rec-screen");
   armDim();
+  try{ startRemote(); }catch(_){}                    // controle remoto: falha silenciosa
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -1035,6 +1111,162 @@ async function deliver(blob, name){
       ? "Armazenamento insuficiente no celular" : "Não foi possível salvar", "err");
   }
 }
+
+/* ==================== CONTROLE REMOTO ====================
+   Módulo isolado e à prova de falha: a biblioteca (PeerJS) é
+   carregada sob demanda; sem internet ou com qualquer erro,
+   o app inteiro funciona exatamente como antes.             */
+let peerLibPromise = null;
+function loadPeerLib(){
+  if (window.Peer) return Promise.resolve(true);
+  if (peerLibPromise) return peerLibPromise;
+  peerLibPromise = new Promise(res => {
+    const sc = document.createElement("script");
+    sc.src = "https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js";
+    sc.onload = () => res(true);
+    sc.onerror = () => { peerLibPromise = null; res(false); };
+    document.head.appendChild(sc);
+    setTimeout(() => res(!!window.Peer), 8000);      // não trava esperando
+  });
+  return peerLibPromise;
+}
+
+/* ---------- lado câmera ---------- */
+const cam2 = { peer: null, conns: [], code: null, ready: false };
+
+function remoteChip(on){ $("chip-remote").classList.toggle("lit", on); }
+
+async function startRemote(){
+  try{
+    if (cam2.peer) return;                            // já ativo
+    const ok = await loadPeerLib();
+    if (!ok || !state.active) return;                 // sem internet: segue sem controle
+    cam2.code = String(Math.floor(100000 + Math.random() * 900000));
+    const peer = new Peer("gravou-" + cam2.code);
+    cam2.peer = peer;
+    peer.on("open", () => { cam2.ready = true; updatePairUI(); });
+    peer.on("connection", conn => {
+      conn.on("open", () => {
+        cam2.conns.push(conn);
+        remoteChip(true);
+        toast("Controle remoto conectado 🎮", "ok", 2200);
+      });
+      conn.on("data", msg => {
+        if (msg === "save" && state.active && $("rec-screen").classList.contains("active")){
+          saveReplay();
+          try{ conn.send("saved"); }catch(_){}
+        }
+      });
+      const drop = () => {
+        cam2.conns = cam2.conns.filter(c => c !== conn);
+        remoteChip(cam2.conns.length > 0);
+      };
+      conn.on("close", drop);
+      conn.on("error", drop);
+    });
+    peer.on("error", err => {
+      if (err && err.type === "unavailable-id" && state.active){
+        try{ peer.destroy(); }catch(_){}
+        cam2.peer = null; cam2.ready = false;
+        startRemote();                                // código colidiu: gera outro
+      }
+    });
+  }catch(_){ /* qualquer falha: app segue normal */ }
+}
+
+function stopRemote(){
+  try{ cam2.conns.forEach(c => { try{ c.close(); }catch(_){} }); }catch(_){}
+  cam2.conns = [];
+  try{ if (cam2.peer) cam2.peer.destroy(); }catch(_){}
+  cam2.peer = null; cam2.code = null; cam2.ready = false;
+  remoteChip(false);
+}
+
+function updatePairUI(){
+  if (cam2.ready && cam2.code){
+    $("pair-code").textContent = cam2.code.slice(0,3) + " " + cam2.code.slice(3);
+    $("pair-status").textContent = 'No outro celular, abra o Gravou e toque em "Usar este celular como controle".';
+  }else{
+    $("pair-code").textContent = "— — —";
+    $("pair-status").textContent = navigator.onLine
+      ? "Preparando o código… toque em fechar e abra de novo em instantes."
+      : "Controle remoto indisponível sem internet. A gravação continua normal.";
+  }
+}
+
+$("chip-remote").onclick = () => {
+  vibrate(20);
+  updatePairUI();
+  $("pair").classList.add("open");
+  if (!cam2.peer && state.active) startRemote();      // tenta de novo se falhou antes
+};
+$("pair-close").onclick = () => $("pair").classList.remove("open");
+
+/* ---------- lado controle ---------- */
+const ctl = { peer: null, conn: null };
+
+$("b-remote").onclick = () => {
+  $("ctl-code").value = "";
+  ctlStatus("");
+  $("btn-ctl").style.display = "none";
+  $("ctl-actions").style.display = "flex";
+  $("ctl-code").style.display = "block";
+  $("ctl-title").textContent = "Conectar à câmera";
+  show("s-remote");
+};
+$("b-ctl-back").onclick = () => { ctlDisconnect(); show("s-home"); };
+
+function ctlStatus(t){ $("ctl-status").textContent = t; }
+
+function ctlDisconnect(){
+  try{ if (ctl.conn) ctl.conn.close(); }catch(_){}
+  try{ if (ctl.peer) ctl.peer.destroy(); }catch(_){}
+  ctl.conn = null; ctl.peer = null;
+}
+
+$("b-ctl-connect").onclick = async () => {
+  const code = ($("ctl-code").value || "").replace(/\D/g, "");
+  if (code.length !== 6){ ctlStatus("Digite o código de 6 números mostrado na câmera."); return; }
+  ctlStatus("Conectando…");
+  const ok = await loadPeerLib();
+  if (!ok){ ctlStatus("Sem internet — o modo controle precisa de conexão."); return; }
+  ctlDisconnect();
+  try{
+    const peer = new Peer();
+    ctl.peer = peer;
+    peer.on("open", () => {
+      const conn = peer.connect("gravou-" + code, { reliable: true });
+      ctl.conn = conn;
+      const fail = () => { ctlStatus("Não encontrei a câmera. Confira o código e se a gravação está ativa."); };
+      conn.on("open", () => {
+        ctlStatus("Conectado à câmera ✓");
+        $("ctl-actions").style.display = "none";
+        $("ctl-code").style.display = "none";
+        $("ctl-title").textContent = "Controle conectado";
+        $("btn-ctl").style.display = "block";
+      });
+      conn.on("data", msg => {
+        if (msg === "saved"){ flashOK(); toast("Replay guardado na câmera", "ok", 1800); }
+      });
+      conn.on("close", () => {
+        $("btn-ctl").style.display = "none";
+        $("ctl-actions").style.display = "flex";
+        $("ctl-code").style.display = "block";
+        $("ctl-title").textContent = "Conectar à câmera";
+        ctlStatus("Conexão encerrada.");
+      });
+      conn.on("error", fail);
+      peer.on("error", fail);
+    });
+    peer.on("error", () => ctlStatus("Falha na conexão. Tente de novo."));
+  }catch(_){ ctlStatus("Falha na conexão. Tente de novo."); }
+};
+
+$("btn-ctl").onclick = () => {
+  vibrate(60);
+  if (ctl.conn && ctl.conn.open){ try{ ctl.conn.send("save"); }catch(_){} }
+  else ctlStatus("Sem conexão com a câmera.");
+};
 
 /* ---------- PWA: manifest inline ---------- */
 (function(){
