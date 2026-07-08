@@ -323,6 +323,27 @@ const vault = {
       rq.onerror = () => rej(rq.error);
     });
   },
+  async entries(){
+    // retorna [{key, item}] para permitir remoção seletiva após entrega
+    const db = await this.db();
+    const store = db.transaction("replays", "readonly").objectStore("replays");
+    const [keys, vals] = await Promise.all([
+      new Promise((res, rej) => { const r = store.getAllKeys(); r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); }),
+      new Promise((res, rej) => { const r = store.getAll();     r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); })
+    ]);
+    return keys.map((k, i) => ({ key: k, item: vals[i] }));
+  },
+  async removeKeys(keys){
+    if (!keys.length) return;
+    const db = await this.db();
+    return new Promise((res, rej) => {
+      const tx = db.transaction("replays", "readwrite");
+      const store = tx.objectStore("replays");
+      keys.forEach(k => store.delete(k));
+      tx.oncomplete = res;
+      tx.onerror = () => rej(tx.error);
+    });
+  },
   async count(){
     try{
       const db = await this.db();
@@ -887,36 +908,65 @@ async function finishSave(item){
 
 /* ---------- salvar todos os replays de uma vez ---------- */
 let savingAll = false;
+const SHARE_MSG = "O lance foi tão bom que virou replay no Gravou 🔥";
+
+/* Compartilha um grupo de replays. Se o sistema recusar por excesso
+   (memória/limite), divide ao meio e tenta as metades — recursivo e
+   invisível. Remove do cofre apenas o que foi realmente entregue.
+   Retorna: "done" | "cancelled" | "blocked"                        */
+async function shareGroup(entries){
+  const files = entries.map(e => new File([e.item.blob], e.item.name, { type: e.item.type }));
+  try{
+    await navigator.share({ files, title: SHARE_MSG, text: SHARE_MSG });
+    await vault.removeKeys(entries.map(e => e.key));
+    return "done";
+  }catch(err){
+    if (err && err.name === "AbortError") return "cancelled";     // usuário fechou: para tudo
+    if (err && err.name === "NotAllowedError") return "blocked";  // sistema exige novo toque
+    if (entries.length <= 1) throw err;                           // não dá para dividir mais
+    // bisseção: tenta cada metade
+    const mid = Math.ceil(entries.length / 2);
+    const a = await shareGroup(entries.slice(0, mid));
+    if (a !== "done") return a;
+    return await shareGroup(entries.slice(mid));
+  }
+}
+
 async function saveAll(){
   if (savingAll) return;
   savingAll = true;
   try{
-    const items = await vault.all();
-    if (!items.length){ toast("Nenhum replay para salvar", "info"); return; }
-    toast("Salvando " + items.length + " replays…", "info", 0);
-    const files = items.map(i => new File([i.blob], i.name, { type: i.type }));
+    const entries = await vault.entries();
+    if (!entries.length){ toast("Nenhum replay para salvar", "info"); return; }
+    const total = entries.length;
 
-    // 1) uma única caixa de compartilhamento com todos os vídeos
-    if (navigator.canShare && navigator.canShare({ files })){
-      try{
-        hideToast();                                   // a caixa do sistema fala por si
-        await navigator.share({ files, title: "O lance foi tão bom que virou replay no Gravou 🔥", text: "O lance foi tão bom que virou replay no Gravou 🔥" });
-        await vault.clear();
-        refreshVaultUI();
+    // 1) caminho principal: compartilhamento nativo com bisseção automática
+    const probe = [new File([entries[0].item.blob], entries[0].item.name, { type: entries[0].item.type })];
+    if (navigator.canShare && navigator.canShare({ files: probe })){
+      hideToast();                                   // a caixa do sistema fala por si
+      const result = await shareGroup(entries);
+      const remaining = await refreshVaultUI();
+      if (result === "done" && remaining === 0){
         flashOK();
-        toast("Tudo certo! " + items.length + " replay" + (items.length > 1 ? "s" : "") + " entregue" + (items.length > 1 ? "s" : ""), "ok");
-        return;
-      }catch(err){
-        if (err && err.name === "AbortError"){ hideToast(); return; }   // cancelou: mantém guardados
-        // muitos arquivos podem exceder o limite do share: cai para downloads
+        toast("Tudo certo! " + total + " replay" + (total > 1 ? "s" : "") + " entregue" + (total > 1 ? "s" : ""), "ok");
+      }else if (result === "blocked" && remaining > 0){
+        // caso raro: o sistema pediu um novo gesto entre as levas
+        const sent = total - remaining;
+        toast((sent > 0 ? sent + " entregues — " : "") + "toque de novo para enviar os " + remaining + " restantes", "info", 4000);
+      }else if (result === "cancelled" && remaining < total && remaining > 0){
+        toast((total - remaining) + " entregues — " + remaining + " continuam guardados", "info", 3000);
+      }else{
+        hideToast();                                 // cancelou sem entregar nada: silêncio
       }
+      return;
     }
 
-    // 2) downloads em sequência
-    for (const it of items){
-      const url = URL.createObjectURL(it.blob);
+    // 2) fallback: downloads em sequência
+    toast("Salvando " + total + " replays…", "info", 0);
+    for (const e of entries){
+      const url = URL.createObjectURL(e.item.blob);
       const a = document.createElement("a");
-      a.href = url; a.download = it.name;
+      a.href = url; a.download = e.item.name;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -926,8 +976,9 @@ async function saveAll(){
     await vault.clear();
     refreshVaultUI();
     flashOK();
-    toast(items.length + " vídeos baixados — veja a notificação de downloads", "ok", 5000);
+    toast(total + " vídeos baixados — veja a notificação de downloads", "ok", 5000);
   }catch(err){
+    await refreshVaultUI();
     toast("Não foi possível salvar", "err");
   }finally{
     savingAll = false;
