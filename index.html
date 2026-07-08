@@ -617,7 +617,7 @@ async function startRecording(){
   const [mime, ext] = pickMime();
   state.mime = mime; state.ext = ext;
   try{
-    await openStream();
+    await openStream(state.cams[state.camIndex] || undefined);   // retoma na mesma câmera
   }catch(err){
     if (err && err.name === "NotAllowedError") show("s-denied");
     else show("s-nocam");
@@ -757,6 +757,7 @@ async function openStream(cam){
   if (!stream) throw lastErr || new Error("camera");
 
   await applyWidestZoom(stream);                     // menor zoom = maior ângulo
+  setTimeout(() => { try{ applyWidestZoom(stream); }catch(_){} }, 800);  // reforço pós-estabilização
   state.stream = stream;
 
   // agora que temos permissão, os rótulos ficam visíveis: (re)monta a lista
