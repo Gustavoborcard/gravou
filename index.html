@@ -866,7 +866,10 @@ async function requestWakeLock(){
   try{ if ("wakeLock" in navigator) state.wakeLock = await navigator.wakeLock.request("screen"); }catch(_){}
 }
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && $("rec-screen").classList.contains("active")) requestWakeLock();
+  if (document.visibilityState === "visible" && $("rec-screen").classList.contains("active")){
+    requestWakeLock();
+    try{ if (cam2.peer && cam2.peer.disconnected && !cam2.peer.destroyed) cam2.peer.reconnect(); }catch(_){}
+  }
 });
 
 /* ---------- trocar câmera (cicla por todas, inclui USB) ---------- */
@@ -1132,7 +1135,7 @@ function loadPeerLib(){
 }
 
 /* ---------- lado câmera ---------- */
-const cam2 = { peer: null, conns: [], code: null, ready: false };
+const cam2 = { peer: null, conns: [], code: null, ready: false, watch: null };
 
 function remoteChip(on){ $("chip-remote").classList.toggle("lit", on); }
 
@@ -1145,6 +1148,22 @@ async function startRemote(){
     const peer = new Peer("gravou-" + cam2.code);
     cam2.peer = peer;
     peer.on("open", () => { cam2.ready = true; updatePairUI(); });
+    // iOS derruba a conexão de recepção após um tempo: religa sozinho
+    peer.on("disconnected", () => {
+      try{ if (state.active && !peer.destroyed) peer.reconnect(); }catch(_){}
+    });
+    clearInterval(cam2.watch);
+    cam2.watch = setInterval(() => {
+      try{
+        if (!state.active || !cam2.peer) return;
+        if (cam2.peer.destroyed){                     // caso extremo: recria do zero
+          cam2.peer = null; cam2.ready = false;
+          startRemote();
+        }else if (cam2.peer.disconnected){
+          cam2.peer.reconnect();
+        }
+      }catch(_){}
+    }, 10000);
     peer.on("connection", conn => {
       conn.on("open", () => {
         cam2.conns.push(conn);
@@ -1175,6 +1194,8 @@ async function startRemote(){
 }
 
 function stopRemote(){
+  clearInterval(cam2.watch);
+  cam2.watch = null;
   try{ cam2.conns.forEach(c => { try{ c.close(); }catch(_){} }); }catch(_){}
   cam2.conns = [];
   try{ if (cam2.peer) cam2.peer.destroy(); }catch(_){}
