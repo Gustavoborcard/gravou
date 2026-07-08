@@ -518,7 +518,6 @@ function stopSession(){
   clearInterval(state.schedId);
   clearInterval(state.timerId);
   disarmDim();
-  try{ stopRemote(); }catch(_){}
   releaseCamera();
   if (state.wakeLock){ try{ state.wakeLock.release(); }catch(_){} state.wakeLock = null; }
   hideToast();
@@ -549,7 +548,11 @@ $("b-again").onclick = () => {
   if (state.everRecorded) startRecording();
   else show("s-time");
 };
-$("b-home").onclick = async () => { await refreshVaultUI(); show("s-home"); };
+$("b-home").onclick = async () => {
+  try{ stopRemote(); }catch(_){}                     // sessão encerrada de verdade: código morre aqui
+  await refreshVaultUI();
+  show("s-home");
+};
 $("b-saveall").onclick = saveAll;
 $("b-recover").onclick = async () => { await refreshVaultUI(); show("s-ended"); };
 $("b-discard").onclick = async () => {
@@ -1150,15 +1153,15 @@ async function startRemote(){
     peer.on("open", () => { cam2.ready = true; updatePairUI(); });
     // iOS derruba a conexão de recepção após um tempo: religa sozinho
     peer.on("disconnected", () => {
-      try{ if (state.active && !peer.destroyed) peer.reconnect(); }catch(_){}
+      try{ if (!peer.destroyed) peer.reconnect(); }catch(_){}
     });
     clearInterval(cam2.watch);
     cam2.watch = setInterval(() => {
       try{
-        if (!state.active || !cam2.peer) return;
+        if (!cam2.peer) return;
         if (cam2.peer.destroyed){                     // caso extremo: recria do zero
           cam2.peer = null; cam2.ready = false;
-          startRemote();
+          if (state.active) startRemote();
         }else if (cam2.peer.disconnected){
           cam2.peer.reconnect();
         }
@@ -1227,6 +1230,7 @@ $("pair-close").onclick = () => $("pair").classList.remove("open");
 const ctl = { peer: null, conn: null };
 
 $("b-remote").onclick = () => {
+  try{ stopRemote(); }catch(_){}                     // este aparelho vira controle: desliga o papel de câmera
   $("ctl-code").value = "";
   ctlStatus("");
   $("btn-ctl").style.display = "none";
@@ -1252,14 +1256,23 @@ $("b-ctl-connect").onclick = async () => {
   const ok = await loadPeerLib();
   if (!ok){ ctlStatus("Sem internet — o modo controle precisa de conexão."); return; }
   ctlDisconnect();
+  let opened = false;
+  const giveUp = setTimeout(() => {
+    if (!opened){
+      ctlDisconnect();
+      ctlStatus("Não conectou. Confira o código na câmera e tente de novo.");
+    }
+  }, 12000);
   try{
     const peer = new Peer();
     ctl.peer = peer;
     peer.on("open", () => {
       const conn = peer.connect("gravou-" + code, { reliable: true });
       ctl.conn = conn;
-      const fail = () => { ctlStatus("Não encontrei a câmera. Confira o código e se a gravação está ativa."); };
+      const fail = () => { clearTimeout(giveUp); ctlStatus("Não encontrei a câmera. Confira o código e se a gravação está ativa."); };
       conn.on("open", () => {
+        opened = true;
+        clearTimeout(giveUp);
         ctlStatus("Conectado à câmera ✓");
         $("ctl-actions").style.display = "none";
         $("ctl-code").style.display = "none";
