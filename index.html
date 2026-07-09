@@ -213,6 +213,7 @@ h2{font-size:24px;font-weight:800;letter-spacing:-.01em}
 }
 @keyframes up{from{transform:translateY(40px);opacity:0}}
 .sheet p{color:var(--text-dim);margin:10px 0 22px;font-size:15px;line-height:1.5}
+.sheet .stack{margin-left:auto;margin-right:auto}
 @media (orientation:landscape){#modal{align-items:center}.sheet{border-radius:22px;margin:0 20px}}
 
 .hint{margin-top:26px;font-size:13px;color:var(--text-dim);line-height:1.6;max-width:300px}
@@ -1153,6 +1154,20 @@ async function startRemote(){
     const peer = new Peer("gravou-" + cam2.code);
     cam2.peer = peer;
     peer.on("open", () => { cam2.ready = true; updatePairUI(); });
+    peer.on("error", err => {
+      const t = err && err.type;
+      if (t === "unavailable-id" && state.active){
+        try{ peer.destroy(); }catch(_){}
+        cam2.peer = null; cam2.ready = false;
+        startRemote();                                // código colidiu: gera outro
+        return;
+      }
+      if (t === "network" || t === "socket-error" || t === "socket-closed" || t === "server-error"){
+        cam2.ready = false;
+        updatePairUI();
+        try{ if (!peer.destroyed) peer.reconnect(); }catch(_){}
+      }
+    });
     // iOS derruba a conexão de recepção após um tempo: religa sozinho
     peer.on("disconnected", () => {
       try{ if (!peer.destroyed) peer.reconnect(); }catch(_){}
@@ -1167,6 +1182,7 @@ async function startRemote(){
         }else if (cam2.peer.disconnected){
           cam2.peer.reconnect();
         }
+        if ($("pair").classList.contains("open")) updatePairUI();
       }catch(_){}
     }, 10000);
     peer.on("connection", conn => {
@@ -1189,13 +1205,6 @@ async function startRemote(){
       conn.on("close", drop);
       conn.on("error", drop);
     });
-    peer.on("error", err => {
-      if (err && err.type === "unavailable-id" && state.active){
-        try{ peer.destroy(); }catch(_){}
-        cam2.peer = null; cam2.ready = false;
-        startRemote();                                // código colidiu: gera outro
-      }
-    });
   }catch(_){ /* qualquer falha: app segue normal */ }
 }
 
@@ -1212,11 +1221,14 @@ function stopRemote(){
 function updatePairUI(){
   if (cam2.ready && cam2.code){
     $("pair-code").textContent = cam2.code.slice(0,3) + " " + cam2.code.slice(3);
-    $("pair-status").textContent = 'No outro celular, abra o Gravou e toque em "Usar este celular como controle".';
+    $("pair-status").textContent = 'Código ativo ✓ No outro celular, abra o Gravou e toque em "Usar este celular como controle".';
+  }else if (cam2.peer && cam2.code){
+    $("pair-code").textContent = cam2.code.slice(0,3) + " " + cam2.code.slice(3);
+    $("pair-status").textContent = "Reativando o código… aguarde alguns segundos antes de conectar.";
   }else{
     $("pair-code").textContent = "— — —";
     $("pair-status").textContent = navigator.onLine
-      ? "Preparando o código… toque em fechar e abra de novo em instantes."
+      ? "Preparando o código… aguarde alguns segundos."
       : "Controle remoto indisponível sem internet. A gravação continua normal.";
   }
 }
