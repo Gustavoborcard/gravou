@@ -391,14 +391,6 @@ const vault = {
       tx.onerror = () => rej(tx.error);
     });
   },
-  async all(){
-    const db = await this.db();
-    return new Promise((res, rej) => {
-      const rq = db.transaction("replays", "readonly").objectStore("replays").getAll();
-      rq.onsuccess = () => res(rq.result || []);
-      rq.onerror = () => rej(rq.error);
-    });
-  },
   async entries(){
     // retorna [{key, item}] para permitir remoção seletiva após entrega
     const db = await this.db();
@@ -457,9 +449,7 @@ const state = {
   mime: "",
   ext: "mp4",
   pool: [],                    // gravadores ativos [{rec, stream, chunks, start}]
-  seq: 0,
   schedId: null,
-  sessionStart: 0,
   timerId: null,
   wakeLock: null,
   saving: false,
@@ -627,10 +617,9 @@ async function startRecording(){
   }
   state.active = true;
   state.everRecorded = true;
-  state.sessionStart = Date.now();
   updateCountChip(await vault.count());
   startScheduler();
-  startTimer();
+  startRing();
   requestWakeLock();
   show("rec-screen");
   armDim();
@@ -806,7 +795,7 @@ function spawnRecorder(){
     try{ rec = state.mime ? new MediaRecorder(s, { mimeType: state.mime }) : new MediaRecorder(s); }
     catch(__){ rec = new MediaRecorder(s); }
   }
-  const item = { id: ++state.seq, rec, stream: s, chunks: [], start: Date.now(), mode: "buffer" };
+  const item = { rec, stream: s, chunks: [], start: Date.now(), mode: "buffer" };
   rec.ondataavailable = e => { if (e.data && e.data.size) item.chunks.push(e.data); };
   rec.onstop = () => {
     item.stream.getTracks().forEach(t => t.stop());
@@ -851,7 +840,7 @@ function startScheduler(){
 }
 
 /* ---------- anel de buffer ---------- */
-function startTimer(){
+function startRing(){
   clearInterval(state.timerId);
   state.timerId = setInterval(() => {
     const oldest = state.pool[0];
@@ -1094,7 +1083,7 @@ async function deliver(blob, name){
   if (navigator.canShare && navigator.canShare({ files: [file] })){
     try{
       hideToast();                                   // a caixa do sistema fala por si
-      await navigator.share({ files: [file], title: "O lance foi tão bom que virou replay no Gravou 🔥", text: "O lance foi tão bom que virou replay no Gravou 🔥" });
+      await navigator.share({ files: [file], title: SHARE_MSG, text: SHARE_MSG });
       flashOK();
       toast("Tudo certo! Replay entregue", "ok");
       return;
@@ -1250,14 +1239,19 @@ $("pair-new").onclick = () => {
 /* ---------- lado controle ---------- */
 const ctl = { peer: null, conn: null };
 
-$("b-remote").onclick = () => {
-  try{ stopRemote(); }catch(_){}                     // este aparelho vira controle: desliga o papel de câmera
-  $("ctl-code").value = "";
-  ctlStatus("");
+/* restaura a tela do controle ao estado "conectar" */
+function ctlResetUI(){
   $("btn-ctl").style.display = "none";
   $("ctl-actions").style.display = "flex";
   $("ctl-code").style.display = "block";
   $("ctl-title").textContent = "Conectar à câmera";
+}
+
+$("b-remote").onclick = () => {
+  try{ stopRemote(); }catch(_){}                     // este aparelho vira controle: desliga o papel de câmera
+  $("ctl-code").value = "";
+  ctlStatus("");
+  ctlResetUI();
   show("s-remote");
 };
 $("b-ctl-back").onclick = () => { ctlDisconnect(); show("s-home"); };
@@ -1304,10 +1298,7 @@ $("b-ctl-connect").onclick = async () => {
         if (msg === "saved"){ flashOK(); toast("Replay guardado na câmera", "ok", 1800); }
       });
       conn.on("close", () => {
-        $("btn-ctl").style.display = "none";
-        $("ctl-actions").style.display = "flex";
-        $("ctl-code").style.display = "block";
-        $("ctl-title").textContent = "Conectar à câmera";
+        ctlResetUI();
         ctlStatus("Conexão encerrada.");
       });
       conn.on("error", fail);
