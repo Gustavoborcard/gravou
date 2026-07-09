@@ -334,6 +334,7 @@ a{color:var(--accent)}
     <div id="pair-code">— — —</div>
     <p id="pair-status">No outro celular, abra o Gravou e toque em "Usar este celular como controle".</p>
     <div class="stack" style="margin-top:0">
+      <button class="btn btn-ghost" id="pair-new">Gerar novo código</button>
       <button class="btn btn-ghost" id="pair-close">Fechar</button>
     </div>
   </div>
@@ -1172,6 +1173,7 @@ async function startRemote(){
       conn.on("open", () => {
         cam2.conns.push(conn);
         remoteChip(true);
+        $("pair").classList.remove("open");           // conectou: o código já cumpriu o papel
         toast("Controle remoto conectado 🎮", "ok", 2200);
       });
       conn.on("data", msg => {
@@ -1226,6 +1228,12 @@ $("chip-remote").onclick = () => {
   if (!cam2.peer && state.active) startRemote();      // tenta de novo se falhou antes
 };
 $("pair-close").onclick = () => $("pair").classList.remove("open");
+$("pair-new").onclick = () => {
+  vibrate(20);
+  try{ stopRemote(); }catch(_){}                     // derruba código e conexões atuais
+  updatePairUI();                                    // mostra "preparando…" enquanto isso
+  if (state.active) startRemote();                   // novo código nasce e atualiza o overlay
+};
 
 /* ---------- lado controle ---------- */
 const ctl = { peer: null, conn: null };
