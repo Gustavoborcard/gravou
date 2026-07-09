@@ -706,8 +706,16 @@ async function applyWidestZoom(stream){
     const track = stream.getVideoTracks()[0];
     if (!track || !track.getCapabilities) return;
     const caps = track.getCapabilities();
-    if (caps.zoom && typeof caps.zoom.min === "number"){
-      await track.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] });
+    if (!caps.zoom || typeof caps.zoom.min !== "number") return;
+    const want = caps.zoom.min;
+    // tenta, confere se pegou, e re-tenta após a câmera estabilizar
+    for (const wait of [0, 500, 1200]){
+      if (wait) await sleep(wait);
+      if (track.readyState !== "live") return;
+      try{ await track.applyConstraints({ advanced: [{ zoom: want }] }); }catch(_){}
+      try{ await track.applyConstraints({ zoom: want }); }catch(_){}
+      const z = track.getSettings && track.getSettings().zoom;
+      if (z !== undefined && Math.abs(z - want) < 0.01) return;   // confirmado
     }
   }catch(_){ /* sem suporte a zoom: segue com o padrão */ }
 }
@@ -747,8 +755,7 @@ async function openStream(cam){
   }
   if (!stream) throw lastErr || new Error("camera");
 
-  await applyWidestZoom(stream);                     // menor zoom = maior ângulo
-  setTimeout(() => { try{ applyWidestZoom(stream); }catch(_){} }, 800);  // reforço pós-estabilização
+  await applyWidestZoom(stream);                     // menor zoom = maior ângulo (com re-tentativas verificadas)
   state.stream = stream;
 
   // agora que temos permissão, os rótulos ficam visíveis: (re)monta a lista
