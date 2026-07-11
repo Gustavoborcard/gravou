@@ -291,7 +291,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v61</p>
+  <p style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v62</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -449,10 +449,7 @@ const vault = {
   /* executa uma operação; se a conexão morreu, reabre e tenta 1x de novo */
   async _run(fn){
     try{ return await fn(await this.db()); }
-    catch(err){
-      this._reset();
-      return await fn(await this.db());
-    }
+    catch(err){ this._reset(); return await fn(await this.db()); }
   },
   async add(item){
     return this._run(db => new Promise((res, rej) => {
@@ -1048,6 +1045,70 @@ function saveReplay(){
   if (!state.pool.length) spawnRecorder();
 }
 
+async function finishSave(item){
+  let blob;
+  try{
+    blob = new Blob(item.chunks, { type: state.mime || (state.ext === "mp4" ? "video/mp4" : "video/webm") });
+  }catch(err){
+    state.saving = false; clearTimeout(state.saveGuard);
+    toast(err && err.name === "QuotaExceededError"
+      ? "Armazenamento insuficiente no celular" : "Não foi possível salvar", "err");
+    return;
+  }
+  if (!blob.size){
+    state.saving = false; clearTimeout(state.saveGuard);
+    toast("Ainda não há vídeo para salvar", "err");
+    return;
+  }
+
+  state.replayCount++;
+  const stamp = new Date();
+  const name = "gravei-replay-" +
+    String(stamp.getHours()).padStart(2,"0") +
+    String(stamp.getMinutes()).padStart(2,"0") +
+    String(stamp.getSeconds()).padStart(2,"0") +
+    "-" + state.replayCount + "." + state.ext;
+
+  try{
+    await vault.add({ name, type: blob.type, blob, t: Date.now(), min: state.duration });
+    const n = await vault.count();                   // fonte única da verdade
+    updateCountChip(n);
+    flashOK();
+    toast("Replay " + n + " guardado", "ok", 1800);
+  }catch(err){
+    // cofre indisponível (raro): avisa com o motivo e cai para o salvamento imediato
+    toast("Cofre falhou (" + ((err && err.name) || "erro") + ") — enviando direto", "err", 3000);
+    await deliver(blob, name);
+  }
+  state.saving = false; clearTimeout(state.saveGuard);
+}
+
+/* ---------- salvar todos os replays de uma vez ---------- */
+let savingAll = false;
+const SHARE_MSG = "O lance foi tão bom que virou replay no Gravei 🔥";
+
+/* Compartilha um grupo de replays. Se o sistema recusar por excesso
+   (memória/limite), divide ao meio e tenta as metades — recursivo e
+   invisível. Remove do cofre apenas o que foi realmente entregue.
+   Retorna: "done" | "cancelled" | "blocked"                        */
+async function shareGroup(entries){
+  const files = entries.map(e => new File([e.item.blob], e.item.name, { type: e.item.type }));
+  try{
+    await navigator.share({ files, title: SHARE_MSG, text: SHARE_MSG });
+    await vault.removeKeys(entries.map(e => e.key));
+    return "done";
+  }catch(err){
+    if (err && err.name === "AbortError") return "cancelled";     // usuário fechou: para tudo
+    if (err && err.name === "NotAllowedError") return "blocked";  // sistema exige novo toque
+    if (entries.length <= 1) throw err;                           // não dá para dividir mais
+    // bisseção: tenta cada metade
+    const mid = Math.ceil(entries.length / 2);
+    const a = await shareGroup(entries.slice(0, mid));
+    if (a !== "done") return a;
+    return await shareGroup(entries.slice(mid));
+  }
+}
+
 /* Gravei — corte de MP4 sem recodificação.
    Regra: preservar PELO MENOS X segundos → corte no último quadro-chave
    com DTS ≤ (duração − X). Sem quadro-chave elegível → retorna null
@@ -1372,114 +1433,59 @@ function trimMp4(bytes, minSeconds){
 }
 
 
-/* Corta o excesso (se possível) e valida; qualquer dúvida → original.
-   Devolve { blob, dur } — dur em segundos quando medido, senão null.  */
+/* Validação real: carrega o vídeo invisível e mede a duração. */
 function _probeBlob(blob){
   return new Promise(res => {
     let done = false;
     const url = URL.createObjectURL(blob);
     const v = document.createElement("video");
     v.muted = true; v.playsInline = true; v.preload = "metadata";
-    const finish = ok => {
-      if (done) return; done = true;
-      URL.revokeObjectURL(url);
-      res(ok ? (isFinite(v.duration) ? v.duration : null) : null);
-    };
+    const finish = ok => { if (done) return; done = true; URL.revokeObjectURL(url); res(ok && isFinite(v.duration) ? v.duration : null); };
     v.onloadedmetadata = () => finish(v.duration > 0);
     v.onerror = () => finish(false);
     setTimeout(() => finish(false), 4000);
     v.src = url;
   });
 }
-async function refineReplay(blob, minSeconds){
+
+/* Corte diferido e transacional: roda na central, ANTES de compartilhar.
+   Para cada replay MP4 bruto: corta → valida → grava o novo → remove o
+   antigo. Qualquer dúvida em qualquer etapa deixa o bruto intocado.    */
+async function refineVault(){
   try{
-    if (!/mp4/i.test(blob.type || "")) return { blob, dur: null };   // WebM: como hoje
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-    const cutBytes = trimMp4(bytes, minSeconds);
-    if (!cutBytes) return { blob, dur: null };                        // sem excesso/cortável
-    const cut = new Blob([cutBytes], { type: blob.type });
-    const dur = await _probeBlob(cut);                                // validação real
-    if (dur === null || dur < minSeconds - 0.5) return { blob, dur: null };
-    return { blob: cut, dur };
-  }catch(_){
-    return { blob, dur: null };                                       // rede de segurança
-  }
-}
-
-async function finishSave(item){
-  let blob;
-  try{
-    blob = new Blob(item.chunks, { type: state.mime || (state.ext === "mp4" ? "video/mp4" : "video/webm") });
-  }catch(err){
-    state.saving = false; clearTimeout(state.saveGuard);
-    toast(err && err.name === "QuotaExceededError"
-      ? "Armazenamento insuficiente no celular" : "Não foi possível salvar", "err");
-    return;
-  }
-  if (!blob.size){
-    state.saving = false; clearTimeout(state.saveGuard);
-    toast("Ainda não há vídeo para salvar", "err");
-    return;
-  }
-
-  // corte de precisão: entrega o tempo pedido com o mínimo de excesso
-  const refined = await refineReplay(blob, state.duration);
-  blob = refined.blob;
-
-  state.replayCount++;
-  const stamp = new Date();
-  const name = "gravei-replay-" +
-    String(stamp.getHours()).padStart(2,"0") +
-    String(stamp.getMinutes()).padStart(2,"0") +
-    String(stamp.getSeconds()).padStart(2,"0") +
-    "-" + state.replayCount + (refined.dur ? "-" + Math.round(refined.dur) + "s" : "") + "." + state.ext;
-
-  try{
-    await vault.add({ name, type: blob.type, blob, t: Date.now() });
-    const n = await vault.count();                   // fonte única da verdade
-    updateCountChip(n);
-    flashOK();
-    toast("Replay " + n + " guardado", "ok", 1800);
-  }catch(err){
-    // cofre indisponível (raro): avisa com o motivo e cai para o salvamento imediato
-    toast("Cofre falhou (" + ((err && err.name) || "erro") + ") — enviando direto", "err", 3000);
-    await deliver(blob, name);
-  }
-  state.saving = false; clearTimeout(state.saveGuard);
-}
-
-/* ---------- salvar todos os replays de uma vez ---------- */
-let savingAll = false;
-const SHARE_MSG = "O lance foi tão bom que virou replay no Gravei 🔥";
-
-/* Compartilha um grupo de replays. Se o sistema recusar por excesso
-   (memória/limite), divide ao meio e tenta as metades — recursivo e
-   invisível. Remove do cofre apenas o que foi realmente entregue.
-   Retorna: "done" | "cancelled" | "blocked"                        */
-async function shareGroup(entries){
-  const files = entries.map(e => new File([e.item.blob], e.item.name, { type: e.item.type }));
-  try{
-    await navigator.share({ files, title: SHARE_MSG, text: SHARE_MSG });
-    await vault.removeKeys(entries.map(e => e.key));
-    return "done";
-  }catch(err){
-    if (err && err.name === "AbortError") return "cancelled";     // usuário fechou: para tudo
-    if (err && err.name === "NotAllowedError") return "blocked";  // sistema exige novo toque
-    if (entries.length <= 1) throw err;                           // não dá para dividir mais
-    // bisseção: tenta cada metade
-    const mid = Math.ceil(entries.length / 2);
-    const a = await shareGroup(entries.slice(0, mid));
-    if (a !== "done") return a;
-    return await shareGroup(entries.slice(mid));
-  }
+    const entries = await vault.entries();
+    let touched = false;
+    for (const e of entries){
+      try{
+        const it = e.item;
+        if (!it || !it.min || !/mp4/i.test(it.type || "")) continue;
+        if (/-\d+s\.mp4$/i.test(it.name || "")) continue;          // já refinado
+        const bytes = new Uint8Array(await it.blob.arrayBuffer());
+        const cut = trimMp4(bytes, it.min);
+        if (!cut) continue;                                          // sem excesso/cortável
+        const blob2 = new Blob([cut], { type: it.type });
+        const dur = await _probeBlob(blob2);
+        if (dur === null || dur < it.min - 0.5) continue;            // validador reprovou
+        const name2 = (it.name || "replay.mp4").replace(/\.mp4$/i, "-" + Math.round(dur) + "s.mp4");
+        await vault.add({ name: name2, type: it.type, blob: blob2, t: it.t, min: it.min });
+        await vault.removeKeys([e.key]);                             // transação: grava antes, remove depois
+        touched = true;
+      }catch(_){ /* este item fica bruto; segue para o próximo */ }
+    }
+    return touched;
+  }catch(_){ return false; }
 }
 
 async function saveAll(){
   if (savingAll) return;
   savingAll = true;
   try{
-    const entries = await vault.entries();
+    let entries = await vault.entries();
     if (!entries.length){ toast("Nenhum replay para salvar", "info"); return; }
+    // corte diferido: ajusta a duração agora, com o jogo já parado
+    toast("Preparando os replays…", "info", 0);
+    if (await refineVault()) entries = await vault.entries();
+    hideToast();
     const total = entries.length;
 
     // 1) caminho principal: compartilhamento nativo com bisseção automática
