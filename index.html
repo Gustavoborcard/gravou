@@ -291,7 +291,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v60</p>
+  <p style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v61</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -433,6 +433,7 @@ a{color:var(--accent)}
    são salvos todos de uma vez no final — sem interromper o jogo. */
 const vault = {
   _db: null,
+  _reset(){ try{ if (this._db) this._db.close(); }catch(_){} this._db = null; },
   async db(){
     if (this._db) return this._db;
     this._db = await new Promise((res, rej) => {
@@ -441,56 +442,63 @@ const vault = {
       rq.onsuccess = () => res(rq.result);
       rq.onerror = () => rej(rq.error);
     });
+    // o iOS fecha a conexão na hibernação do PWA: invalida o cache na hora
+    try{ this._db.onclose = () => { this._db = null; }; }catch(_){}
     return this._db;
   },
+  /* executa uma operação; se a conexão morreu, reabre e tenta 1x de novo */
+  async _run(fn){
+    try{ return await fn(await this.db()); }
+    catch(err){
+      this._reset();
+      return await fn(await this.db());
+    }
+  },
   async add(item){
-    const db = await this.db();
-    return new Promise((res, rej) => {
+    return this._run(db => new Promise((res, rej) => {
       const tx = db.transaction("replays", "readwrite");
       tx.objectStore("replays").add(item);
       tx.oncomplete = res;
       tx.onerror = () => rej(tx.error);
-    });
+    }));
   },
   async entries(){
     // retorna [{key, item}] para permitir remoção seletiva após entrega
-    const db = await this.db();
-    const store = db.transaction("replays", "readonly").objectStore("replays");
-    const [keys, vals] = await Promise.all([
-      new Promise((res, rej) => { const r = store.getAllKeys(); r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); }),
-      new Promise((res, rej) => { const r = store.getAll();     r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); })
-    ]);
-    return keys.map((k, i) => ({ key: k, item: vals[i] }));
+    return this._run(async db => {
+      const store = db.transaction("replays", "readonly").objectStore("replays");
+      const [keys, vals] = await Promise.all([
+        new Promise((res, rej) => { const r = store.getAllKeys(); r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); }),
+        new Promise((res, rej) => { const r = store.getAll();     r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); })
+      ]);
+      return keys.map((k, i) => ({ key: k, item: vals[i] }));
+    });
   },
   async removeKeys(keys){
     if (!keys.length) return;
-    const db = await this.db();
-    return new Promise((res, rej) => {
+    return this._run(db => new Promise((res, rej) => {
       const tx = db.transaction("replays", "readwrite");
       const store = tx.objectStore("replays");
       keys.forEach(k => store.delete(k));
       tx.oncomplete = res;
       tx.onerror = () => rej(tx.error);
-    });
+    }));
   },
   async count(){
     try{
-      const db = await this.db();
-      return await new Promise((res, rej) => {
+      return await this._run(db => new Promise((res, rej) => {
         const rq = db.transaction("replays", "readonly").objectStore("replays").count();
         rq.onsuccess = () => res(rq.result || 0);
         rq.onerror = () => rej(rq.error);
-      });
+      }));
     }catch(_){ return 0; }
   },
   async clear(){
-    const db = await this.db();
-    return new Promise((res, rej) => {
+    return this._run(db => new Promise((res, rej) => {
       const tx = db.transaction("replays", "readwrite");
       tx.objectStore("replays").clear();
       tx.oncomplete = res;
       tx.onerror = () => rej(tx.error);
-    });
+    }));
   }
 };
 
@@ -1433,7 +1441,8 @@ async function finishSave(item){
     flashOK();
     toast("Replay " + n + " guardado", "ok", 1800);
   }catch(err){
-    // cofre indisponível (raro): cai para o salvamento imediato
+    // cofre indisponível (raro): avisa com o motivo e cai para o salvamento imediato
+    toast("Cofre falhou (" + ((err && err.name) || "erro") + ") — enviando direto", "err", 3000);
     await deliver(blob, name);
   }
   state.saving = false; clearTimeout(state.saveGuard);
