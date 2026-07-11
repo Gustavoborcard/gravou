@@ -1,134 +1,125 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Gravei — Sonda de Captura</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#121212">
+<title>Gravei — Sonda de captura única</title>
 <style>
-  :root{ --rec:#FF3B30; --preto:#121212; --branco:#FAFAF7; --dim:#8A8A8E; --surf:#1A1A1A; --line:#2E2E2E; }
-  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  body{background:var(--preto);color:var(--branco);font-family:-apple-system,system-ui,sans-serif;
-       padding:16px;max-width:640px;margin:0 auto;line-height:1.5}
-  h1{font-size:20px;margin-bottom:4px}
-  .sub{color:var(--dim);font-size:13px;margin-bottom:16px}
-  video{width:100%;border-radius:12px;background:#000;aspect-ratio:9/16;object-fit:cover;margin-bottom:12px}
-  button{width:100%;border:none;border-radius:999px;padding:16px;font-size:16px;font-weight:700;
-         font-family:inherit;margin-bottom:10px;cursor:pointer}
-  .primary{background:var(--rec);color:#fff}
-  .ghost{background:var(--surf);color:var(--branco);border:1px solid var(--line)}
-  button:disabled{opacity:.4}
-  .row{display:flex;gap:10px}
-  .row button{flex:1}
-  #log{background:#000;border:1px solid var(--line);border-radius:12px;padding:12px;
-       font-family:ui-monospace,Menlo,monospace;font-size:12px;white-space:pre-wrap;
-       margin-top:12px;min-height:80px;word-break:break-all}
-  .files{margin-top:12px}
-  .files a{display:block;background:var(--surf);border:1px solid var(--line);border-radius:10px;
-           padding:12px;color:var(--branco);text-decoration:none;font-size:14px;margin-bottom:8px}
-  .files a b{color:var(--rec)}
-  .hint{font-size:12px;color:var(--dim);margin-top:8px}
+:root{color-scheme:dark;--bg:#121212;--card:#1d1d1f;--line:#343438;--fg:#fafaf7;--muted:#a3a3a8;--red:#ff3b30;--green:#2fbf71}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,sans-serif;padding:calc(18px + env(safe-area-inset-top)) 16px calc(22px + env(safe-area-inset-bottom))}
+main{max-width:720px;margin:auto}h1{font-size:25px;margin:0 0 5px}.sub{color:var(--muted);margin:0 0 16px}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin:12px 0}
+video{width:100%;max-height:45vh;background:#000;border-radius:12px;object-fit:cover}.row{display:flex;gap:9px;flex-wrap:wrap}.row>*{flex:1 1 130px}
+button,select{appearance:none;border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:#29292d;color:var(--fg);font:inherit;font-weight:700}button.primary{background:var(--red);border-color:var(--red)}button:disabled{opacity:.42}.ok{color:var(--green)}.bad{color:#ff6961}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.stat{padding:9px;background:#151517;border-radius:10px}.stat b{display:block;font-size:18px}.stat span{font-size:12px;color:var(--muted)}
+pre{margin:0;max-height:270px;overflow:auto;white-space:pre-wrap;word-break:break-word;font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:#d7d7dc}.note{font-size:12px;color:var(--muted)}
 </style>
 </head>
 <body>
-  <h1>Sonda de Captura — Gravei</h1>
-  <p class="sub">Isolada do app. Grava com 1 MediaRecorder e captura os blobs crus do <code>dataavailable</code> para análise de estrutura.</p>
-
-  <video id="cam" autoplay playsinline muted></video>
-
-  <button class="primary" id="b-start">1 · Abrir câmera</button>
-  <div class="row">
-    <button class="ghost" id="b-rec" disabled>2 · Gravar 30s</button>
-    <button class="ghost" id="b-stop" disabled>Parar</button>
-  </div>
-
-  <div id="files" class="files"></div>
-  <div id="log">Aguardando…</div>
-  <p class="hint">Passo a passo: 1) Abrir câmera → 2) Gravar 30s (deixe rodar até parar sozinho) → baixe os arquivos que aparecerem e me envie. O "final" e o primeiro "fragmento" são os mais importantes.</p>
-
+<main>
+<h1>Gravei — sonda de captura única</h1>
+<p class="sub">Bancada isolada. Um único MediaRecorder, chunks brutos preservados, sem pool e sem clones.</p>
+<section class="card">
+<video id="preview" autoplay muted playsinline></video>
+<div class="row" style="margin-top:12px">
+<select id="duration" aria-label="Duração automática">
+<option value="30">Parar em 30 s</option><option value="60">Parar em 60 s</option><option value="120">Parar em 2 min</option><option value="300">Parar em 5 min</option><option value="0">Parada manual</option>
+</select>
+<button id="start" class="primary">Iniciar sonda</button><button id="stop" disabled>Parar</button>
+</div>
+</section>
+<section class="card stats">
+<div class="stat"><b id="elapsed">0,0 s</b><span>tempo real</span></div>
+<div class="stat"><b id="chunks">0</b><span>dataavailable</span></div>
+<div class="stat"><b id="bytes">0 MB</b><span>bytes preservados</span></div>
+<div class="stat"><b id="frames">0</b><span>quadros do preview</span></div>
+</section>
+<section class="card">
+<div id="status">Pronto. Abra por HTTPS no Safari do iPhone.</div>
+<p class="note">Mantém todos os chunks na memória. Use no máximo cinco minutos. Transfira os resultados por iCloud Drive, AirDrop ou cabo, sem WhatsApp.</p>
+<div class="row"><button id="full" disabled>Baixar MP4 completo</button><button id="bundle" disabled>Baixar pacote forense</button><button id="manifest" disabled>Baixar manifesto</button></div>
+</section>
+<section class="card"><pre id="log"></pre></section>
+</main>
 <script>
-const $ = id => document.getElementById(id);
-const log = (...a) => { $("log").textContent = a.join(" ") + "\n" + $("log").textContent; };
-let stream = null, rec = null, frags = [], mime = "";
-
-function pickMime(){
-  const cands = ["video/mp4", "video/mp4;codecs=avc1,mp4a",
-                 "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
-  for (const c of cands) if (window.MediaRecorder && MediaRecorder.isTypeSupported(c)) return c;
-  return "";
+"use strict";
+var $=function(id){return document.getElementById(id)};
+var state={stream:null,rec:null,parts:[],events:[],startedAt:0,stoppedAt:0,timer:null,auto:null,frameId:null,frameCount:0,session:null,fullBlob:null};
+var enc=new TextEncoder();
+function nowMs(){return performance.now()}
+function log(type,data){
+ data=data||{};var elapsed=state.startedAt?Math.round(nowMs()-state.startedAt):0;
+ var row=Object.assign({elapsedMs:elapsed,type:type},data);state.events.push(row);
+ $("log").textContent+=String(elapsed).padStart(7)+"ms  "+type+" "+(Object.keys(data).length?JSON.stringify(data):"")+"\n";$("log").scrollTop=$("log").scrollHeight;
 }
-
-$("b-start").onclick = async () => {
-  try{
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment", width:{ideal:1280}, height:{ideal:720} },
-      audio: true
-    });
-    $("cam").srcObject = stream;
-    mime = pickMime();
-    const t = stream.getVideoTracks()[0];
-    log("Câmera aberta.");
-    log("MIME escolhido:", mime || "(padrão do navegador)");
-    log("Trilha:", t.label || "(sem rótulo)", "| settings:", JSON.stringify(t.getSettings()));
-    $("b-rec").disabled = false;
-    $("b-start").disabled = true;
-  }catch(e){ log("ERRO ao abrir câmera:", e.name, e.message); }
-};
-
-$("b-rec").onclick = () => {
-  frags = [];
-  $("files").innerHTML = "";
-  try{
-    rec = mime ? new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000 })
-               : new MediaRecorder(stream);
-  }catch(e){ log("ERRO MediaRecorder:", e.name, e.message); return; }
-
-  log("Gravando… tipo efetivo:", rec.mimeType);
-  rec.ondataavailable = e => {
-    if (e.data && e.data.size){
-      frags.push(e.data);
-      log(`fragmento #${frags.length}: ${e.data.size} bytes, type="${e.data.type}"`);
-    }
-  };
-  rec.onstop = async () => {
-    log("Parou. Total de fragmentos:", frags.length);
-    const final = new Blob(frags, { type: (frags[0] && frags[0].type) || mime || "video/mp4" });
-    // análise leve dos primeiros bytes do arquivo final
-    try{
-      const head = new Uint8Array(await final.slice(0, 64).arrayBuffer());
-      log("primeiros bytes (hex):", [...head.slice(0,32)].map(b=>b.toString(16).padStart(2,"0")).join(" "));
-      const ascii = [...head].map(b => (b>=32&&b<127)?String.fromCharCode(b):".").join("");
-      log("ascii:", ascii);
-      // procura marcadores de caixa
-      const s = ascii;
-      const marks = ["ftyp","moov","moof","mdat","mvhd","styp"].filter(m => s.includes(m));
-      log("caixas visíveis no início:", marks.join(", ") || "(nenhuma óbvia)");
-    }catch(_){}
-    // downloads
-    addDownload("ARQUIVO FINAL", final, "sonda-final");
-    if (frags[0]) addDownload("PRIMEIRO fragmento", frags[0], "sonda-frag01");
-    if (frags[1]) addDownload("SEGUNDO fragmento", frags[1], "sonda-frag02");
-    $("b-rec").disabled = false;
-    $("b-stop").disabled = true;
-  };
-
-  // start(1000): pede fragmentos a cada 1s — é o que revela o dialeto real
-  rec.start(1000);
-  $("b-rec").disabled = true;
-  $("b-stop").disabled = false;
-  // para sozinho em 30s
-  const stopAt = setTimeout(() => { if (rec && rec.state !== "inactive") rec.stop(); }, 30000);
-  $("b-stop").onclick = () => { clearTimeout(stopAt); if (rec && rec.state !== "inactive") rec.stop(); };
-};
-
-function addDownload(label, blob, base){
-  const ext = (blob.type.includes("mp4") ? "mp4" : blob.type.includes("webm") ? "webm" : "bin");
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = base + "." + ext;
-  a.innerHTML = `<b>⬇︎ ${label}</b> — ${(blob.size/1024).toFixed(0)} KB · ${blob.type || "?"} · .${ext}`;
-  $("files").appendChild(a);
+function status(text,kind){$("status").textContent=text;$("status").className=kind||""}
+function sizeText(n){return(n/1048576).toFixed(2)+" MB"}
+function pickMime(){var list=["video/mp4;codecs=avc1.42E01E,mp4a.40.2","video/mp4","video/webm;codecs=vp8,opus","video/webm"];return list.find(function(x){return window.MediaRecorder&&MediaRecorder.isTypeSupported(x)})||""}
+function update(){
+ var ms=state.startedAt&&!state.stoppedAt?nowMs()-state.startedAt:(state.stoppedAt?state.stoppedAt-state.startedAt:0);
+ $("elapsed").textContent=(ms/1000).toFixed(1).replace(".",",")+" s";$("chunks").textContent=state.parts.length;
+ $("bytes").textContent=sizeText(state.parts.reduce(function(a,x){return a+x.blob.size},0));$("frames").textContent=state.frameCount;
 }
+function frameWatch(){var v=$("preview");if(!v.requestVideoFrameCallback)return;state.frameId=v.requestVideoFrameCallback(function(){state.frameCount++;frameWatch()})}
+function trackSnapshot(track){
+ var settings={},constraints={};try{settings=track.getSettings?track.getSettings():{}}catch(e){}try{constraints=track.getConstraints?track.getConstraints():{}}catch(e){}
+ return{kind:track.kind,id:track.id,label:track.label,enabled:track.enabled,muted:track.muted,readyState:track.readyState,settings:settings,constraints:constraints};
+}
+async function startProbe(){
+ if(state.rec&&state.rec.state!=="inactive")return;
+ state.parts=[];state.events=[];state.frameCount=0;state.fullBlob=null;state.stoppedAt=0;$("log").textContent="";
+ $("full").disabled=$("bundle").disabled=$("manifest").disabled=true;status("Solicitando câmera e microfone…");
+ try{
+  state.stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30}},audio:true});
+  $("preview").srcObject=state.stream;await $("preview").play();
+  var requestedMime=pickMime(),opts={videoBitsPerSecond:2500000};if(requestedMime)opts.mimeType=requestedMime;
+  state.rec=new MediaRecorder(state.stream,opts);state.startedAt=nowMs();
+  state.session={format:"gravei-probe-v1",createdAt:new Date().toISOString(),userAgent:navigator.userAgent,requestedMime:requestedMime,actualMime:state.rec.mimeType||"",timesliceMs:1000,tracks:state.stream.getTracks().map(trackSnapshot)};
+  state.stream.getTracks().forEach(function(track){
+   track.addEventListener("mute",function(){log("track-mute",trackSnapshot(track))});
+   track.addEventListener("unmute",function(){log("track-unmute",trackSnapshot(track))});
+   track.addEventListener("ended",function(){log("track-ended",trackSnapshot(track))});
+  });
+  state.rec.addEventListener("start",function(){log("recorder-start",{state:state.rec.state,mimeType:state.rec.mimeType})});
+  state.rec.addEventListener("error",function(e){log("recorder-error",{name:e.error&&e.error.name,message:e.error&&e.error.message})});
+  state.rec.addEventListener("dataavailable",function(e){
+   var item={index:state.parts.length,blob:e.data,eventTimecode:Number.isFinite(e.timecode)?e.timecode:null,elapsedMs:Math.round(nowMs()-state.startedAt),type:e.data.type||""};
+   state.parts.push(item);log("dataavailable",{index:item.index,size:e.data.size,eventTimecode:item.eventTimecode,type:item.type});update();
+  });
+  state.rec.addEventListener("stop",finishProbe,{once:true});state.rec.start(1000);
+  log("probe-start",{requestedMime:requestedMime,actualMime:state.rec.mimeType,tracks:state.session.tracks});frameWatch();state.timer=setInterval(update,250);
+  var seconds=Number($("duration").value);if(seconds>0)state.auto=setTimeout(stopProbe,seconds*1000);
+  $("start").disabled=true;$("stop").disabled=false;$("duration").disabled=true;status("Gravando com um único encoder…","ok");
+ }catch(err){log("start-failed",{name:err.name,message:err.message});status("Falha: "+(err.name||err.message),"bad");release(true)}
+}
+function stopProbe(){
+ clearTimeout(state.auto);state.auto=null;
+ if(state.rec&&state.rec.state!=="inactive"){status("Finalizando o MediaRecorder…");log("stop-request",{state:state.rec.state});try{state.rec.stop()}catch(err){log("stop-throw",{name:err.name,message:err.message})}}
+}
+async function finishProbe(){
+ state.stoppedAt=nowMs();clearInterval(state.timer);state.timer=null;log("recorder-stop",{state:state.rec.state,totalParts:state.parts.length});
+ var first=state.parts.find(function(x){return x.type});var type=(first&&first.type)||state.rec.mimeType||"video/mp4";
+ state.fullBlob=new Blob(state.parts.map(function(x){return x.blob}),{type:type});
+ state.session=Object.assign({},state.session,{stoppedAt:new Date().toISOString(),elapsedMs:Math.round(state.stoppedAt-state.startedAt),finalMime:type,fullBlobBytes:state.fullBlob.size,frameCount:state.frameCount,finalTracks:state.stream.getTracks().map(trackSnapshot)});
+ update();$("full").disabled=$("bundle").disabled=$("manifest").disabled=false;$("start").disabled=false;$("stop").disabled=true;$("duration").disabled=false;
+ status("Concluído: "+state.parts.length+" chunks, "+sizeText(state.fullBlob.size)+". Baixe os três arquivos.","ok");release(false);
+}
+function release(clearPreview){if(state.stream){state.stream.getTracks().forEach(function(t){try{t.stop()}catch(e){}});state.stream=null}if(clearPreview)$("preview").srcObject=null}
+function safeStamp(){return new Date().toISOString().replace(/[:.]/g,"-")}
+function download(blob,name){var a=document.createElement("a"),u=URL.createObjectURL(blob);a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},60000)}
+function manifestObject(){
+ var offset=0;var chunks=state.parts.map(function(x){var row={index:x.index,offset:offset,size:x.blob.size,eventTimecode:x.eventTimecode,elapsedMs:x.elapsedMs,type:x.type};offset+=x.blob.size;return row});
+ return Object.assign({},state.session,{chunks:chunks,events:state.events,payloadBytes:offset});
+}
+async function makeBundle(){
+ var manifest=manifestObject(),json=enc.encode(JSON.stringify(manifest)),head=new ArrayBuffer(12),u8=new Uint8Array(head);u8.set(enc.encode("GRVP0001"),0);new DataView(head).setUint32(8,json.byteLength,true);
+ return new Blob([head,json].concat(state.parts.map(function(x){return x.blob})),{type:"application/octet-stream"});
+}
+$("start").onclick=startProbe;$("stop").onclick=stopProbe;
+$("full").onclick=function(){download(state.fullBlob,"gravei-probe-full-"+safeStamp()+"."+(state.fullBlob.type.includes("webm")?"webm":"mp4"))};
+$("manifest").onclick=function(){download(new Blob([JSON.stringify(manifestObject(),null,2)],{type:"application/json"}),"gravei-probe-manifest-"+safeStamp()+".json")};
+$("bundle").onclick=async function(){status("Montando pacote forense…");var b=await makeBundle();download(b,"gravei-probe-"+safeStamp()+".grvp");status("Pacote forense pronto: "+sizeText(b.size)+".","ok")};
+window.addEventListener("beforeunload",function(e){if(state.rec&&state.rec.state!=="inactive"){e.preventDefault();e.returnValue=""}});
 </script>
 </body>
 </html>
