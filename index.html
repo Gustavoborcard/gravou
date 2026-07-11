@@ -292,7 +292,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v67</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v68</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -1135,8 +1135,11 @@ function saveReplay(){
     toast("Não foi possível salvar", "err");
   }
 
-  // repõe o buffer imediatamente: a gravação nunca para
-  if (!state.pool.length) spawnRecorder();
+  // buffer zera a cada salvamento: os demais gravadores são descartados
+  // e um novo nasce — o anel recomeça do zero (decisão de UX).
+  // Toque precoce (política A): salva o que houver, mesmo abaixo do alvo.
+  teardownPool();
+  spawnRecorder();
 }
 
 async function finishSave(item){
