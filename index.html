@@ -291,7 +291,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v62</p>
+  <p style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v63</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -498,6 +498,12 @@ const vault = {
     }));
   }
 };
+
+/* Compat: itens novos guardam bytes (Safari não armazena Blob de forma
+   confiável no IndexedDB — bug conhecido do WebKit); itens antigos, Blob. */
+function itemBlob(it){
+  return it.blob || new Blob([it.bytes], { type: it.type || "video/mp4" });
+}
 
 function updateCountChip(n){
   $("count-n").textContent = n;
@@ -1070,7 +1076,7 @@ async function finishSave(item){
     "-" + state.replayCount + "." + state.ext;
 
   try{
-    await vault.add({ name, type: blob.type, blob, t: Date.now(), min: state.duration });
+    await vault.add({ name, type: blob.type, bytes: await blob.arrayBuffer(), t: Date.now(), min: state.duration });
     const n = await vault.count();                   // fonte única da verdade
     updateCountChip(n);
     flashOK();
@@ -1092,7 +1098,7 @@ const SHARE_MSG = "O lance foi tão bom que virou replay no Gravei 🔥";
    invisível. Remove do cofre apenas o que foi realmente entregue.
    Retorna: "done" | "cancelled" | "blocked"                        */
 async function shareGroup(entries){
-  const files = entries.map(e => new File([e.item.blob], e.item.name, { type: e.item.type }));
+  const files = entries.map(e => new File([itemBlob(e.item)], e.item.name, { type: e.item.type }));
   try{
     await navigator.share({ files, title: SHARE_MSG, text: SHARE_MSG });
     await vault.removeKeys(entries.map(e => e.key));
@@ -1460,14 +1466,14 @@ async function refineVault(){
         const it = e.item;
         if (!it || !it.min || !/mp4/i.test(it.type || "")) continue;
         if (/-\d+s\.mp4$/i.test(it.name || "")) continue;          // já refinado
-        const bytes = new Uint8Array(await it.blob.arrayBuffer());
+        const bytes = new Uint8Array(await itemBlob(it).arrayBuffer());
         const cut = trimMp4(bytes, it.min);
         if (!cut) continue;                                          // sem excesso/cortável
         const blob2 = new Blob([cut], { type: it.type });
         const dur = await _probeBlob(blob2);
         if (dur === null || dur < it.min - 0.5) continue;            // validador reprovou
         const name2 = (it.name || "replay.mp4").replace(/\.mp4$/i, "-" + Math.round(dur) + "s.mp4");
-        await vault.add({ name: name2, type: it.type, blob: blob2, t: it.t, min: it.min });
+        await vault.add({ name: name2, type: it.type, bytes: cut.buffer.slice(cut.byteOffset, cut.byteOffset + cut.byteLength), t: it.t, min: it.min });
         await vault.removeKeys([e.key]);                             // transação: grava antes, remove depois
         touched = true;
       }catch(_){ /* este item fica bruto; segue para o próximo */ }
@@ -1489,7 +1495,7 @@ async function saveAll(){
     const total = entries.length;
 
     // 1) caminho principal: compartilhamento nativo com bisseção automática
-    const probe = [new File([entries[0].item.blob], entries[0].item.name, { type: entries[0].item.type })];
+    const probe = [new File([itemBlob(entries[0].item)], entries[0].item.name, { type: entries[0].item.type })];
     if (navigator.canShare && navigator.canShare({ files: probe })){
       hideToast();                                   // a caixa do sistema fala por si
       const result = await shareGroup(entries);
@@ -1512,7 +1518,7 @@ async function saveAll(){
     // 2) fallback: downloads em sequência
     toast("Salvando " + total + " replays…", "info", 0);
     for (const e of entries){
-      const url = URL.createObjectURL(e.item.blob);
+      const url = URL.createObjectURL(itemBlob(e.item));
       const a = document.createElement("a");
       a.href = url; a.download = e.item.name;
       document.body.appendChild(a);
