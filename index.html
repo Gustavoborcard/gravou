@@ -134,7 +134,8 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 #cam.mirror{transform:scaleX(-1)}
 
 /* modo jogo: em telas OLED, pixel preto = pixel desligado */
-#rec-screen.dimmed #cam{opacity:.05}
+#shade{position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .6s ease;z-index:1}
+#rec-screen.dimmed #shade{opacity:.95}
 #rec-screen.dimmed .rec-top{opacity:.08}
 #rec-screen.dimmed #btn-flip{opacity:.08}
 /* botão: anel aceso + rótulos em meio-brilho; miolo preto (OLED off) */
@@ -291,7 +292,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v63</p>
+  <p style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v65</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -339,6 +340,7 @@ a{color:var(--accent)}
 <!-- GRAVAÇÃO -->
 <section class="screen" id="rec-screen">
   <video id="cam" autoplay playsinline muted></video>
+  <div id="shade"></div>
   <div class="rec-top">
     <div class="badge"><span class="rec-dot"></span>Gravando</div>
     <div class="badge time-chip" id="chip-dur">20s</div>
@@ -433,7 +435,6 @@ a{color:var(--accent)}
    são salvos todos de uma vez no final — sem interromper o jogo. */
 const vault = {
   _db: null,
-  _reset(){ try{ if (this._db) this._db.close(); }catch(_){} this._db = null; },
   async db(){
     if (this._db) return this._db;
     this._db = await new Promise((res, rej) => {
@@ -442,65 +443,61 @@ const vault = {
       rq.onsuccess = () => res(rq.result);
       rq.onerror = () => rej(rq.error);
     });
-    // o iOS fecha a conexão na hibernação do PWA: invalida o cache na hora
-    try{ this._db.onclose = () => { this._db = null; }; }catch(_){}
     return this._db;
   },
-  /* executa uma operação; se a conexão morreu, reabre e tenta 1x de novo */
-  async _run(fn){
-    try{ return await fn(await this.db()); }
-    catch(err){ this._reset(); return await fn(await this.db()); }
-  },
   async add(item){
-    return this._run(db => new Promise((res, rej) => {
+    const db = await this.db();
+    return new Promise((res, rej) => {
       const tx = db.transaction("replays", "readwrite");
       tx.objectStore("replays").add(item);
       tx.oncomplete = res;
       tx.onerror = () => rej(tx.error);
-    }));
+    });
   },
   async entries(){
     // retorna [{key, item}] para permitir remoção seletiva após entrega
-    return this._run(async db => {
-      const store = db.transaction("replays", "readonly").objectStore("replays");
-      const [keys, vals] = await Promise.all([
-        new Promise((res, rej) => { const r = store.getAllKeys(); r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); }),
-        new Promise((res, rej) => { const r = store.getAll();     r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); })
-      ]);
-      return keys.map((k, i) => ({ key: k, item: vals[i] }));
-    });
+    const db = await this.db();
+    const store = db.transaction("replays", "readonly").objectStore("replays");
+    const [keys, vals] = await Promise.all([
+      new Promise((res, rej) => { const r = store.getAllKeys(); r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); }),
+      new Promise((res, rej) => { const r = store.getAll();     r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); })
+    ]);
+    return keys.map((k, i) => ({ key: k, item: vals[i] }));
   },
   async removeKeys(keys){
     if (!keys.length) return;
-    return this._run(db => new Promise((res, rej) => {
+    const db = await this.db();
+    return new Promise((res, rej) => {
       const tx = db.transaction("replays", "readwrite");
       const store = tx.objectStore("replays");
       keys.forEach(k => store.delete(k));
       tx.oncomplete = res;
       tx.onerror = () => rej(tx.error);
-    }));
+    });
   },
   async count(){
     try{
-      return await this._run(db => new Promise((res, rej) => {
+      const db = await this.db();
+      return await new Promise((res, rej) => {
         const rq = db.transaction("replays", "readonly").objectStore("replays").count();
         rq.onsuccess = () => res(rq.result || 0);
         rq.onerror = () => rej(rq.error);
-      }));
+      });
     }catch(_){ return 0; }
   },
   async clear(){
-    return this._run(db => new Promise((res, rej) => {
+    const db = await this.db();
+    return new Promise((res, rej) => {
       const tx = db.transaction("replays", "readwrite");
       tx.objectStore("replays").clear();
       tx.oncomplete = res;
       tx.onerror = () => rej(tx.error);
-    }));
+    });
   }
 };
 
-/* Compat: itens novos guardam bytes (Safari não armazena Blob de forma
-   confiável no IndexedDB — bug conhecido do WebKit); itens antigos, Blob. */
+/* Compat: itens novos guardam bytes crus (o Safari falha ao armazenar
+   Blob no IndexedDB — bug conhecido do WebKit); itens antigos, Blob. */
 function itemBlob(it){
   return it.blob || new Blob([it.bytes], { type: it.type || "video/mp4" });
 }
@@ -579,6 +576,7 @@ $("m-yes").onclick = async () => {
 /* ---------- parar sessão (câmera/energia) ---------- */
 function stopSession(){
   state.active = false;
+  sentinelStop();
   clearInterval(state.schedId);
   clearInterval(state.timerId);
   disarmDim();
@@ -696,6 +694,7 @@ async function startRecording(){
   show("rec-screen");
   armDim();
   watchCamera();
+  sentinelStart();
   try{ startRemote(); }catch(_){}                    // controle remoto: falha silenciosa
 }
 
@@ -723,6 +722,57 @@ function disarmDim(){ clearTimeout(dimTimer); setDim(false); }
 document.addEventListener("pointerdown", () => {
   if (state.active && $("rec-screen").classList.contains("active")) armDim();
 });
+
+/* ---------- sentinela da câmera (congelamento em pleno voo) ----------
+   O iOS pode estagnar a trilha de vídeo no meio da gravação (interrupções,
+   térmica). Ouvimos os eventos da trilha e conferimos, a cada 2s, se
+   quadros novos continuam chegando; parou → religa e renasce o buffer.  */
+let camRecovering = false;
+async function onCamStall(){
+  if (camRecovering || !state.active) return;
+  camRecovering = true;
+  try{
+    toast("Religando a câmera…", "info", 0);
+    await openStream(state.cams[state.camIndex] || undefined);
+    teardownPool(); spawnRecorder();
+    sentinelStart();
+    toast("Câmera religada — o replay recomeça a contar", "ok", 2600);
+  }catch(_){
+    hideToast();
+    try{ askCamRetry(); }catch(__){ toast("Câmera indisponível", "err"); }
+  }
+  camRecovering = false;
+}
+function sentinelStop(){
+  clearInterval(state.sentinelId); state.sentinelId = null;
+  try{ if (state.rvfcId && $("cam").cancelVideoFrameCallback) $("cam").cancelVideoFrameCallback(state.rvfcId); }catch(_){}
+  state.rvfcId = null;
+}
+function sentinelStart(){
+  sentinelStop();
+  try{
+    const track = state.stream && state.stream.getVideoTracks()[0];
+    if (track){ track.onmute = onCamStall; track.onended = onCamStall; }
+  }catch(_){}
+  const v = $("cam");
+  state.lastFrameT = performance.now();
+  state.lastCT = v ? v.currentTime : 0;
+  if (v && v.requestVideoFrameCallback){
+    const tick = () => { state.lastFrameT = performance.now();
+      try{ state.rvfcId = v.requestVideoFrameCallback(tick); }catch(_){} };
+    try{ state.rvfcId = v.requestVideoFrameCallback(tick); }catch(_){}
+  }
+  state.sentinelId = setInterval(() => {
+    if (!state.active || camRecovering || document.visibilityState !== "visible") return;
+    if (state.rvfcId){
+      if (performance.now() - state.lastFrameT > 4500) onCamStall();
+    }else{
+      const ct = v ? v.currentTime : 0;               // fallback: progresso do relógio do vídeo
+      if (ct === state.lastCT) onCamStall();
+      state.lastCT = ct;
+    }
+  }, 2000);
+}
 
 /* Girou o celular: as dimensões de um vídeo são fixadas quando o
    gravador começa, então só reiniciamos o buffer de gravadores.
@@ -867,7 +917,7 @@ function spawnRecorder(){
   if (!state.stream) return;
   const s = state.stream.clone();                    // cada gravador tem seu clone
   let rec;
-  const opts = { videoBitsPerSecond: 2500000, videoKeyFrameIntervalDuration: 1000 };      // 2,5 Mbps: menos bateria, arquivos 3x menores
+  const opts = { videoBitsPerSecond: 2500000 };      // 2,5 Mbps: menos bateria, arquivos 3x menores
   if (state.mime) opts.mimeType = state.mime;
   try{
     rec = new MediaRecorder(s, opts);
@@ -980,6 +1030,7 @@ $("btn-flip").onclick = async () => {
     await openStream(cam);
     toast(camName(cam) + " — o replay recomeça a contar", "info", 2200);
     watchCamera();
+    sentinelStart();
   }catch(_){
     // falhou: volta para a câmera anterior sem deixar tela preta
     try{
@@ -1076,14 +1127,13 @@ async function finishSave(item){
     "-" + state.replayCount + "." + state.ext;
 
   try{
-    await vault.add({ name, type: blob.type, bytes: await blob.arrayBuffer(), t: Date.now(), min: state.duration });
+    await vault.add({ name, type: blob.type, bytes: await blob.arrayBuffer(), t: Date.now() });
     const n = await vault.count();                   // fonte única da verdade
     updateCountChip(n);
     flashOK();
     toast("Replay " + n + " guardado", "ok", 1800);
   }catch(err){
-    // cofre indisponível (raro): avisa com o motivo e cai para o salvamento imediato
-    toast("Cofre falhou (" + ((err && err.name) || "erro") + ") — enviando direto", "err", 3000);
+    // cofre indisponível (raro): cai para o salvamento imediato
     await deliver(blob, name);
   }
   state.saving = false; clearTimeout(state.saveGuard);
@@ -1115,383 +1165,12 @@ async function shareGroup(entries){
   }
 }
 
-/* Gravei — corte de MP4 sem recodificação.
-   Regra: preservar PELO MENOS X segundos → corte no último quadro-chave
-   com DTS ≤ (duração − X). Sem quadro-chave elegível → retorna null
-   (o chamador entrega o arquivo original).
-   Estratégia: mdat é copiado byte a byte; só as tabelas de amostras do
-   moov são reescritas (1 amostra por chunk, offsets absolutos novos).  */
-"use strict";
-
-function _rd32(dv, o){ return dv.getUint32(o); }
-function _rd64(dv, o){ return Number(dv.getBigUint64(o)); }
-
-function _parseBoxes(buf, start, end){
-  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-  const boxes = [];
-  let o = start;
-  while (o + 8 <= end){
-    let size = _rd32(dv, o);
-    const type = String.fromCharCode(buf[o+4], buf[o+5], buf[o+6], buf[o+7]);
-    let hdr = 8;
-    if (size === 1){ size = _rd64(dv, o + 8); hdr = 16; }
-    else if (size === 0){ size = end - o; }
-    if (size < hdr || o + size > end) break;          // arquivo malformado: para
-    boxes.push({ type, start: o, size, hdr });
-    o += size;
-  }
-  return boxes;
-}
-function _child(buf, box, type){
-  return _parseBoxes(buf, box.start + box.hdr, box.start + box.size).find(b => b.type === type) || null;
-}
-function _children(buf, box){
-  return _parseBoxes(buf, box.start + box.hdr, box.start + box.size);
-}
-function _fourcc(s){ return [s.charCodeAt(0), s.charCodeAt(1), s.charCodeAt(2), s.charCodeAt(3)]; }
-function _u32(n){ return [(n>>>24)&255, (n>>>16)&255, (n>>>8)&255, n&255]; }
-
-function _box(type, payload){
-  const size = 8 + payload.length;
-  const out = new Uint8Array(size);
-  out.set(_u32(size), 0); out.set(_fourcc(type), 4); out.set(payload, 8);
-  return out;
-}
-function _concat(parts){
-  let n = 0; for (const p of parts) n += p.length;
-  const out = new Uint8Array(n);
-  let o = 0; for (const p of parts){ out.set(p, o); o += p.length; }
-  return out;
-}
-
-/* Lê as tabelas de um trak e devolve amostras expandidas */
-function _readTrack(buf, trak){
-  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-  const mdia = _child(buf, trak, "mdia"); if (!mdia) return null;
-  const mdhd = _child(buf, mdia, "mdhd"); if (!mdhd) return null;
-  const hdlr = _child(buf, mdia, "hdlr"); if (!hdlr) return null;
-  const minf = _child(buf, mdia, "minf"); if (!minf) return null;
-  const stbl = _child(buf, minf, "stbl"); if (!stbl) return null;
-
-  const mv = buf[mdhd.start + mdhd.hdr];              // versão do mdhd
-  const timescale = mv === 1 ? _rd32(dv, mdhd.start + mdhd.hdr + 20) : _rd32(dv, mdhd.start + mdhd.hdr + 12);
-  const handler = String.fromCharCode(buf[hdlr.start+hdlr.hdr+8], buf[hdlr.start+hdlr.hdr+9], buf[hdlr.start+hdlr.hdr+10], buf[hdlr.start+hdlr.hdr+11]);
-
-  const need = t => _child(buf, stbl, t);
-  const stts = need("stts"), stsz = need("stsz"), stsc = need("stsc");
-  const stco = need("stco") || need("co64");
-  if (!stts || !stsz || !stsc || !stco) return null;
-  const stss = need("stss"), ctts = need("ctts");
-
-  // stsz → tamanhos
-  const szCount = _rd32(dv, stsz.start + stsz.hdr + 8);
-  const szFixed = _rd32(dv, stsz.start + stsz.hdr + 4);
-  const sizes = new Array(szCount);
-  for (let i = 0; i < szCount; i++)
-    sizes[i] = szFixed || _rd32(dv, stsz.start + stsz.hdr + 12 + i*4);
-
-  // stts → DTS e deltas
-  const sttsN = _rd32(dv, stts.start + stts.hdr + 4);
-  const deltas = new Array(szCount);
-  { let s = 0;
-    for (let e = 0; e < sttsN; e++){
-      const cnt = _rd32(dv, stts.start + stts.hdr + 8 + e*8);
-      const del = _rd32(dv, stts.start + stts.hdr + 12 + e*8);
-      for (let i = 0; i < cnt && s < szCount; i++, s++) deltas[s] = del;
-    }
-    for (; s < szCount; s++) deltas[s] = deltas[s-1] || 0;
-  }
-  const dts = new Array(szCount);
-  { let t = 0; for (let i = 0; i < szCount; i++){ dts[i] = t; t += deltas[i]; } }
-
-  // stss → conjuntos de sync (ausente = todas são sync)
-  let sync = null;
-  if (stss){
-    sync = new Set();
-    const n = _rd32(dv, stss.start + stss.hdr + 4);
-    for (let i = 0; i < n; i++) sync.add(_rd32(dv, stss.start + stss.hdr + 8 + i*4) - 1);
-  }
-
-  // ctts → offsets de composição (podem ser assinados na v1)
-  let cofs = null;
-  if (ctts){
-    cofs = new Array(szCount).fill(0);
-    const ver = buf[ctts.start + ctts.hdr];
-    const n = _rd32(dv, ctts.start + ctts.hdr + 4);
-    let s = 0;
-    for (let e = 0; e < n && s < szCount; e++){
-      const cnt = _rd32(dv, ctts.start + ctts.hdr + 8 + e*8);
-      const off = ver === 1 ? dv.getInt32(ctts.start + ctts.hdr + 12 + e*8) : _rd32(dv, ctts.start + ctts.hdr + 12 + e*8);
-      for (let i = 0; i < cnt && s < szCount; i++, s++) cofs[s] = off;
-    }
-  }
-
-  // stsc + stco → offset absoluto de cada amostra
-  const co64 = stco.type === "co64";
-  const chunkN = _rd32(dv, stco.start + stco.hdr + 4);
-  const chunkOff = new Array(chunkN);
-  for (let i = 0; i < chunkN; i++)
-    chunkOff[i] = co64 ? _rd64(dv, stco.start + stco.hdr + 8 + i*8) : _rd32(dv, stco.start + stco.hdr + 8 + i*4);
-  const stscN = _rd32(dv, stsc.start + stsc.hdr + 4);
-  const stscE = [];
-  for (let i = 0; i < stscN; i++)
-    stscE.push({ first: _rd32(dv, stsc.start + stsc.hdr + 8 + i*12),
-                 per:   _rd32(dv, stsc.start + stsc.hdr + 12 + i*12) });
-  const offsets = new Array(szCount);
-  { let s = 0;
-    for (let e = 0; e < stscE.length && s < szCount; e++){
-      const lastChunk = e + 1 < stscE.length ? stscE[e+1].first - 1 : chunkN;
-      for (let c = stscE[e].first; c <= lastChunk && s < szCount; c++){
-        let off = chunkOff[c-1];
-        for (let k = 0; k < stscE[e].per && s < szCount; k++){
-          offsets[s] = off; off += sizes[s]; s++;
-        }
-      }
-    }
-    if (s < szCount) return null;                     // tabelas inconsistentes
-  }
-
-  return { trak, stbl, mdhd, handler, timescale, sizes, deltas, dts, sync, cofs, offsets, count: szCount };
-}
-
-/* Serializa as novas tabelas a partir do índice de corte */
-function _rebuildStbl(buf, tk, from, delta){
-  const n = tk.count - from;
-  const keepTypes = new Set(["stsd"]);                // stsd copiado verbatim; resto reescrito/omitido
-  const parts = [];
-  for (const b of _children(buf, tk.stbl))
-    if (keepTypes.has(b.type)) parts.push(buf.slice(b.start, b.start + b.size));
-
-  // stts (agrupa deltas iguais)
-  { const ent = [];
-    for (let i = from; i < tk.count; i++){
-      const d = tk.deltas[i];
-      if (ent.length && ent[ent.length-1][1] === d) ent[ent.length-1][0]++;
-      else ent.push([1, d]);
-    }
-    const p = new Uint8Array(8 + ent.length*8);
-    p.set(_u32(ent.length), 4);
-    ent.forEach((e, i) => { p.set(_u32(e[0]), 8 + i*8); p.set(_u32(e[1]), 12 + i*8); });
-    parts.push(_box("stts", p));
-  }
-  // stss (só vídeo)
-  if (tk.sync){
-    const list = [];
-    for (let i = from; i < tk.count; i++) if (tk.sync.has(i)) list.push(i - from + 1);
-    const p = new Uint8Array(8 + list.length*4);
-    p.set(_u32(list.length), 4);
-    list.forEach((v, i) => p.set(_u32(v), 8 + i*4));
-    parts.push(_box("stss", p));
-  }
-  // ctts
-  if (tk.cofs){
-    const ent = [];
-    for (let i = from; i < tk.count; i++){
-      const c = tk.cofs[i];
-      if (ent.length && ent[ent.length-1][1] === c) ent[ent.length-1][0]++;
-      else ent.push([1, c]);
-    }
-    const p = new Uint8Array(8 + ent.length*8);
-    p[0] = 1;                                         // v1: offsets assinados
-    p.set(_u32(ent.length), 4);
-    ent.forEach((e, i) => { p.set(_u32(e[0]), 8 + i*8);
-                            new DataView(p.buffer).setInt32(12 + i*8, e[1]); });
-    parts.push(_box("ctts", p));
-  }
-  // stsz
-  { const p = new Uint8Array(12 + n*4);
-    p.set(_u32(n), 8);
-    for (let i = 0; i < n; i++) p.set(_u32(tk.sizes[from+i]), 12 + i*4);
-    parts.push(_box("stsz", p));
-  }
-  // stsc: 1 amostra por chunk
-  { const p = new Uint8Array(8 + 12);
-    p.set(_u32(1), 4); p.set(_u32(1), 8); p.set(_u32(1), 12); p.set(_u32(1), 16);
-    parts.push(_box("stsc", p));
-  }
-  // stco/co64 com offsets novos (delta do reposicionamento do mdat)
-  { let big = false;
-    for (let i = from; i < tk.count; i++) if (tk.offsets[i] + delta > 0xFFFFFFFF) big = true;
-    if (big){
-      const p = new Uint8Array(8 + n*8);
-      p.set(_u32(n), 4);
-      const pdv = new DataView(p.buffer);
-      for (let i = 0; i < n; i++) pdv.setBigUint64(8 + i*8, BigInt(tk.offsets[from+i] + delta));
-      parts.push(_box("co64", p));
-    }else{
-      const p = new Uint8Array(8 + n*4);
-      p.set(_u32(n), 4);
-      for (let i = 0; i < n; i++) p.set(_u32(tk.offsets[from+i] + delta), 8 + i*4);
-      parts.push(_box("stco", p));
-    }
-  }
-  return _box("stbl", _concat(parts));
-}
-
-function _patchDuration(bytes, box, isMvhdTkhd, dur){
-  // patch in-place da duração em mvhd/tkhd/mdhd (v0: u32; v1: u64)
-  const v = bytes[box.start + box.hdr];
-  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let off;
-  if (box.typeName === "tkhd") off = v === 1 ? 28 : 20;
-  else off = v === 1 ? 24 : 16;                       // mvhd e mdhd têm o mesmo layout até duration
-  if (v === 1) dv.setBigUint64(box.start + box.hdr + off, BigInt(Math.round(dur)));
-  else dv.setUint32(box.start + box.hdr + off, Math.round(dur));
-}
-
-/* API principal: recebe Uint8Array do MP4 e o mínimo de segundos a manter.
-   Devolve Uint8Array do arquivo cortado, ou null se não deve/consegue cortar. */
-function trimMp4(bytes, minSeconds){
-  try{
-    const top = _parseBoxes(bytes, 0, bytes.length);
-    const ftyp = top.find(b => b.type === "ftyp");
-    const moov = top.find(b => b.type === "moov");
-    const mdats = top.filter(b => b.type === "mdat");
-    if (!moov || mdats.length !== 1) return null;     // layout inesperado: não arrisca
-    const mdat = mdats[0];
-
-    const traks = _children(bytes, moov).filter(b => b.type === "trak");
-    const tracks = traks.map(t => _readTrack(bytes, t)).filter(Boolean);
-    const video = tracks.find(t => t.handler === "vide");
-    const audio = tracks.find(t => t.handler === "soun");
-    if (!video || tracks.length !== (audio ? 2 : 1)) return null;
-
-    const durMedia = video.dts[video.count-1] + video.deltas[video.count-1];
-    const idealDts = durMedia - minSeconds * video.timescale;
-    if (idealDts <= 0) return null;                   // sem excesso: mantém original
-
-    // último quadro-chave com DTS ≤ ponto ideal (nunca corta lance)
-    let cut = -1;
-    for (let i = 0; i < video.count; i++){
-      const isSync = video.sync ? video.sync.has(i) : true;
-      if (isSync && video.dts[i] <= idealDts) cut = i;
-      if (video.dts[i] > idealDts) break;
-    }
-    if (cut <= 0) return null;                        // nada elegível: mantém original
-
-    const tcut = video.dts[cut] / video.timescale;    // segundos
-    let audioFrom = 0;
-    if (audio){
-      const target = tcut * audio.timescale;
-      for (let i = 0; i < audio.count; i++){ if (audio.dts[i] <= target) audioFrom = i; else break; }
-    }
-
-    // layout de saída: [ftyp] + mdat(bytes idênticos) + moov novo
-    const ftypBytes = ftyp ? bytes.slice(ftyp.start, ftyp.start + ftyp.size) : new Uint8Array(0);
-    const delta = ftypBytes.length - mdat.start;      // novo início do mdat − antigo
-
-    const mvhd = _child(bytes, moov, "mvhd");
-    if (!mvhd) return null;
-    const mdv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const mvhdV = bytes[mvhd.start + mvhd.hdr];
-    const movieTs = mvhdV === 1 ? _rd32(mdv, mvhd.start + mvhd.hdr + 20) : _rd32(mdv, mvhd.start + mvhd.hdr + 12);
-
-    const newParts = [];
-    let maxMovieDur = 0;
-    for (const b of _children(bytes, moov)){
-      if (b.type !== "trak"){                          // mvhd e outros: copia (mvhd é patchado depois)
-        newParts.push({ raw: bytes.slice(b.start, b.start + b.size), type: b.type });
-        continue;
-      }
-      const tk = tracks.find(t => t.trak.start === b.start);
-      if (!tk){ newParts.push({ raw: bytes.slice(b.start, b.start + b.size), type: "trak" }); continue; }
-      const from = tk.handler === "vide" ? cut : audioFrom;
-
-      let mediaDur = 0;
-      for (let i = from; i < tk.count; i++) mediaDur += tk.deltas[i];
-      const movieDur = mediaDur * movieTs / tk.timescale;
-      if (movieDur > maxMovieDur) maxMovieDur = movieDur;
-
-      // reconstrói trak: tkhd(patch) + mdia{ mdhd(patch)+hdlr+minf{ ...stbl novo } }, sem edts
-      const tkhd = _child(bytes, b, "tkhd");
-      const mdia = _child(bytes, b, "mdia");
-      const mdhd = _child(bytes, mdia, "mdhd");
-      const hdlr = _child(bytes, mdia, "hdlr");
-      const minf = _child(bytes, mdia, "minf");
-      if (!tkhd || !mdhd || !hdlr || !minf) return null;
-
-      const tkhdB = bytes.slice(tkhd.start, tkhd.start + tkhd.size);
-      _patchDuration(tkhdB, { start: 0, hdr: tkhd.hdr, typeName: "tkhd" }, true, movieDur);
-      const mdhdB = bytes.slice(mdhd.start, mdhd.start + mdhd.size);
-      _patchDuration(mdhdB, { start: 0, hdr: mdhd.hdr, typeName: "mdhd" }, false, mediaDur);
-
-      const minfParts = [];
-      for (const mb of _children(bytes, minf)){
-        if (mb.type === "stbl") minfParts.push(_rebuildStbl(bytes, tk, from, delta));
-        else minfParts.push(bytes.slice(mb.start, mb.start + mb.size));
-      }
-      const mdiaB = _box("mdia", _concat([mdhdB, bytes.slice(hdlr.start, hdlr.start + hdlr.size), _box("minf", _concat(minfParts))]));
-      newParts.push({ raw: _box("trak", _concat([tkhdB, mdiaB])), type: "trak" });
-    }
-
-    // patch do mvhd (duração do filme)
-    for (const p of newParts){
-      if (p.type === "mvhd"){
-        _patchDuration(p.raw, { start: 0, hdr: 12 <= p.raw.length ? (p.raw[8] === 1 ? 8 : 8) : 8, typeName: "mvhd" }, true, maxMovieDur);
-      }
-    }
-    // (hdr do box mvhd copiado é sempre 8 — tamanho 32 bits)
-    const moovB = _box("moov", _concat(newParts.map(p => p.raw)));
-    return _concat([ftypBytes, bytes.slice(mdat.start, mdat.start + mdat.size), moovB]);
-  }catch(_){
-    return null;                                      // qualquer surpresa: original
-  }
-}
-
-
-/* Validação real: carrega o vídeo invisível e mede a duração. */
-function _probeBlob(blob){
-  return new Promise(res => {
-    let done = false;
-    const url = URL.createObjectURL(blob);
-    const v = document.createElement("video");
-    v.muted = true; v.playsInline = true; v.preload = "metadata";
-    const finish = ok => { if (done) return; done = true; URL.revokeObjectURL(url); res(ok && isFinite(v.duration) ? v.duration : null); };
-    v.onloadedmetadata = () => finish(v.duration > 0);
-    v.onerror = () => finish(false);
-    setTimeout(() => finish(false), 4000);
-    v.src = url;
-  });
-}
-
-/* Corte diferido e transacional: roda na central, ANTES de compartilhar.
-   Para cada replay MP4 bruto: corta → valida → grava o novo → remove o
-   antigo. Qualquer dúvida em qualquer etapa deixa o bruto intocado.    */
-async function refineVault(){
-  try{
-    const entries = await vault.entries();
-    let touched = false;
-    for (const e of entries){
-      try{
-        const it = e.item;
-        if (!it || !it.min || !/mp4/i.test(it.type || "")) continue;
-        if (/-\d+s\.mp4$/i.test(it.name || "")) continue;          // já refinado
-        const bytes = new Uint8Array(await itemBlob(it).arrayBuffer());
-        const cut = trimMp4(bytes, it.min);
-        if (!cut) continue;                                          // sem excesso/cortável
-        const blob2 = new Blob([cut], { type: it.type });
-        const dur = await _probeBlob(blob2);
-        if (dur === null || dur < it.min - 0.5) continue;            // validador reprovou
-        const name2 = (it.name || "replay.mp4").replace(/\.mp4$/i, "-" + Math.round(dur) + "s.mp4");
-        await vault.add({ name: name2, type: it.type, bytes: cut.buffer.slice(cut.byteOffset, cut.byteOffset + cut.byteLength), t: it.t, min: it.min });
-        await vault.removeKeys([e.key]);                             // transação: grava antes, remove depois
-        touched = true;
-      }catch(_){ /* este item fica bruto; segue para o próximo */ }
-    }
-    return touched;
-  }catch(_){ return false; }
-}
-
 async function saveAll(){
   if (savingAll) return;
   savingAll = true;
   try{
-    let entries = await vault.entries();
+    const entries = await vault.entries();
     if (!entries.length){ toast("Nenhum replay para salvar", "info"); return; }
-    // corte diferido: ajusta a duração agora, com o jogo já parado
-    toast("Preparando os replays…", "info", 0);
-    if (await refineVault()) entries = await vault.entries();
-    hideToast();
     const total = entries.length;
 
     // 1) caminho principal: compartilhamento nativo com bisseção automática
