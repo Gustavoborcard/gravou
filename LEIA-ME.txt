@@ -1,0 +1,30 @@
+GRAVEI v66 — PACOTE DE PUBLICAÇÃO
+
+Esta entrega parte da v65 e preserva a sentinela contra congelamento da câmera e o escurecimento OLED.
+
+Publique estes arquivos preservando exatamente a estrutura:
+
+gravei-v66/
+  index.html
+  replay-worker.js
+  vendor/
+    mediabunny.min.mjs
+    MEDIABUNNY-LICENSE.txt
+
+IMPORTANTE
+1. Substitua o index.html atual e envie também replay-worker.js e a pasta vendor.
+2. Mantenha o seu icon-gravei-1024.png ao lado de index.html; ele não foi anexado a esta tarefa.
+3. Use HTTPS. A câmera e o Worker de preparação não devem ser executados por file://.
+4. O servidor deve servir arquivos .mjs como JavaScript (text/javascript ou application/javascript).
+5. Não renomeie nem mova replay-worker.js ou a pasta vendor sem ajustar os caminhos no index.html.
+
+CONTRATO DE DURAÇÃO
+- O botão de replay só é habilitado depois que existe o histórico completo escolhido.
+- O arquivo bruto íntegro é guardado primeiro em ArrayBuffer, preservando a compatibilidade do cofre no Safari.
+- A preparação ocorre somente depois que a câmera é encerrada.
+- O resultado é aceito apenas entre 90% e 110% do tempo escolhido.
+- O primeiro caminho corta sem recompressão; se necessário, a contingência recodifica só o vídeo e copia o áudio original.
+- Áudio, vídeo, dimensões, leitura, início e fim do arquivo são validados.
+- Se não houver resultado válido, o bruto permanece guardado e nada fora da tolerância é entregue silenciosamente.
+
+A biblioteca de mídia é local; o corte não depende de internet.

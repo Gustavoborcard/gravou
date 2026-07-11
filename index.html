@@ -277,6 +277,9 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 @media (orientation:landscape){#modal{align-items:center}.sheet{border-radius:20px;margin:0 20px}}
 
 .hint{margin-top:26px;font-size:13px;color:var(--text-dim);line-height:1.6;max-width:300px}
+.prep-status{min-height:20px;margin-top:10px;font-size:13px;line-height:1.45;color:var(--text-dim);max-width:320px}
+.btn:disabled{cursor:not-allowed;opacity:.55;transform:none}
+#btn-save:disabled{cursor:not-allowed;filter:grayscale(.35)}
 a{color:var(--accent)}
 </style>
 </head>
@@ -292,7 +295,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v68</p>
+  <p style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v66</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -334,7 +337,7 @@ a{color:var(--accent)}
   <div class="stack">
     <button class="btn btn-primary" id="b-go">Iniciar gravação</button>
   </div>
-  <p class="hint">O <b>+</b> é porque o vídeo pode vir com alguns segundos extras no início. O replay salva só o que aconteceu <b>antes</b> do toque — nunca depois.</p>
+  <p class="hint">O replay termina no momento do toque e é preparado para ficar com a duração escolhida.</p>
 </section>
 
 <!-- GRAVAÇÃO -->
@@ -350,7 +353,7 @@ a{color:var(--accent)}
   <button class="icon-btn" id="btn-flip" aria-label="Trocar câmera">
     <svg viewBox="0 0 24 24"><path d="M20 8h-3l-2-3H9L7 8H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1z"/><path d="M9.5 13.5a2.5 2.5 0 0 1 4.3-1.7M14.5 13.5a2.5 2.5 0 0 1-4.3 1.7"/><path d="M14 11.5l.6-.9.9.6M10 15.5l-.6.9-.9-.6"/></svg>
   </button>
-  <button id="btn-save" aria-label="Salvar replay">
+  <button id="btn-save" aria-label="Salvar replay" disabled aria-disabled="true">
     <span class="inner">
       <span class="rw"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><polyline points="23 5.2 23 10 18.2 10" stroke="#FAFAF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="#FAFAF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.4" fill="#FF3B30"/></svg></span>
       <span class="lbl">Salvar últimos</span>
@@ -364,6 +367,7 @@ a{color:var(--accent)}
   <div class="status-icon ok"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg></div>
   <h2>Seus replays</h2>
   <p class="tagline" id="ended-msg">Nenhum replay guardado.</p>
+  <p id="prep-status" class="prep-status" aria-live="polite"></p>
   <div class="stack">
     <button class="btn btn-primary" id="b-saveall" style="display:none">Salvar ou compartilhar</button>
     <button class="btn btn-ghost" id="b-again">Voltar a gravar</button>
@@ -421,85 +425,194 @@ a{color:var(--accent)}
 
 <script>
 /* =========================================================
-   Gravei — gravadores alternados
-   Em vez de recortar pedaços (que gera arquivo inválido no
-   iOS), mantemos gravadores paralelos defasados. No toque,
-   finalizamos o mais antigo: o arquivo é completo, válido e
-   termina exatamente no momento do toque — nunca depois.
-   O clipe cobre pelo menos os últimos X segundos.
+   Gravei — captura íntegra + ajuste transacional
+   Gravadores paralelos preservam um arquivo bruto completo e
+   válido no iOS. No toque, o bruto termina naquele momento e
+   é guardado imediatamente. Com a câmera parada, um Worker
+   recorta os últimos X segundos, valida o resultado e só então
+   substitui o bruto no cofre.
    ========================================================= */
 "use strict";
 
 /* ---------- cofre local de replays (IndexedDB) ----------
    Os replays ficam guardados no aparelho durante a partida e
    são salvos todos de uma vez no final — sem interromper o jogo. */
+const VAULT_VERSION = 2;
 const vault = {
   _db: null,
+  _reset(){ try{ if (this._db) this._db.close(); }catch(_){} this._db = null; },
   async db(){
     if (this._db) return this._db;
     this._db = await new Promise((res, rej) => {
-      const rq = indexedDB.open("gravei", 1);
-      rq.onupgradeneeded = () => rq.result.createObjectStore("replays", { autoIncrement: true });
+      const rq = indexedDB.open("gravei", VAULT_VERSION);
+      rq.onupgradeneeded = event => {
+        const db = rq.result;
+        const store = db.objectStoreNames.contains("replays")
+          ? rq.transaction.objectStore("replays")
+          : db.createObjectStore("replays", { autoIncrement: true });
+
+        if (!store.indexNames.contains("status")){
+          store.createIndex("status", "status", { unique: false });
+        }
+
+        // Replays das versões anteriores já foram entregues sem contrato de corte.
+        // Eles permanecem intocados e passam a ser considerados prontos.
+        if (event.oldVersion < 2){
+          const cursorRq = store.openCursor();
+          cursorRq.onsuccess = () => {
+            const cursor = cursorRq.result;
+            if (!cursor) return;
+            const item = cursor.value || {};
+            if (!item.status){
+              cursor.update(Object.assign({}, item, {
+                schema: 2,
+                status: "ready",
+                legacy: true
+              }));
+            }
+            cursor.continue();
+          };
+        }
+      };
       rq.onsuccess = () => res(rq.result);
       rq.onerror = () => rej(rq.error);
+      rq.onblocked = () => rej(new Error("vault_blocked"));
     });
+    try{
+      this._db.onclose = () => { this._db = null; };
+      this._db.onversionchange = () => this._reset();
+    }catch(_){}
     return this._db;
   },
-  async add(item){
-    const db = await this.db();
-    return new Promise((res, rej) => {
+  async _run(fn){
+    try{ return await fn(await this.db()); }
+    catch(err){
+      const retryable = err && ["InvalidStateError","TransactionInactiveError","UnknownError"].includes(err.name);
+      if (!retryable) throw err;
+      this._reset();
+      return await fn(await this.db());
+    }
+  },
+  async addRaw(item){
+    return this._run(db => new Promise((res, rej) => {
       const tx = db.transaction("replays", "readwrite");
-      tx.objectStore("replays").add(item);
-      tx.oncomplete = res;
+      const rq = tx.objectStore("replays").add(item);
+      let key = null;
+      rq.onsuccess = () => { key = rq.result; };
+      tx.oncomplete = () => res(key);
+      tx.onabort = () => rej(tx.error || new Error("vault_add_aborted"));
       tx.onerror = () => rej(tx.error);
-    });
+    }));
   },
   async entries(){
-    // retorna [{key, item}] para permitir remoção seletiva após entrega
-    const db = await this.db();
-    const store = db.transaction("replays", "readonly").objectStore("replays");
-    const [keys, vals] = await Promise.all([
-      new Promise((res, rej) => { const r = store.getAllKeys(); r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); }),
-      new Promise((res, rej) => { const r = store.getAll();     r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); })
-    ]);
-    return keys.map((k, i) => ({ key: k, item: vals[i] }));
+    return this._run(async db => {
+      const store = db.transaction("replays", "readonly").objectStore("replays");
+      const [keys, vals] = await Promise.all([
+        new Promise((res, rej) => { const r = store.getAllKeys(); r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); }),
+        new Promise((res, rej) => { const r = store.getAll();     r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); })
+      ]);
+      return keys.map((key, i) => ({ key, item: vals[i] }));
+    });
+  },
+  async entriesByStatus(status){
+    const entries = await this.entries();
+    return entries.filter(entry => (entry.item.status || "ready") === status);
+  },
+  async promoteReady(key, captureId, patch){
+    return this._run(db => new Promise((res, rej) => {
+      const tx = db.transaction("replays", "readwrite");
+      const store = tx.objectStore("replays");
+      const rq = store.get(key);
+      let failure = null;
+
+      rq.onsuccess = () => {
+        const current = rq.result;
+        if (!current || current.status !== "raw" || current.captureId !== captureId){
+          failure = new Error("stale_replay");
+          failure.name = "StaleReplayError";
+          try{ tx.abort(); }catch(_){}
+          return;
+        }
+        const next = Object.assign({}, current, patch, {
+          schema: 2,
+          status: "ready",
+          lastErrorCode: null
+        });
+        if (next.bytes) delete next.blob;
+        store.put(next, key);
+      };
+      rq.onerror = () => { failure = rq.error; };
+      tx.oncomplete = () => res(true);
+      tx.onabort = () => rej(failure || tx.error || new Error("vault_promote_aborted"));
+      tx.onerror = () => { failure = failure || tx.error; };
+    }));
+  },
+  async markRawError(key, captureId, code){
+    return this._run(db => new Promise((res, rej) => {
+      const tx = db.transaction("replays", "readwrite");
+      const store = tx.objectStore("replays");
+      const rq = store.get(key);
+      let failure = null;
+
+      rq.onsuccess = () => {
+        const current = rq.result;
+        if (!current || current.status !== "raw" || current.captureId !== captureId){
+          failure = new Error("stale_replay");
+          failure.name = "StaleReplayError";
+          try{ tx.abort(); }catch(_){}
+          return;
+        }
+        store.put(Object.assign({}, current, {
+          attempts: (current.attempts || 0) + 1,
+          lastErrorCode: code || "processing_failed"
+        }), key);
+      };
+      rq.onerror = () => { failure = rq.error; };
+      tx.oncomplete = () => res(true);
+      tx.onabort = () => rej(failure || tx.error || new Error("vault_error_update_aborted"));
+      tx.onerror = () => { failure = failure || tx.error; };
+    }));
   },
   async removeKeys(keys){
     if (!keys.length) return;
-    const db = await this.db();
-    return new Promise((res, rej) => {
+    return this._run(db => new Promise((res, rej) => {
       const tx = db.transaction("replays", "readwrite");
       const store = tx.objectStore("replays");
-      keys.forEach(k => store.delete(k));
+      keys.forEach(key => store.delete(key));
       tx.oncomplete = res;
+      tx.onabort = () => rej(tx.error || new Error("vault_remove_aborted"));
       tx.onerror = () => rej(tx.error);
-    });
+    }));
   },
   async count(){
     try{
-      const db = await this.db();
-      return await new Promise((res, rej) => {
+      return await this._run(db => new Promise((res, rej) => {
         const rq = db.transaction("replays", "readonly").objectStore("replays").count();
         rq.onsuccess = () => res(rq.result || 0);
         rq.onerror = () => rej(rq.error);
-      });
+      }));
     }catch(_){ return 0; }
   },
   async clear(){
-    const db = await this.db();
-    return new Promise((res, rej) => {
+    return this._run(db => new Promise((res, rej) => {
       const tx = db.transaction("replays", "readwrite");
       tx.objectStore("replays").clear();
       tx.oncomplete = res;
+      tx.onabort = () => rej(tx.error || new Error("vault_clear_aborted"));
       tx.onerror = () => rej(tx.error);
-    });
+    }));
   }
 };
 
-/* Compat: itens novos guardam bytes crus (o Safari falha ao armazenar
-   Blob no IndexedDB — bug conhecido do WebKit); itens antigos, Blob. */
-function itemBlob(it){
-  return it.blob || new Blob([it.bytes], { type: it.type || "video/mp4" });
+/* O WebKit pode falhar ao persistir Blob no IndexedDB. O cofre grava
+   ArrayBuffer e reconstrói o Blob apenas quando ele será usado. Itens
+   antigos que já contêm Blob continuam compatíveis. */
+function itemBlob(item){
+  if (item && item.blob instanceof Blob) return item.blob;
+  return new Blob(
+    [item && item.bytes ? item.bytes : new Uint8Array(0)],
+    { type: (item && item.type) || "video/mp4" }
+  );
 }
 
 function updateCountChip(n){
@@ -510,7 +623,6 @@ const $ = id => document.getElementById(id);
 const DURATIONS = [10,15,20,30,45,60];
 
 const state = {
-  freeClones: [],              // clones reciclados (nunca parados em sessão: iOS estagna a câmera)
   duration: 20,
   facing: "user",              // frontal por padrão (usado na 1ª abertura)
   cams: [],                    // câmeras disponíveis [{deviceId, label, side}]
@@ -524,6 +636,7 @@ const state = {
   wakeLock: null,
   saving: false,
   replayCount: 0,
+  bufferReady: false,
   active: false
 };
 
@@ -550,7 +663,7 @@ const chipsBox = $("chips");
 DURATIONS.forEach(d => {
   const c = document.createElement("button");
   c.className = "chip" + (d === state.duration ? " sel" : "");
-  c.textContent = d + "s+";
+  c.textContent = d + "s";
   c.onclick = () => {
     state.duration = d;
     chipsBox.querySelectorAll(".chip").forEach(x => x.classList.toggle("sel", x === c));
@@ -595,7 +708,13 @@ $("b-start").onclick = async () => {
       "Você tem " + n + " replay" + (n > 1 ? "s" : "") + " não salvo" + (n > 1 ? "s" : "") +
       ". Uma nova gravação descarta o que está guardado.",
       "Descartar e começar",
-      async () => { await vault.clear(); await refreshVaultUI(); show("s-perm"); }
+      async () => {
+        await cancelReplayProcessing("clear");
+        await drainRawWrites();
+        await vault.clear();
+        await refreshVaultUI();
+        show("s-perm");
+      }
     );
     return;
   }
@@ -606,18 +725,17 @@ $("b-perm").onclick = requestPermission;
 $("b-retry-perm").onclick = requestPermission;
 $("b-retry-cam").onclick = requestPermission;
 $("b-go").onclick = startRecording;
-$("b-again").onclick = () => {
-  // volta a gravar: replays ficam intactos; usa a duração já escolhida
-  if (state.everRecorded) startRecording();
+$("b-again").onclick = async () => {
+  if (state.everRecorded) await startRecording();
   else show("s-time");
 };
 $("b-home").onclick = async () => {
-  try{ stopRemote(); }catch(_){}                     // sessão encerrada de verdade: código morre aqui
+  try{ stopRemote(); }catch(_){}
   await refreshVaultUI();
   show("s-home");
 };
 $("b-saveall").onclick = saveAll;
-$("b-recover").onclick = async () => { await refreshVaultUI(); show("s-ended"); };
+$("b-recover").onclick = openReplayCenter;
 $("b-discard").onclick = async () => {
   const n = await vault.count();
   openConfirm(
@@ -625,6 +743,8 @@ $("b-discard").onclick = async () => {
     n + " replay" + (n > 1 ? "s" : "") + " ser" + (n > 1 ? "ão" : "á") + " apagado" + (n > 1 ? "s" : "") + " definitivamente.",
     "Descartar",
     async () => {
+      await cancelReplayProcessing("clear");
+      await drainRawWrites();
       await vault.clear();
       await refreshVaultUI();
       toast("Replays descartados", "info");
@@ -632,15 +752,21 @@ $("b-discard").onclick = async () => {
   );
 };
 
-// contador de replays abre a central (pausa a câmera para poupar bateria)
+async function openReplayCenter(){
+  if (state.active) stopSession();
+  show("s-ended");
+  await drainRawWrites();
+  await refreshVaultUI();
+  void ensureAllReplaysReady().catch(() => {});
+}
+
 $("chip-count").onclick = async () => {
   vibrate(20);
-  stopSession();
-  await refreshVaultUI();
-  show("s-ended");
+  await openReplayCenter();
 };
 
-// ao abrir o app: verifica se há replays de uma sessão anterior
+// Ao abrir o app, replays brutos continuam seguros e só serão
+// preparados quando o usuário entrar na Central de Replays.
 refreshVaultUI();
 
 async function requestPermission(){
@@ -656,8 +782,8 @@ async function requestPermission(){
 }
 
 function updateDurLabels(){
-  $("save-secs").textContent = state.duration + "s+";
-  $("chip-dur").textContent = state.duration + "s+";
+  $("save-secs").textContent = state.duration + "s";
+  $("chip-dur").textContent = state.duration + "s";
 }
 
 /* ---------- MIME / compatibilidade ---------- */
@@ -675,28 +801,37 @@ function pickMime(){
 }
 
 /* ---------- iniciar ---------- */
+let recordingStarting = false;
 async function startRecording(){
-  updateDurLabels();
-  const [mime, ext] = pickMime();
-  state.mime = mime; state.ext = ext;
+  if (recordingStarting) return;
+  recordingStarting = true;
   try{
-    await openStream(state.cams[state.camIndex] || undefined);   // retoma na mesma câmera
-  }catch(err){
-    if (err && err.name === "NotAllowedError") show("s-denied");
-    else show("s-nocam");
-    return;
+    await cancelReplayProcessing("recording-start");
+    setBufferReady(false);
+    updateDurLabels();
+    const [mime, ext] = pickMime();
+    state.mime = mime; state.ext = ext;
+    try{
+      await openStream(state.cams[state.camIndex] || undefined);
+    }catch(err){
+      if (err && err.name === "NotAllowedError") show("s-denied");
+      else show("s-nocam");
+      return;
+    }
+    state.active = true;
+    state.everRecorded = true;
+    updateCountChip(await vault.count());
+    startScheduler();
+    startRing();
+    requestWakeLock();
+    show("rec-screen");
+    armDim();
+    watchCamera();
+    sentinelStart();
+    try{ startRemote(); }catch(_){}
+  }finally{
+    recordingStarting = false;
   }
-  state.active = true;
-  state.everRecorded = true;
-  updateCountChip(await vault.count());
-  startScheduler();
-  startRing();
-  requestWakeLock();
-  show("rec-screen");
-  armDim();
-  watchCamera();
-  sentinelStart();
-  try{ startRemote(); }catch(_){}                    // controle remoto: falha silenciosa
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -717,19 +852,8 @@ function setDim(on){
 function armDim(){
   clearTimeout(dimTimer);
   setDim(false);
-  dimTimer = setTimeout(() => { if (state.active && dimEnabled) setDim(true); }, DIM_AFTER);
+  dimTimer = setTimeout(() => { if (state.active) setDim(true); }, DIM_AFTER);
 }
-let dimEnabled = true;                              // interruptor de diagnóstico
-try{
-  document.addEventListener("DOMContentLoaded", () => {
-    const vl = document.getElementById("ver-label");
-    if (vl) vl.onclick = () => {
-      dimEnabled = !dimEnabled;
-      toast("Modo economia " + (dimEnabled ? "ATIVADO" : "DESATIVADO (diagnóstico)"), "info", 2500);
-    };
-  });
-}catch(_){}
-
 function disarmDim(){ clearTimeout(dimTimer); setDim(false); }
 document.addEventListener("pointerdown", () => {
   if (state.active && $("rec-screen").classList.contains("active")) armDim();
@@ -743,12 +867,11 @@ let camRecovering = false;
 async function onCamStall(){
   if (camRecovering || !state.active) return;
   camRecovering = true;
-  state.stallCount = (state.stallCount || 0) + 1;
-  try{ $("chip-dur").textContent = state.duration + "s+ ⚡" + state.stallCount; }catch(_){}
   try{
     toast("Religando a câmera…", "info", 0);
     await openStream(state.cams[state.camIndex] || undefined);
-    teardownPool(); spawnRecorder();
+    teardownPool();
+    spawnRecorder();
     sentinelStart();
     toast("Câmera religada — o replay recomeça a contar", "ok", 2600);
   }catch(_){
@@ -758,39 +881,46 @@ async function onCamStall(){
   camRecovering = false;
 }
 function sentinelStop(){
-  clearInterval(state.sentinelId); state.sentinelId = null;
-  try{ if (state.rvfcId && $("cam").cancelVideoFrameCallback) $("cam").cancelVideoFrameCallback(state.rvfcId); }catch(_){}
+  clearInterval(state.sentinelId);
+  state.sentinelId = null;
+  try{
+    if (state.rvfcId && $("cam").cancelVideoFrameCallback){
+      $("cam").cancelVideoFrameCallback(state.rvfcId);
+    }
+  }catch(_){}
   state.rvfcId = null;
 }
 function sentinelStart(){
   sentinelStop();
   try{
     const track = state.stream && state.stream.getVideoTracks()[0];
-    if (track){ track.onmute = onCamStall; track.onended = onCamStall; }
+    if (track){
+      track.onmute = onCamStall;
+      track.onended = onCamStall;
+    }
   }catch(_){}
-  const v = $("cam");
+
+  const video = $("cam");
   state.lastFrameT = performance.now();
-  state.lastCT = v ? v.currentTime : 0;
-  if (v && v.requestVideoFrameCallback){
-    const tick = () => { state.lastFrameT = performance.now();
-      try{ state.rvfcId = v.requestVideoFrameCallback(tick); }catch(_){} };
-    try{ state.rvfcId = v.requestVideoFrameCallback(tick); }catch(_){}
+  state.lastCT = video ? video.currentTime : 0;
+
+  if (video && video.requestVideoFrameCallback){
+    const tick = () => {
+      state.lastFrameT = performance.now();
+      try{ state.rvfcId = video.requestVideoFrameCallback(tick); }catch(_){}
+    };
+    try{ state.rvfcId = video.requestVideoFrameCallback(tick); }catch(_){}
   }
-  state.stallStrikes = 0;
+
   state.sentinelId = setInterval(() => {
     if (!state.active || camRecovering || document.visibilityState !== "visible") return;
-    // fonte primária: o relógio do vídeo avança se quadros fluem — imune à cortina
-    const ct = v ? v.currentTime : 0;
-    const clockMoved = ct !== state.lastCT;
-    state.lastCT = ct;
-    let trackMuted = false;
-    try{
-      const tr = state.stream && state.stream.getVideoTracks()[0];
-      trackMuted = !!(tr && (tr.muted || tr.readyState === "ended"));
-    }catch(_){}
-    if (trackMuted){ onCamStall(); return; }
-    state.stallStrikes = clockMoved ? 0 : state.stallStrikes + 1;
-    if (state.stallStrikes >= 2) onCamStall();        // ~4s parado confirma
+    if (state.rvfcId){
+      if (performance.now() - state.lastFrameT > 4500) onCamStall();
+    }else{
+      const currentTime = video ? video.currentTime : 0;
+      if (currentTime === state.lastCT) onCamStall();
+      state.lastCT = currentTime;
+    }
   }, 2000);
 }
 
@@ -812,8 +942,6 @@ window.addEventListener("orientationchange", onRotate);
 
 function releaseCamera(){
   teardownPool();
-  try{ state.freeClones.forEach(c => c.getTracks().forEach(t => t.stop())); }catch(_){}
-  state.freeClones = [];
   if (state.stream){ state.stream.getTracks().forEach(t => t.stop()); state.stream = null; }
 }
 
@@ -935,25 +1063,11 @@ try{
 }catch(_){}
 
 /* ---------- pool de gravadores ---------- */
-/* Devolve um clone à prateleira em vez de pará-lo: parar trilhas de
-   clone em plena sessão estagna a câmera-fonte no iOS (bug WebKit). */
-function recycleClone(st){
-  try{
-    const tr = st && st.getVideoTracks && st.getVideoTracks()[0];
-    if (tr && tr.readyState === "live" && state.freeClones.length < 6) state.freeClones.push(st);
-  }catch(_){}
-}
-
 function spawnRecorder(){
   if (!state.stream) return;
-  let s = null;
-  while (state.freeClones.length && !s){             // reaproveita clone vivo
-    const c = state.freeClones.pop();
-    try{ if (c.getVideoTracks()[0].readyState === "live") s = c; }catch(_){}
-  }
-  if (!s) s = state.stream.clone();                  // ou nasce um novo
+  const s = state.stream.clone();                    // cada gravador tem seu clone
   let rec;
-  const opts = { videoBitsPerSecond: 2500000 };      // 2,5 Mbps: menos bateria, arquivos 3x menores
+  const opts = { videoBitsPerSecond: 2500000, videoKeyFrameIntervalDuration: 1000 };      // 2,5 Mbps: menos bateria, arquivos 3x menores
   if (state.mime) opts.mimeType = state.mime;
   try{
     rec = new MediaRecorder(s, opts);
@@ -964,9 +1078,15 @@ function spawnRecorder(){
   const item = { rec, stream: s, chunks: [], start: Date.now(), mode: "buffer" };
   rec.ondataavailable = e => { if (e.data && e.data.size) item.chunks.push(e.data); };
   rec.onstop = () => {
-    recycleClone(item.stream);                       // clone volta à prateleira, nunca é parado
-    if (item.mode === "save") finishSave(item);
-    item.chunks = [];
+    item.stream.getTracks().forEach(t => t.stop());
+    if (item.mode === "save"){
+      const write = finishSave(item);
+      item.chunks = [];
+      void write.finally(() => completeRawWrite(item));
+    }else{
+      item.chunks = [];
+      completeRawWrite(item);
+    }
   };
   rec.onerror = () => toast("Não foi possível salvar", "err");
   rec.start();                                       // sem timeslice: arquivo único e válido
@@ -977,15 +1097,15 @@ function discard(item){
   item.mode = "discard";
   const i = state.pool.indexOf(item);
   if (i >= 0) state.pool.splice(i, 1);
-  try{
-    if (item.rec.state !== "inactive") item.rec.stop();   // onstop recicla o clone
-    else recycleClone(item.stream);                       // gravador já morto: recicla direto
-  }catch(_){ recycleClone(item.stream); }
+  try{ if (item.rec.state !== "inactive") item.rec.stop(); }catch(_){}
+  // libera a câmera imediatamente (Android exige liberação síncrona)
+  try{ item.stream.getTracks().forEach(t => t.stop()); }catch(_){}
 }
 
 function teardownPool(){
   [...state.pool].forEach(discard);
   state.pool = [];
+  setBufferReady(false);
 }
 
 /* Agendador: um gravador novo a cada X/2 segundos.
@@ -1007,12 +1127,24 @@ function startScheduler(){
 }
 
 /* ---------- anel de buffer ---------- */
+function setBufferReady(ready){
+  state.bufferReady = !!ready;
+  const button = $("btn-save");
+  if (!button) return;
+  button.disabled = !state.bufferReady;
+  button.setAttribute("aria-disabled", String(!state.bufferReady));
+  const label = button.querySelector(".lbl");
+  if (label) label.textContent = state.bufferReady ? "Salvar últimos" : "Aguarde";
+}
 function startRing(){
   clearInterval(state.timerId);
+  setBufferReady(false);
   state.timerId = setInterval(() => {
     const oldest = state.pool[0];
-    const avail = oldest ? Math.min((Date.now() - oldest.start) / 1000, state.duration) : 0;
+    const age = oldest ? Math.max(0, (Date.now() - oldest.start) / 1000) : 0;
+    const avail = Math.min(age, state.duration);
     $("btn-save").style.setProperty("--buf", (avail / state.duration) * 100);
+    setBufferReady(age >= state.duration);
   }, 250);
 }
 
@@ -1098,85 +1230,469 @@ function ripple(e){
 }
 function vibrate(ms){ try{ navigator.vibrate && navigator.vibrate(ms); }catch(_){} }
 
-function saveReplay(){
-  if (state.saving){ return; }                 // um replay por vez
+const pendingRawWrites = new Set();
 
-  // hibernação pode matar gravadores sem avisar: descarta os zumbis
+function reserveRawWrite(item){
+  if (item._rawWritePromise) return item._rawWritePromise;
+  let resolved = false;
+  let resolvePending;
+  const promise = new Promise(resolve => { resolvePending = resolve; });
+  item._rawWritePromise = promise;
+  item._rawWriteDone = () => {
+    if (resolved) return;
+    resolved = true;
+    clearTimeout(item._rawWriteTimer);
+    resolvePending();
+  };
+  item._rawWriteTimer = setTimeout(item._rawWriteDone, 12000);
+  pendingRawWrites.add(promise);
+  void promise.finally(() => pendingRawWrites.delete(promise));
+  return promise;
+}
+
+function completeRawWrite(item){
+  try{ if (item && item._rawWriteDone) item._rawWriteDone(); }catch(_){}
+}
+
+async function drainRawWrites(){
+  const writes = [...pendingRawWrites];
+  if (!writes.length) return;
+  await Promise.race([
+    Promise.allSettled(writes),
+    sleep(13000)
+  ]);
+}
+
+function newCaptureId(){
+  try{ if (crypto.randomUUID) return crypto.randomUUID(); }catch(_){}
+  return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+}
+
+function saveReplay(){
+  if (state.saving) return false;
+
   while (state.pool.length && state.pool[0].rec.state !== "recording"){
     const dead = state.pool.shift();
     try{ dead.rec.ondataavailable = null; dead.rec.onstop = null; }catch(_){}
   }
+
   const oldest = state.pool[0];
   if (!oldest){
-    teardownPool(); spawnRecorder();           // renasce o buffer na hora
+    teardownPool();
+    spawnRecorder();
     toast("Gravação retomada — aguarde o buffer encher", "err", 2600);
-    return;
+    return false;
+  }
+
+  const capturedMs = Date.now() - oldest.start;
+  if (!state.bufferReady || capturedMs < state.duration * 1000){
+    setBufferReady(false);
+    toast("Aguarde o anel completar para salvar " + state.duration + " segundos", "info", 2200);
+    return false;
   }
 
   state.saving = true;
-  // trava com prazo: se a finalização nunca vier (iOS), destrava sozinho
+  oldest.captureId = newCaptureId();
+  oldest.targetSeconds = state.duration;
+  oldest.mime = oldest.rec.mimeType || state.mime || (state.ext === "mp4" ? "video/mp4" : "video/webm");
+  oldest.ext = state.ext;
+  oldest.captureEnd = Date.now();
+  reserveRawWrite(oldest);
+
   clearTimeout(state.saveGuard);
   state.saveGuard = setTimeout(() => {
     if (!state.saving) return;
-    state.saving = false; clearTimeout(state.saveGuard);
-    teardownPool(); spawnRecorder();
+    state.saving = false;
+    completeRawWrite(oldest);
+    teardownPool();
+    spawnRecorder();
     toast("O salvamento travou — gravação reiniciada", "err", 3000);
   }, 8000);
 
-  // finaliza o gravador mais antigo NO MOMENTO do toque:
-  // o arquivo termina aqui — nada depois do toque entra no vídeo
   oldest.mode = "save";
-  const i = state.pool.indexOf(oldest);
-  if (i >= 0) state.pool.splice(i, 1);
+  const index = state.pool.indexOf(oldest);
+  if (index >= 0) state.pool.splice(index, 1);
+  setBufferReady(false);
+
   try{
-    oldest.rec.stop();                         // onstop → finishSave(item)
+    oldest.rec.stop();
   }catch(_){
-    state.saving = false; clearTimeout(state.saveGuard);
+    state.saving = false;
+    clearTimeout(state.saveGuard);
+    completeRawWrite(oldest);
     toast("Não foi possível salvar", "err");
+    return false;
   }
 
-  // buffer zera a cada salvamento: os demais gravadores são descartados
-  // e um novo nasce — o anel recomeça do zero (decisão de UX).
-  // Toque precoce (política A): salva o que houver, mesmo abaixo do alvo.
-  teardownPool();
-  spawnRecorder();
+  if (!state.pool.length) spawnRecorder();
+  return true;
+}
+
+/* ---------- preparação transacional dos replays ---------- */
+const REPLAY_PROCESSOR_VERSION = 4;
+const replayPrep = {
+  worker: null,
+  pending: new Map(),
+  run: null,
+  epoch: 0,
+  sequence: 0
+};
+
+function replayError(code, message){
+  const error = new Error(message || code);
+  error.code = code;
+  return error;
+}
+
+function setPrepStatus(text, busy){
+  const status = $("prep-status");
+  if (status) status.textContent = text || "";
+  const screen = $("s-ended");
+  if (screen) screen.setAttribute("aria-busy", String(!!busy));
+  const button = $("b-saveall");
+  if (button) button.disabled = !!busy;
+}
+
+function rejectWorkerJobs(error){
+  for (const job of replayPrep.pending.values()){
+    clearTimeout(job.timer);
+    try{ job.reject(error); }catch(_){}
+  }
+  replayPrep.pending.clear();
+}
+
+function disposeReplayWorker(reason){
+  const worker = replayPrep.worker;
+  replayPrep.worker = null;
+  if (worker){
+    try{ worker.onmessage = null; worker.onerror = null; worker.terminate(); }catch(_){}
+  }
+  if (replayPrep.pending.size){
+    rejectWorkerJobs(reason || replayError("worker_stopped", "O preparador foi interrompido."));
+  }
+}
+
+function getReplayWorker(){
+  if (replayPrep.worker) return replayPrep.worker;
+  if (!window.Worker) throw replayError("worker_unsupported", "Este navegador não oferece processamento em segundo plano.");
+
+  let worker;
+  try{
+    worker = new Worker("./replay-worker.js?v=66", { type: "module" });
+  }catch(_){
+    throw replayError("worker_unavailable", "O motor local de preparação não pôde ser iniciado.");
+  }
+
+  worker.onmessage = event => {
+    const message = event.data || {};
+    const job = replayPrep.pending.get(message.jobId);
+    if (!job) return;
+
+    if (message.type === "progress"){
+      if (job.onProgress) job.onProgress(message.progress || 0);
+      return;
+    }
+
+    clearTimeout(job.timer);
+    replayPrep.pending.delete(message.jobId);
+
+    if (message.type === "done" || message.type === "passthrough"){
+      job.resolve(message);
+    }else if (message.type === "cancelled"){
+      job.reject(replayError("cancelled", "Preparação cancelada."));
+    }else{
+      const error = replayError(message.code || "processing_failed", message.message || "Não foi possível preparar o replay.");
+      job.reject(error);
+    }
+  };
+
+  worker.onerror = event => {
+    try{ event.preventDefault(); }catch(_){}
+    disposeReplayWorker(replayError("worker_failed", "O motor local de preparação falhou."));
+  };
+
+  replayPrep.worker = worker;
+  return worker;
+}
+
+function runReplayWorker(blob, targetSeconds, mime, forceTranscode, epoch, onProgress){
+  if (epoch !== replayPrep.epoch) return Promise.reject(replayError("cancelled", "Preparação cancelada."));
+  const worker = getReplayWorker();
+  const jobId = epoch + "-" + (++replayPrep.sequence);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      disposeReplayWorker(replayError("processing_timeout", "A preparação excedeu o tempo seguro."));
+    }, forceTranscode ? 120000 : 60000);
+
+    replayPrep.pending.set(jobId, { resolve, reject, timer, onProgress });
+    try{
+      worker.postMessage({
+        type: "trim",
+        jobId,
+        blob,
+        targetSeconds,
+        mime,
+        forceTranscode: !!forceTranscode
+      });
+    }catch(err){
+      clearTimeout(timer);
+      replayPrep.pending.delete(jobId);
+      reject(err);
+    }
+  });
+}
+
+async function cancelReplayProcessing(){
+  replayPrep.epoch++;
+  try{
+    if (replayPrep.worker){
+      for (const jobId of replayPrep.pending.keys()){
+        replayPrep.worker.postMessage({ type: "cancel", jobId });
+      }
+    }
+  }catch(_){}
+  disposeReplayWorker(replayError("cancelled", "Preparação cancelada."));
+  setPrepStatus("", false);
+  await Promise.resolve();
+}
+
+function waitVideoEvent(video, eventName, timeoutMs){
+  return new Promise((resolve, reject) => {
+    let timer = null;
+    const clean = () => {
+      clearTimeout(timer);
+      video.removeEventListener(eventName, ok);
+      video.removeEventListener("error", bad);
+    };
+    const ok = () => { clean(); resolve(); };
+    const bad = () => { clean(); reject(replayError("unplayable_output", "O arquivo preparado não pôde ser reproduzido.")); };
+    video.addEventListener(eventName, ok, { once: true });
+    video.addEventListener("error", bad, { once: true });
+    timer = setTimeout(() => {
+      clean();
+      reject(replayError("validation_timeout", "A validação do replay excedeu o tempo seguro."));
+    }, timeoutMs);
+  });
+}
+
+async function validateReadyBlob(blob, targetSeconds){
+  const url = URL.createObjectURL(blob);
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = "auto";
+  video.style.cssText = "position:fixed;width:2px;height:2px;left:-10000px;top:-10000px;opacity:0;pointer-events:none";
+  document.body.appendChild(video);
+
+  try{
+    const metadata = waitVideoEvent(video, "loadedmetadata", 8000);
+    video.src = url;
+    video.load();
+    await metadata;
+
+    const duration = video.duration;
+    if (!Number.isFinite(duration) || duration <= 0){
+      throw replayError("invalid_output_duration", "A duração do replay preparado é inválida.");
+    }
+    if (duration < targetSeconds * 0.9 || duration > targetSeconds * 1.1){
+      throw replayError("duration_out_of_range", "A duração preparada ficou fora da tolerância.");
+    }
+    if (!(video.videoWidth > 0 && video.videoHeight > 0)){
+      throw replayError("missing_output_video", "O replay preparado não contém vídeo reproduzível.");
+    }
+
+    if (video.readyState < 2){
+      await waitVideoEvent(video, "loadeddata", 8000);
+    }
+
+    const seekPoints = [Math.min(0.1, duration / 4), Math.max(0, duration - 0.12)];
+    let previous = -1;
+    for (const point of seekPoints){
+      if (Math.abs(point - previous) < 0.02) continue;
+      const seeked = waitVideoEvent(video, "seeked", 6000);
+      video.currentTime = point;
+      await seeked;
+      previous = point;
+    }
+
+    return {
+      duration,
+      width: video.videoWidth,
+      height: video.videoHeight
+    };
+  }finally{
+    try{ video.pause(); }catch(_){}
+    try{ video.removeAttribute("src"); video.load(); }catch(_){}
+    try{ video.remove(); }catch(_){}
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function buildAndValidateCandidate(item, epoch, forceTranscode, index, total){
+  const sourceBlob = itemBlob(item);
+  const result = await runReplayWorker(
+    sourceBlob,
+    item.targetSeconds,
+    item.type,
+    forceTranscode,
+    epoch,
+    progress => {
+      const percent = Math.max(0, Math.min(100, Math.round(progress * 100)));
+      setPrepStatus("Preparando replay " + index + " de " + total + " — " + percent + "%", true);
+    }
+  );
+
+  if (epoch !== replayPrep.epoch) throw replayError("cancelled", "Preparação cancelada.");
+
+  const passthrough = result.type === "passthrough";
+  const candidate = passthrough
+    ? sourceBlob
+    : new Blob([result.buffer], { type: result.mime || item.type });
+  const validation = await validateReadyBlob(candidate, item.targetSeconds);
+
+  return {
+    blob: candidate,
+    type: candidate.type || item.type,
+    ext: passthrough ? item.ext : (result.ext || item.ext),
+    rawDuration: result.rawDuration,
+    actualDuration: validation.duration
+  };
+}
+
+async function processOneRaw(entry, epoch, index, total){
+  const item = entry.item;
+  let prepared = null;
+  let firstError = null;
+
+  try{
+    prepared = await buildAndValidateCandidate(item, epoch, false, index, total);
+  }catch(err){
+    firstError = err;
+  }
+
+  if (!prepared && epoch === replayPrep.epoch && firstError && !["insufficient_history","cancelled"].includes(firstError.code)){
+    try{
+      setPrepStatus("Ajustando replay " + index + " de " + total + "…", true);
+      prepared = await buildAndValidateCandidate(item, epoch, true, index, total);
+    }catch(_){}
+  }
+
+  if (epoch !== replayPrep.epoch) throw replayError("cancelled", "Preparação cancelada.");
+
+  if (!prepared){
+    const code = (firstError && firstError.code) || "processing_failed";
+    try{ await vault.markRawError(entry.key, item.captureId, code); }catch(_){}
+    throw firstError || replayError(code, "Não foi possível preparar o replay.");
+  }
+
+  const extension = String(prepared.ext || item.ext || (/mp4/i.test(prepared.type) ? "mp4" : "webm")).replace(/^\./, "");
+  const baseName = item.name.replace(/\.(mp4|webm)$/i, "");
+  const readyBytes = await prepared.blob.arrayBuffer();
+  await vault.promoteReady(entry.key, item.captureId, {
+    name: baseName + "." + extension,
+    type: prepared.type,
+    ext: extension,
+    bytes: readyBytes,
+    rawDuration: prepared.rawDuration,
+    actualDuration: prepared.actualDuration,
+    processedAt: Date.now(),
+    processorVersion: REPLAY_PROCESSOR_VERSION
+  });
+}
+
+async function ensureAllReplaysReady(){
+  if (state.active) return false;
+  if (replayPrep.run) return replayPrep.run;
+
+  const epoch = replayPrep.epoch;
+  const run = (async () => {
+    await drainRawWrites();
+    if (epoch !== replayPrep.epoch || state.active) return false;
+
+    const rawEntries = await vault.entriesByStatus("raw");
+    if (!rawEntries.length){
+      const count = await vault.count();
+      setPrepStatus(count ? count + " replay" + (count > 1 ? "s prontos" : " pronto") : "", false);
+      return true;
+    }
+
+    let failed = 0;
+    for (let i = 0; i < rawEntries.length; i++){
+      if (epoch !== replayPrep.epoch || state.active) return false;
+      setPrepStatus("Preparando replay " + (i + 1) + " de " + rawEntries.length + "…", true);
+      try{
+        await processOneRaw(rawEntries[i], epoch, i + 1, rawEntries.length);
+      }catch(err){
+        if (epoch !== replayPrep.epoch || (err && err.code === "cancelled")) return false;
+        failed++;
+      }
+    }
+
+    disposeReplayWorker();
+    await refreshVaultUI();
+    const remainingRaw = await vault.entriesByStatus("raw");
+    if (remainingRaw.length){
+      setPrepStatus(
+        "Não foi possível preparar " + remainingRaw.length + " replay" + (remainingRaw.length > 1 ? "s" : "") + ". Toque em salvar para tentar novamente.",
+        false
+      );
+      return false;
+    }
+
+    const count = await vault.count();
+    setPrepStatus(count + " replay" + (count > 1 ? "s prontos" : " pronto"), false);
+    return failed === 0;
+  })();
+
+  replayPrep.run = run;
+  try{
+    return await run;
+  }finally{
+    if (replayPrep.run === run) replayPrep.run = null;
+  }
 }
 
 async function finishSave(item){
   let blob;
   try{
-    blob = new Blob(item.chunks, { type: state.mime || (state.ext === "mp4" ? "video/mp4" : "video/webm") });
-  }catch(err){
-    state.saving = false; clearTimeout(state.saveGuard);
-    toast(err && err.name === "QuotaExceededError"
-      ? "Armazenamento insuficiente no celular" : "Não foi possível salvar", "err");
-    return;
-  }
-  if (!blob.size){
-    state.saving = false; clearTimeout(state.saveGuard);
-    toast("Ainda não há vídeo para salvar", "err");
-    return;
-  }
+    blob = new Blob(item.chunks, { type: item.mime || (item.ext === "mp4" ? "video/mp4" : "video/webm") });
+    if (!blob.size) throw replayError("empty_blob", "Ainda não há vídeo para salvar");
 
-  state.replayCount++;
-  const stamp = new Date();
-  const name = "gravei-replay-" +
-    String(stamp.getHours()).padStart(2,"0") +
-    String(stamp.getMinutes()).padStart(2,"0") +
-    String(stamp.getSeconds()).padStart(2,"0") +
-    "-" + state.replayCount + "." + state.ext;
+    state.replayCount++;
+    const stamp = new Date();
+    const name = "gravei-replay-" +
+      String(stamp.getHours()).padStart(2,"0") +
+      String(stamp.getMinutes()).padStart(2,"0") +
+      String(stamp.getSeconds()).padStart(2,"0") +
+      "-" + state.replayCount + "." + item.ext;
 
-  try{
-    await vault.add({ name, type: blob.type, bytes: await blob.arrayBuffer(), t: Date.now() });
-    const n = await vault.count();                   // fonte única da verdade
+    await vault.addRaw({
+      schema: 2,
+      status: "raw",
+      captureId: item.captureId,
+      name,
+      type: blob.type,
+      ext: item.ext,
+      bytes: await blob.arrayBuffer(),
+      t: Date.now(),
+      targetSeconds: item.targetSeconds,
+      captureEnd: item.captureEnd,
+      attempts: 0,
+      lastErrorCode: null
+    });
+
+    const n = await vault.count();
     updateCountChip(n);
     flashOK();
-    toast("Replay " + n + " guardado", "ok", 1800);
+    toast("Replay " + n + " capturado", "ok", 1800);
   }catch(err){
-    // cofre indisponível (raro): cai para o salvamento imediato
-    await deliver(blob, name);
+    toast(err && err.name === "QuotaExceededError"
+      ? "Armazenamento insuficiente no celular"
+      : ((err && err.message) || "Não foi possível guardar o replay"), "err", 3200);
+  }finally{
+    state.saving = false;
+    clearTimeout(state.saveGuard);
   }
-  state.saving = false; clearTimeout(state.saveGuard);
 }
 
 /* ---------- salvar todos os replays de uma vez ---------- */
@@ -1209,8 +1725,18 @@ async function saveAll(){
   if (savingAll) return;
   savingAll = true;
   try{
-    const entries = await vault.entries();
-    if (!entries.length){ toast("Nenhum replay para salvar", "info"); return; }
+    await drainRawWrites();
+    const ready = await ensureAllReplaysReady();
+    const allEntries = await vault.entries();
+    if (!allEntries.length){ toast("Nenhum replay para salvar", "info"); return; }
+
+    const rawEntries = allEntries.filter(entry => (entry.item.status || "ready") === "raw");
+    if (!ready || rawEntries.length){
+      toast("Os replays continuam seguros — toque novamente para tentar prepará-los", "err", 4000);
+      return;
+    }
+
+    const entries = allEntries.filter(entry => (entry.item.status || "ready") === "ready");
     const total = entries.length;
 
     // 1) caminho principal: compartilhamento nativo com bisseção automática
@@ -1259,19 +1785,31 @@ async function saveAll(){
 }
 
 async function refreshVaultUI(){
-  const n = await vault.count();
-  // central de replays
+  const entries = await vault.entries();
+  const n = entries.length;
+  const raw = entries.filter(entry => (entry.item.status || "ready") === "raw").length;
+
   $("ended-msg").textContent = n > 0
     ? "Você tem " + n + " replay" + (n > 1 ? "s" : "") + " guardado" + (n > 1 ? "s" : "") + "."
     : "Nenhum replay guardado.";
+
   $("b-saveall").style.display = n > 0 ? "block" : "none";
-  $("b-saveall").textContent = "Salvar ou compartilhar (" + n + ")";
+  $("b-saveall").textContent = raw > 0
+    ? "Preparar e compartilhar (" + n + ")"
+    : "Salvar ou compartilhar (" + n + ")";
+  $("b-saveall").disabled = !!replayPrep.run;
   $("b-discard").style.display = n > 0 ? "block" : "none";
-  // tela inicial: rótulos dinâmicos
+
   $("b-recover").style.display = n > 0 ? "block" : "none";
   $("b-recover").textContent = "Continuar (" + n + " replay" + (n > 1 ? "s" : "") + ")";
   $("b-start").textContent = n > 0 ? "Nova gravação" : "Começar agora";
   updateCountChip(n);
+
+  if (!replayPrep.run){
+    if (raw > 0) setPrepStatus(raw + " replay" + (raw > 1 ? "s aguardando preparação" : " aguardando preparação"), false);
+    else if (n > 0) setPrepStatus(n + " replay" + (n > 1 ? "s prontos" : " pronto"), false);
+    else setPrepStatus("", false);
+  }
   return n;
 }
 
@@ -1382,8 +1920,8 @@ async function startRemote(){
       });
       conn.on("data", msg => {
         if (msg === "save" && state.active && $("rec-screen").classList.contains("active")){
-          saveReplay();
-          try{ conn.send("saved"); }catch(_){}
+          const accepted = saveReplay();
+          try{ conn.send(accepted ? "saved" : "waiting"); }catch(_){}
         }
       });
       const drop = () => {
@@ -1496,7 +2034,8 @@ $("b-ctl-connect").onclick = async () => {
         $("b-ctl-disc").style.display = "block";
       });
       conn.on("data", msg => {
-        if (msg === "saved"){ flashOK(); toast("Replay guardado na câmera", "ok", 1800); }
+        if (msg === "saved"){ flashOK(); toast("Replay capturado na câmera", "ok", 1800); }
+        else if (msg === "waiting"){ toast("A câmera ainda está preenchendo o buffer", "info", 2200); }
       });
       conn.on("close", () => {
         ctlResetUI();
