@@ -1,0 +1,27 @@
+GRAVEI — SONDA DE CAPTURA ÚNICA (iPhone)
+
+1. Publique o arquivo index.html em um endereço HTTPS.
+2. Abra pelo Safari do iPhone.
+3. Execute primeiro 30 segundos e depois 60 segundos.
+4. Ao concluir, toque em “Compartilhar resultados”.
+5. Na folha do iOS, escolha “Salvar em Arquivos”, AirDrop ou iCloud Drive.
+6. Se o iPhone recusar os três arquivos juntos, use os botões individuais:
+   - Salvar MP4;
+   - Salvar pacote forense;
+   - Salvar manifesto.
+7. Não envie os resultados pelo WhatsApp.
+
+Arquivos esperados
+- gravei-probe-full-*.mp4
+- gravei-probe-manifest-*.json
+- gravei-probe-*.bin
+
+O arquivo .bin é o pacote forense GRVP0001:
+- bytes 0–7: texto GRVP0001;
+- bytes 8–11: tamanho do manifesto JSON, uint32 little-endian;
+- manifesto JSON UTF-8;
+- chunks originais concatenados conforme offsets do manifesto.
+
+A extensão .bin é usada porque o iOS pode recusar extensões personalizadas. O conteúdo forense é idêntico ao antigo .grvp.
+
+Limite esta sonda a cinco minutos: ela preserva todos os chunks na memória.
