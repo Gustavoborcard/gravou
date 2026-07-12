@@ -349,7 +349,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v74</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v74.1</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -676,7 +676,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v74 - captura unica e MP4 plano
+   Gravei v74.1 - captura unica e MP4 plano
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
@@ -1551,12 +1551,43 @@ function joinBytes(parts){const n=parts.reduce((s,p)=>s+p.byteLength,0),o=new Ui
 function chooseReplay(snapshot,duration){if(!snapshot.length)return[];const target=snapshot[snapshot.length-1].endAt-duration*1000;let pick=0;for(let i=0;i<snapshot.length;i++)if(snapshot[i].startAt<=target)pick=i;return snapshot.slice(pick)}
 function rewriteFragment(f,seq,bases){const a=f.bytes.slice(),info=fragmentTfdt(a);if(info.mfhd)put32(a,info.mfhd.data+4,seq);for(const t of info.tracks){if(bases[t.id]===undefined)bases[t.id]=t.base;const v=t.base-bases[t.id];t.version===1?put64(a,t.pos,v):put32(a,t.pos,v)}return a}
 function makeFmp4(selected){if(!state.initSegment||!selected.length)throw Error('Buffer incompleto');const bases={},parts=[state.initSegment];selected.forEach((f,i)=>parts.push(rewriteFragment(f,i+1,bases)));return joinBytes(parts)}
+function readMp4MovieDuration(bytes){
+  try{
+    const a=bytes instanceof Uint8Array
+      ? bytes
+      : ArrayBuffer.isView(bytes)
+        ? new Uint8Array(bytes.buffer,bytes.byteOffset,bytes.byteLength)
+        : new Uint8Array(bytes);
+    const moov=boxes(a).find(box=>box.type==='moov');
+    if(!moov)return null;
+    const mvhd=child(a,moov,'mvhd');
+    if(!mvhd)return null;
+    const version=a[mvhd.data];
+    let timescale,duration;
+    if(version===0){
+      if(mvhd.data+20>mvhd.end)return null;
+      timescale=u32(a,mvhd.data+12);
+      duration=u32(a,mvhd.data+16);
+      if(duration===0xffffffff)return null;
+    }else if(version===1){
+      if(mvhd.data+32>mvhd.end)return null;
+      timescale=u32(a,mvhd.data+20);
+      const hi=u32(a,mvhd.data+24),lo=u32(a,mvhd.data+28);
+      if(hi===0xffffffff&&lo===0xffffffff)return null;
+      duration=hi*4294967296+lo;
+    }else return null;
+    const seconds=duration/timescale;
+    return timescale>0&&Number.isFinite(seconds)&&seconds>0&&seconds<86400?seconds:null;
+  }catch(_){return null}
+}
 async function flattenMp4(bytes){const M=window.Mediabunny;if(!M)throw Error('Mediabunny indisponivel');const input=new M.Input({source:new M.BufferSource(bytes),formats:M.ALL_FORMATS}),target=new M.BufferTarget(),output=new M.Output({format:new M.Mp4OutputFormat({fastStart:'in-memory'}),target});const conv=await M.Conversion.init({input,output});if(!conv.isValid||conv.discardedTracks.length)throw Error('Trilhas MP4 incompativeis');await conv.execute();const a=new Uint8Array(target.buffer||new ArrayBuffer(0)),types=boxes(a).map(x=>x.type);if(!a.byteLength||!types.includes('ftyp')||!types.includes('moov')||!types.includes('mdat')||types.includes('moof'))throw Error('MP4 final invalido');return new Blob([a],{type:'video/mp4'})}
 async function persistReplayBlob(blob, requestedDuration){
   if(!blob||!blob.size)throw Error('Video vazio');
   state.replayCount++;
   const d=new Date(),name='gravei-replay-'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+String(d.getSeconds()).padStart(2,'0')+'-'+state.replayCount+'.mp4';
-  const item={name,type:'video/mp4',bytes:await blob.arrayBuffer(),t:Date.now()};
+  const bytes=await blob.arrayBuffer();
+  const actualDuration=readMp4MovieDuration(bytes);
+  const item={name,type:'video/mp4',bytes,t:Date.now()};
   let replayId;
   try{
     replayId=await vault.add(item);
@@ -1565,7 +1596,9 @@ async function persistReplayBlob(blob, requestedDuration){
     return;
   }
   try{
-    await metadataWithTimeout(replayMeta.put(makeReplayMeta(replayId,item,requestedDuration)),1200);
+    const meta=makeReplayMeta(replayId,item,requestedDuration);
+    if(actualDuration!==null)meta.actualDuration=actualDuration;
+    await metadataWithTimeout(replayMeta.put(meta),1200);
   }catch(err){
     console.warn('gravei metadata save',err);
   }
