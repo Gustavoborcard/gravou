@@ -307,6 +307,10 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .replay-card:active{transform:scale(.992)}
 .replay-card-visual{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 35%,#333 0,#202020 42%,#151515 100%)}
 .replay-card-mark{font-family:'Poppins',sans-serif;font-size:clamp(24px,8vw,42px);font-weight:800;letter-spacing:-.04em;color:rgba(250,250,247,.16)}
+.replay-card-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+.replay-card.has-thumb .replay-card-visual{background:#000}
+.replay-card.has-thumb .replay-card-mark{display:none}
+.thumbnail-worker{position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:.01;pointer-events:none;z-index:-1}
 .replay-card-play{position:absolute;width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,59,48,.92);box-shadow:0 5px 18px rgba(0,0,0,.35)}
 .replay-card-play::after{content:"";margin-left:4px;border-top:9px solid transparent;border-bottom:9px solid transparent;border-left:14px solid #fff}
 .replay-card-overlay{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:34px 16px 14px;background:linear-gradient(transparent,rgba(0,0,0,.88))}
@@ -349,7 +353,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v74.1</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v75</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -676,7 +680,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v74.1 - captura unica e MP4 plano
+   Gravei v75 - captura unica e MP4 plano
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
@@ -854,7 +858,10 @@ function makeReplayMeta(replayId, item, requestedDuration = null){
     orientation: null,
     favorite: false,
     thumbStatus: "none",
-    thumbType: null
+    thumbType: null,
+    thumbBytes: null,
+    thumbSize: 0,
+    thumbAttempts: 0
   };
 }
 
@@ -904,7 +911,7 @@ async function getReplayStorageSummary(){
   }
   try{
     const result = await metadataWithTimeout(reconcileReplayMetadata(keys), 3000);
-    const bytes = result.metas.reduce((sum, meta) => sum + (Number(meta.size) || 0), 0);
+    const bytes = result.metas.reduce((sum, meta) => sum + (Number(meta.size) || 0) + (Number(meta.thumbSize) || 0), 0);
     return { count: keys.length, bytes, sizeAvailable: result.complete };
   }catch(err){
     console.warn("gravei metadata sync", err);
@@ -1643,7 +1650,10 @@ async function shareGroup(entries){
   const files = entries.map(e => new File([itemBlob(e.item)], e.item.name, { type: e.item.type }));
   try{
     await navigator.share({ files, title: SHARE_MSG, text: SHARE_MSG });
-    await vault.removeKeys(entries.map(e => e.key));
+    const deliveredKeys = entries.map(e => e.key);
+    await vault.removeKeys(deliveredKeys);
+    try{ await metadataWithTimeout(replayMeta.removeKeys(deliveredKeys), 1200); }
+    catch(err){ console.warn("gravei shared metadata cleanup", err); }
     return "done";
   }catch(err){
     if (err && err.name === "AbortError") return "cancelled";     // usuário fechou: para tudo
@@ -1750,6 +1760,15 @@ let playerObjectUrl = null;
 let playerBlob = null;
 let playerInfo = null;
 let playerShareBusy = false;
+let galleryThumbUrls = new Map();
+let thumbnailQueue = [];
+let thumbnailQueuedKeys = new Set();
+let thumbnailFailedThisRun = new Set();
+let thumbnailRunning = false;
+let thumbnailGeneration = 0;
+let thumbnailObserver = null;
+let thumbnailActiveKey = null;
+let thumbnailAbortCurrent = null;
 
 const replayDateFormatter = new Intl.DateTimeFormat("pt-BR", {
   day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit"
@@ -1780,7 +1799,7 @@ async function listGalleryEntries(){
       schemaVersion: 1, replayId: key, name: "gravei-replay-" + key + ".mp4",
       type: "video/mp4", size: null, createdAt: null, requestedDuration: null,
       actualDuration: null, width: null, height: null, orientation: null,
-      favorite: false, thumbStatus: "none", thumbType: null
+      favorite: false, thumbStatus: "none", thumbType: null, thumbBytes: null, thumbSize: 0, thumbAttempts: 0
     }
   }));
 }
@@ -1788,12 +1807,363 @@ async function listGalleryEntries(){
 function updateGallerySummary(){
   const n = galleryEntries.length;
   const allSizesKnown = n > 0 && galleryEntries.every(entry => Number.isFinite(Number(entry.meta.size)));
-  const bytes = allSizesKnown ? galleryEntries.reduce((sum, entry) => sum + Number(entry.meta.size), 0) : 0;
+  const bytes = allSizesKnown ? galleryEntries.reduce((sum, entry) => sum + Number(entry.meta.size) + (Number(entry.meta.thumbSize) || 0), 0) : 0;
   $("gallery-summary").textContent = n + " replay" + (n === 1 ? "" : "s") +
     (allSizesKnown ? " · " + formatReplayBytes(bytes) : "");
 }
 
+function thumbnailCancelError(){
+  const err = Error("Miniatura cancelada");
+  err.name = "ThumbnailCancelled";
+  return err;
+}
+
+function releaseGalleryThumbUrls(){
+  const list = $("gallery-list");
+  if (list && list.querySelectorAll){
+    list.querySelectorAll(".replay-card-thumb").forEach(image => { image.onerror = null; });
+  }
+  for (const url of galleryThumbUrls.values()){
+    try{ URL.revokeObjectURL(url); }catch(_){}
+  }
+  galleryThumbUrls.clear();
+}
+
+function findGalleryCard(replayKey){
+  return Array.from($("gallery-list").children).find(card => card.dataset.replayKey === String(replayKey)) || null;
+}
+
+function thumbnailBytesLength(bytes){
+  if (!bytes) return 0;
+  if (typeof Blob !== "undefined" && bytes instanceof Blob) return bytes.size;
+  return Number(bytes.byteLength) || 0;
+}
+
+function attachThumbnailToCard(card, entry){
+  const meta = entry && entry.meta;
+  if (!card || !meta || meta.thumbStatus !== "ready" || thumbnailBytesLength(meta.thumbBytes) <= 0) return false;
+  try{
+    const visual = card.querySelector(".replay-card-visual");
+    const oldImage = visual.querySelector(".replay-card-thumb");
+    if (oldImage){ oldImage.onerror = null; oldImage.remove(); }
+    card.classList.remove("has-thumb");
+    const previous = galleryThumbUrls.get(entry.key);
+    if (previous){ URL.revokeObjectURL(previous); galleryThumbUrls.delete(entry.key); }
+    const blob = new Blob([meta.thumbBytes], { type: meta.thumbType || "image/jpeg" });
+    if (!blob.size) return false;
+    const url = URL.createObjectURL(blob);
+    galleryThumbUrls.set(entry.key, url);
+    const image = document.createElement("img");
+    image.className = "replay-card-thumb";
+    image.alt = "";
+    image.decoding = "async";
+    image.setAttribute("aria-hidden", "true");
+    image.onerror = () => {
+      if (galleryThumbUrls.get(entry.key) === url){
+        URL.revokeObjectURL(url);
+        galleryThumbUrls.delete(entry.key);
+      }
+      image.remove();
+      card.classList.remove("has-thumb");
+      thumbnailFailedThisRun.add(entry.key);
+      void markThumbnailFailure(entry);
+    };
+    image.src = url;
+    visual.insertBefore(image, visual.firstChild);
+    card.classList.add("has-thumb");
+    return true;
+  }catch(err){
+    console.warn("gravei thumbnail display", err);
+    return false;
+  }
+}
+
+function updateGalleryCardLabels(card, entry){
+  if (!card || !entry) return;
+  const duration = card.querySelector(".replay-card-duration");
+  const date = card.querySelector(".replay-card-date");
+  if (duration) duration.textContent = replayDurationText(entry.meta);
+  if (date) date.textContent = replayDateText(entry.meta);
+  card.setAttribute("aria-label", "Abrir " + replayDurationText(entry.meta) + ", " + replayDateText(entry.meta));
+}
+
+function stopThumbnailWork(){
+  thumbnailGeneration++;
+  if (thumbnailObserver){
+    thumbnailObserver.disconnect();
+    thumbnailObserver = null;
+  }
+  thumbnailQueue = [];
+  thumbnailQueuedKeys.clear();
+  thumbnailFailedThisRun.clear();
+  thumbnailActiveKey = null;
+  const cancel = thumbnailAbortCurrent;
+  thumbnailAbortCurrent = null;
+  if (cancel) cancel();
+}
+
+function waitThumbnailEvent(video, eventName, timeoutMs, generation){
+  return new Promise((res, rej) => {
+    let settled = false;
+    let timer = null;
+    const cleanup = () => {
+      clearTimeout(timer);
+      video.removeEventListener(eventName, onReady);
+      video.removeEventListener("error", onError);
+      if (thumbnailAbortCurrent === cancel) thumbnailAbortCurrent = null;
+    };
+    const finish = err => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (err) rej(err); else res();
+    };
+    const onReady = () => finish(generation === thumbnailGeneration ? null : thumbnailCancelError());
+    const onError = () => finish(Error("Falha ao carregar o quadro"));
+    const cancel = () => finish(thumbnailCancelError());
+    video.addEventListener(eventName, onReady);
+    video.addEventListener("error", onError);
+    timer = setTimeout(() => finish(Error("Tempo limite do quadro")), timeoutMs);
+    thumbnailAbortCurrent = cancel;
+    if (generation !== thumbnailGeneration) cancel();
+  });
+}
+
+function canvasToJpeg(canvas, quality, generation){
+  return new Promise((res, rej) => {
+    let settled = false;
+    let timer = null;
+    const cleanup = () => {
+      clearTimeout(timer);
+      if (thumbnailAbortCurrent === cancel) thumbnailAbortCurrent = null;
+    };
+    const finish = (err, blob) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (err) rej(err); else res(blob);
+    };
+    const cancel = () => finish(thumbnailCancelError());
+    timer = setTimeout(() => finish(Error("Tempo limite da imagem")), 3500);
+    thumbnailAbortCurrent = cancel;
+    if (generation !== thumbnailGeneration){ cancel(); return; }
+    try{
+      canvas.toBlob(blob => {
+        if (generation !== thumbnailGeneration){ finish(thumbnailCancelError()); return; }
+        if (!blob || !blob.size){ finish(Error("Miniatura vazia")); return; }
+        finish(null, blob);
+      }, "image/jpeg", quality);
+    }catch(err){ finish(err); }
+  });
+}
+
+async function generateThumbnailForEntry(entry, generation){
+  let video = null;
+  let sourceUrl = null;
+  let canvas = null;
+  try{
+    const item = await vault.get(entry.key);
+    if (generation !== thumbnailGeneration || state.active || document.visibilityState === "hidden") throw thumbnailCancelError();
+    if (!item) throw Error("Replay não encontrado");
+    const blob = itemBlob(item);
+    if (!blob.size) throw Error("Replay vazio");
+    const base = entry.meta && entry.meta.createdAt
+      ? entry.meta
+      : makeReplayMeta(entry.key, item, entry.meta && entry.meta.requestedDuration);
+
+    video = document.createElement("video");
+    video.className = "thumbnail-worker";
+    video.muted = true;
+    video.defaultMuted = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    video.setAttribute("muted", "");
+    video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
+    document.body.appendChild(video);
+
+    sourceUrl = URL.createObjectURL(blob);
+    const loaded = waitThumbnailEvent(video, "loadedmetadata", 5000, generation);
+    video.src = sourceUrl;
+    video.load();
+    await loaded;
+
+    const duration = Number(video.duration);
+    const width = Number(video.videoWidth);
+    const height = Number(video.videoHeight);
+    if (!Number.isFinite(duration) || duration <= 0 || !width || !height) throw Error("Metadados do vídeo indisponíveis");
+    const lastSafeTime = Math.max(0, duration - 0.05);
+    const candidates = [];
+    for (const raw of [duration - 1, duration - 2.5, duration * 0.75]){
+      const value = Math.max(0, Math.min(lastSafeTime, raw));
+      if (!candidates.some(existing => Math.abs(existing - value) < 0.05)) candidates.push(value);
+    }
+
+    let lastError = Error("Nenhum quadro disponível");
+    for (const target of candidates){
+      try{
+        const seeking = waitThumbnailEvent(video, "seeked", 3200, generation);
+        try{ video.currentTime = target; }
+        catch(err){
+          const cancel = thumbnailAbortCurrent;
+          if (cancel) cancel();
+          try{ await seeking; }catch(_){}
+          throw err;
+        }
+        await seeking;
+        await new Promise(resolve => setTimeout(resolve, 60));
+        if (generation !== thumbnailGeneration || state.active || document.visibilityState === "hidden") throw thumbnailCancelError();
+
+        const scale = Math.min(1, 640 / Math.max(width, height));
+        canvas = canvas || document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(width * scale));
+        canvas.height = Math.max(1, Math.round(height * scale));
+        const context = canvas.getContext("2d");
+        if (!context) throw Error("Canvas indisponível");
+        context.fillStyle = "#000";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        let thumbnail = await canvasToJpeg(canvas, 0.72, generation);
+        if (thumbnail.size > 300 * 1024) thumbnail = await canvasToJpeg(canvas, 0.55, generation);
+        if (thumbnail.size > 500 * 1024) throw Error("Miniatura acima do limite");
+        const thumbBytes = await thumbnail.arrayBuffer();
+        if (generation !== thumbnailGeneration) throw thumbnailCancelError();
+        return {
+          ...base,
+          name: item.name || base.name,
+          type: item.type || base.type,
+          size: blob.size,
+          actualDuration: duration,
+          width,
+          height,
+          orientation: height > width ? "portrait" : "landscape",
+          thumbStatus: "ready",
+          thumbType: thumbnail.type || "image/jpeg",
+          thumbBytes,
+          thumbSize: thumbnail.size,
+          thumbAttempts: (Number(base.thumbAttempts) || 0) + 1,
+          thumbCapturedAt: Date.now(),
+          thumbErrorAt: null
+        };
+      }catch(err){
+        if (err && err.name === "ThumbnailCancelled") throw err;
+        lastError = err;
+      }
+    }
+    throw lastError;
+  }finally{
+    thumbnailAbortCurrent = null;
+    if (video){
+      try{ video.pause(); }catch(_){}
+      video.removeAttribute("src");
+      try{ video.load(); }catch(_){}
+      video.remove();
+    }
+    if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+    if (canvas){ canvas.width = 0; canvas.height = 0; }
+  }
+}
+
+async function markThumbnailFailure(entry){
+  const updated = {
+    ...entry.meta,
+    thumbStatus: "failed",
+    thumbType: null,
+    thumbBytes: null,
+    thumbSize: 0,
+    thumbAttempts: (Number(entry.meta.thumbAttempts) || 0) + 1,
+    thumbErrorAt: Date.now()
+  };
+  const index = galleryEntries.findIndex(item => item.key === entry.key);
+  if (index >= 0) galleryEntries[index] = { key: entry.key, meta: updated };
+  try{ await metadataWithTimeout(replayMeta.put(updated), 1200); }
+  catch(err){ console.warn("gravei thumbnail failure metadata", err); }
+}
+
+function queueThumbnail(entry){
+  if (!entry || !entry.meta) return;
+  if (entry.meta.thumbStatus === "ready" && thumbnailBytesLength(entry.meta.thumbBytes) > 0) return;
+  if ((Number(entry.meta.thumbAttempts) || 0) >= 2) return;
+  if (thumbnailFailedThisRun.has(entry.key) || thumbnailQueuedKeys.has(entry.key) || thumbnailActiveKey === entry.key) return;
+  thumbnailQueuedKeys.add(entry.key);
+  thumbnailQueue.push(entry);
+  setTimeout(runThumbnailQueue, 0);
+}
+
+async function runThumbnailQueue(){
+  if (thumbnailRunning) return;
+  thumbnailRunning = true;
+  try{
+    while (thumbnailQueue.length){
+      if (state.active || document.visibilityState === "hidden" || !$("s-gallery").classList.contains("active")) break;
+      const queued = thumbnailQueue.shift();
+      thumbnailQueuedKeys.delete(queued.key);
+      const entry = galleryEntries.find(item => item.key === queued.key);
+      if (!entry || (entry.meta.thumbStatus === "ready" && thumbnailBytesLength(entry.meta.thumbBytes) > 0)) continue;
+      const generation = thumbnailGeneration;
+      thumbnailActiveKey = entry.key;
+      try{
+        const updated = await generateThumbnailForEntry(entry, generation);
+        if (generation !== thumbnailGeneration) continue;
+        const index = galleryEntries.findIndex(item => item.key === entry.key);
+        if (index >= 0) galleryEntries[index] = { key: entry.key, meta: updated };
+        try{ await metadataWithTimeout(replayMeta.put(updated), 1200); }
+        catch(err){ console.warn("gravei thumbnail metadata", err); }
+        const card = findGalleryCard(entry.key);
+        if (card){
+          const freshEntry = { key: entry.key, meta: updated };
+          attachThumbnailToCard(card, freshEntry);
+          updateGalleryCardLabels(card, freshEntry);
+        }
+        updateGallerySummary();
+      }catch(err){
+        if (!(err && err.name === "ThumbnailCancelled") && generation === thumbnailGeneration){
+          console.warn("gravei thumbnail", err);
+          thumbnailFailedThisRun.add(entry.key);
+          await markThumbnailFailure(entry);
+        }
+      }finally{
+        thumbnailActiveKey = null;
+      }
+    }
+  }finally{
+    thumbnailRunning = false;
+    if (thumbnailQueue.length && !state.active && document.visibilityState !== "hidden" && $("s-gallery").classList.contains("active")){
+      setTimeout(runThumbnailQueue, 0);
+    }
+  }
+}
+
+function startThumbnailObservation(){
+  if (thumbnailObserver){
+    thumbnailObserver.disconnect();
+    thumbnailObserver = null;
+  }
+  if (!galleryEntries.length || !$("s-gallery").classList.contains("active")) return;
+  const cards = Array.from($("gallery-list").children);
+  if ("IntersectionObserver" in window){
+    thumbnailObserver = new IntersectionObserver(records => {
+      for (const record of records){
+        if (!record.isIntersecting) continue;
+        thumbnailObserver.unobserve(record.target);
+        const entry = galleryEntries.find(item => String(item.key) === record.target.dataset.replayKey);
+        if (entry) queueThumbnail(entry);
+      }
+    }, { root: $("gallery-scroll"), rootMargin: "320px 0px", threshold: 0.01 });
+    cards.forEach(card => thumbnailObserver.observe(card));
+  }else{
+    galleryEntries.forEach(queueThumbnail);
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") stopThumbnailWork();
+  else if ($("s-gallery").classList.contains("active")) startThumbnailObservation();
+});
+
 function renderGalleryCards(){
+  releaseGalleryThumbUrls();
   const box = $("gallery-list");
   while (box.firstChild) box.removeChild(box.firstChild);
   const empty = $("gallery-empty");
@@ -1804,6 +2174,7 @@ function renderGalleryCards(){
     const card = document.createElement("button");
     card.type = "button";
     card.className = "replay-card";
+    card.dataset.replayKey = String(entry.key);
     card.setAttribute("aria-label", "Abrir " + replayDurationText(entry.meta) + ", " + replayDateText(entry.meta));
 
     const visual = document.createElement("span");
@@ -1835,10 +2206,14 @@ function renderGalleryCards(){
       openReplayAt(index);
     };
     box.appendChild(card);
+    attachThumbnailToCard(card, entry);
   });
+  startThumbnailObservation();
 }
 
 async function openGallery(){
+  stopThumbnailWork();
+  releaseGalleryThumbUrls();
   const token = ++galleryLoadToken;
   $("gallery-list").textContent = "";
   $("gallery-empty").hidden = false;
@@ -1863,6 +2238,8 @@ async function openGallery(){
 
 async function closeGalleryToCentral(){
   galleryLoadToken++;
+  stopThumbnailWork();
+  releaseGalleryThumbUrls();
   await refreshVaultUI();
   show("s-ended");
 }
@@ -1915,6 +2292,8 @@ async function enrichReplayFromPlayer(entry, video, token){
 
 async function openReplayAt(index){
   if (index < 0 || index >= galleryEntries.length) return;
+  stopThumbnailWork();
+  releaseGalleryThumbUrls();
   const token = ++playerLoadToken;
   clearPlayerMedia();
   galleryIndex = index;
@@ -1963,8 +2342,8 @@ async function openReplayAt(index){
 function closePlayerToGallery(){
   playerLoadToken++;
   clearPlayerMedia();
-  renderGalleryCards();
   show("s-gallery");
+  renderGalleryCards();
   requestAnimationFrame(() => { $("gallery-scroll").scrollTop = galleryScrollTop; });
 }
 
@@ -2006,8 +2385,8 @@ function deleteCurrentReplay(){
       if (!galleryEntries.length){
         show("s-ended");
       }else{
-        renderGalleryCards();
         show("s-gallery");
+        renderGalleryCards();
         requestAnimationFrame(() => { $("gallery-scroll").scrollTop = galleryScrollTop; });
       }
       toast("Replay excluído", "info", 1800);
