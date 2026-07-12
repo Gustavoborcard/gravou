@@ -292,7 +292,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v69</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v70</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -324,6 +324,14 @@ a{color:var(--accent)}
   <div class="stack">
     <button class="btn btn-primary" id="b-retry-cam">Tentar de novo</button>
   </div>
+</section>
+
+<!-- FORMATO INCOMPATIVEL -->
+<section class="screen" id="s-format">
+  <div class="status-icon err"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="8" y1="8" x2="16" y2="16"/><line x1="16" y1="8" x2="8" y2="16"/></svg></div>
+  <h2 id="format-title">Por aqui não vai dar 😕</h2>
+  <p class="tagline" id="format-msg">Abra o Gravei pelo Chrome atualizado.</p>
+  <div class="stack"><button class="btn btn-ghost" id="b-format-back">Voltar</button></div>
 </section>
 
 <!-- SELEÇÃO DE TEMPO -->
@@ -561,7 +569,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v69 - captura unica e MP4 plano
+   Gravei v70 - captura unica e MP4 plano
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
@@ -650,7 +658,7 @@ const DURATIONS = [10,15,20,30,45,60];
 const state = {
  duration:20,facing:"user",cams:[],camIndex:-1,stream:null,mime:"",ext:"mp4",
  captureRec:null,captureGeneration:0,initSegment:null,dataEventSerial:0,processedEventSerial:0,fragments:[],fragmentQueue:Promise.resolve(),flushWaiters:[],
- lastChunkAt:0,bufferSeconds:0,captureRecovering:false,timerId:null,wakeLock:null,saving:false,replayCount:0,active:false
+ lastChunkAt:0,bufferSeconds:0,captureRecovering:false,formatProbeFailures:0,formatRejected:false,timerId:null,wakeLock:null,saving:false,replayCount:0,active:false
 };
 
 /* ---------- navegação entre telas ---------- */
@@ -713,6 +721,7 @@ function stopSession(){
 
 /* ---------- fluxo ---------- */
 $("b-start").onclick = async () => {
+  if (!pickMime()){ showFormatUnsupported(); return; }
   const n = await vault.count();
   if (n > 0){
     openConfirm(
@@ -727,6 +736,7 @@ $("b-start").onclick = async () => {
   show("s-perm");
 };
 $("b-perm-back").onclick = () => show("s-home");
+$("b-format-back").onclick = () => show("s-home");
 $("b-perm").onclick = requestPermission;
 $("b-retry-perm").onclick = requestPermission;
 $("b-retry-cam").onclick = requestPermission;
@@ -769,6 +779,7 @@ $("chip-count").onclick = async () => {
 refreshVaultUI();
 
 async function requestPermission(){
+  if (!pickMime()){ showFormatUnsupported(); return; }
   try{
     const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     s.getTracks().forEach(t => t.stop());       // só validamos a permissão
@@ -787,27 +798,38 @@ function updateDurLabels(){
 
 /* ---------- MIME / compatibilidade ---------- */
 function pickMime(){
-  const list = [
-    ["video/mp4", "mp4"],
-    ["video/webm;codecs=vp9,opus", "webm"],
-    ["video/webm;codecs=vp8,opus", "webm"],
-    ["video/webm", "webm"]
-  ];
-  for (const [m, e] of list){
-    if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return [m, e];
+  if (!window.MediaRecorder || typeof MediaRecorder.isTypeSupported !== "function") return null;
+  const list = ["video/mp4", "video/mp4;codecs=avc1.42E01E,mp4a.40.2"];
+  for (const candidate of list){
+    try{ if (MediaRecorder.isTypeSupported(candidate)) return [candidate, "mp4"]; }catch(_){}
   }
-  return ["", "webm"];
+  return null;
+}
+function showFormatUnsupported(){
+  const ua=navigator.userAgent||"";
+  const appleMobile=/iPad|iPhone|iPod/.test(ua)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+  $("format-title").textContent="Por aqui não vai dar 😕";
+  $("format-msg").textContent=appleMobile?"Atualize o iPhone e tente de novo.":"Abra o Gravei pelo Chrome atualizado.";
+  show("s-format");
+}
+function failCaptureFormat(){
+  if(state.formatRejected)return;
+  state.formatRejected=true;
+  setTimeout(()=>{stopSession();showFormatUnsupported()},0);
 }
 
 /* ---------- iniciar ---------- */
 async function startRecording(){
   updateDurLabels();
-  const [mime, ext] = pickMime();
+  const picked = pickMime();
+  if (!picked){ showFormatUnsupported(); return; }
+  const [mime, ext] = picked;
   state.mime = mime; state.ext = ext;
   try{
     await openStream(state.cams[state.camIndex] || undefined);   // retoma na mesma câmera
   }catch(err){
     if (err && err.name === "NotAllowedError") show("s-denied");
+    else if (err && err.name === "NotSupportedError"){ releaseCamera(); showFormatUnsupported(); }
     else show("s-nocam");
     return;
   }
@@ -1066,9 +1088,34 @@ function fragmentTfdt(a){const moof=boxes(a).find(x=>x.type==='moof');if(!moof)t
 function settleFlush(force=false){const keep=[];for(const x of state.flushWaiters){if(force||state.processedEventSerial>=x.target){clearTimeout(x.timer);x.resolve()}else keep.push(x)}state.flushWaiters=keep}
 function updateBuffer(){const a=state.fragments[0],b=state.fragments[state.fragments.length-1];state.bufferSeconds=a&&b?Math.max(0,(b.endAt-a.startAt)/1000):0}
 function pruneBuffer(){const cutoff=performance.now()-(state.duration+3)*1000;while(state.fragments.length>2&&state.fragments[1].endAt<cutoff)state.fragments.shift();updateBuffer()}
-async function ingestChunk(blob,generation){if(generation!==state.captureGeneration||!blob||!blob.size)return;const a=new Uint8Array(await blob.arrayBuffer());if(generation!==state.captureGeneration)return;const top=boxes(a),moofs=top.filter(x=>x.type==='moof');if(!state.initSegment){const m=moofs[0];if(!m)return;state.initSegment=a.slice(0,m.start);if(!boxes(state.initSegment).some(x=>x.type==='moov'))throw Error('Cabecalho MP4 ausente')}let previous=state.fragments[state.fragments.length-1];for(let i=0;i<moofs.length;i++){const start=moofs[i].start,end=i+1<moofs.length?moofs[i+1].start:a.byteLength,bytes=a.slice(start,end);fragmentTfdt(bytes);const endAt=performance.now(),startAt=previous?previous.endAt:endAt-1000;previous={bytes,startAt,endAt};state.fragments.push(previous)}if(moofs.length){state.lastChunkAt=Date.now();pruneBuffer()}}
-function makeRecorder(stream){const o={videoBitsPerSecond:2500000};if(state.mime)o.mimeType=state.mime;try{return new MediaRecorder(stream,o)}catch(_){try{return state.mime?new MediaRecorder(stream,{mimeType:state.mime}):new MediaRecorder(stream)}catch(__){return new MediaRecorder(stream)}}}
-function startCaptureRecorder(){if(!state.stream||state.captureRec)return;const gen=++state.captureGeneration;state.initSegment=null;state.dataEventSerial=0;state.processedEventSerial=0;state.fragments=[];state.bufferSeconds=0;state.fragmentQueue=Promise.resolve();state.flushWaiters=[];const rec=makeRecorder(state.stream);state.captureRec=rec;rec.ondataavailable=e=>{const serial=++state.dataEventSerial;state.fragmentQueue=state.fragmentQueue.then(()=>ingestChunk(e.data,gen)).catch(err=>{console.error('gravei fragment',err);toast('Falha ao preparar o buffer','err',2400)}).finally(()=>{state.processedEventSerial=Math.max(state.processedEventSerial,serial);settleFlush()})};rec.onerror=e=>{console.error('gravei recorder',e);if(state.active)restartCaptureRecorder()};rec.onstop=()=>{if(state.captureRec===rec)state.captureRec=null};rec.start(1000);state.lastChunkAt=Date.now()}
+async function ingestChunk(blob,generation){
+  if(generation!==state.captureGeneration||!blob||!blob.size)return;
+  const a=new Uint8Array(await blob.arrayBuffer());if(generation!==state.captureGeneration)return;
+  const top=boxes(a),moofs=top.filter(x=>x.type==='moof');
+  if(!state.initSegment){
+    const m=moofs[0];
+    if(!m){if(++state.formatProbeFailures>=3)failCaptureFormat();return}
+    const init=a.slice(0,m.start),types=boxes(init).map(x=>x.type);
+    if(!types.includes('ftyp')||!types.includes('moov')){failCaptureFormat();return}
+    state.initSegment=init;state.formatProbeFailures=0;
+  }
+  let previous=state.fragments[state.fragments.length-1];
+  for(let i=0;i<moofs.length;i++){
+    const start=moofs[i].start,end=i+1<moofs.length?moofs[i+1].start:a.byteLength,bytes=a.slice(start,end);
+    fragmentTfdt(bytes);const endAt=performance.now(),startAt=previous?previous.endAt:endAt-1000;
+    previous={bytes,startAt,endAt};state.fragments.push(previous)
+  }
+  if(moofs.length){state.lastChunkAt=Date.now();pruneBuffer()}
+}
+function makeRecorder(stream){
+  const options={videoBitsPerSecond:2500000,mimeType:state.mime};
+  try{return new MediaRecorder(stream,options)}catch(firstError){
+    try{return new MediaRecorder(stream,{mimeType:state.mime})}catch(_){
+      const error=new Error("MP4 MediaRecorder indisponivel");error.name="NotSupportedError";error.cause=firstError;throw error
+    }
+  }
+}
+function startCaptureRecorder(){if(!state.stream||state.captureRec)return;const gen=++state.captureGeneration;state.initSegment=null;state.dataEventSerial=0;state.processedEventSerial=0;state.formatProbeFailures=0;state.formatRejected=false;state.fragments=[];state.bufferSeconds=0;state.fragmentQueue=Promise.resolve();state.flushWaiters=[];const rec=makeRecorder(state.stream);state.captureRec=rec;rec.ondataavailable=e=>{const serial=++state.dataEventSerial;state.fragmentQueue=state.fragmentQueue.then(()=>ingestChunk(e.data,gen)).catch(err=>{console.error('gravei fragment',err);toast('Falha ao preparar o buffer','err',2400)}).finally(()=>{state.processedEventSerial=Math.max(state.processedEventSerial,serial);settleFlush()})};rec.onerror=e=>{console.error('gravei recorder',e);if(state.active)restartCaptureRecorder()};rec.onstop=()=>{if(state.captureRec===rec)state.captureRec=null};rec.start(1000);state.lastChunkAt=Date.now()}
 function stopCaptureRecorder(reset){const rec=state.captureRec;state.captureRec=null;state.captureGeneration++;if(rec)try{rec.ondataavailable=null;rec.onerror=null;rec.onstop=null;if(rec.state!=='inactive')rec.stop()}catch(_){}settleFlush(true);if(reset){state.initSegment=null;state.fragments=[];state.bufferSeconds=0;state.fragmentQueue=Promise.resolve()}}
 async function restartCaptureRecorder(){if(state.captureRecovering||!state.active||!state.stream)return;state.captureRecovering=true;try{stopCaptureRecorder(true);await sleep(180);if(state.active&&state.stream)startCaptureRecorder()}finally{state.captureRecovering=false}}
 async function flushCurrentChunk(){const rec=state.captureRec;if(!rec||rec.state!=='recording')throw Error('Gravador inativo');const wait=new Promise(resolve=>{const x={resolve,timer:null,target:state.dataEventSerial+1};x.timer=setTimeout(()=>{const i=state.flushWaiters.indexOf(x);if(i>=0)state.flushWaiters.splice(i,1);resolve()},1600);state.flushWaiters.push(x)});try{rec.requestData()}catch(_){}await wait;await state.fragmentQueue}
