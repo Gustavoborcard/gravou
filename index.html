@@ -305,7 +305,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v72</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v73</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -594,7 +594,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v72 - captura unica e MP4 plano
+   Gravei v73 - captura unica e MP4 plano
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
@@ -620,8 +620,10 @@ const vault = {
     const db = await this.db();
     return new Promise((res, rej) => {
       const tx = db.transaction("replays", "readwrite");
-      tx.objectStore("replays").add(item);
-      tx.oncomplete = res;
+      const rq = tx.objectStore("replays").add(item);
+      let key;
+      rq.onsuccess = () => { key = rq.result; };
+      tx.oncomplete = () => res(key);
       tx.onerror = () => rej(tx.error);
     });
   },
@@ -634,6 +636,22 @@ const vault = {
       new Promise((res, rej) => { const r = store.getAll();     r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); })
     ]);
     return keys.map((k, i) => ({ key: k, item: vals[i] }));
+  },
+  async keys(){
+    const db = await this.db();
+    return new Promise((res, rej) => {
+      const rq = db.transaction("replays", "readonly").objectStore("replays").getAllKeys();
+      rq.onsuccess = () => res(rq.result || []);
+      rq.onerror = () => rej(rq.error);
+    });
+  },
+  async get(key){
+    const db = await this.db();
+    return new Promise((res, rej) => {
+      const rq = db.transaction("replays", "readonly").objectStore("replays").get(key);
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => rej(rq.error);
+    });
   },
   async removeKeys(keys){
     if (!keys.length) return;
@@ -666,6 +684,169 @@ const vault = {
     });
   }
 };
+
+/* Metadados leves em banco separado. O cofre gravei permanece na versão 1,
+   permitindo voltar à v72 sem VersionError e sem regravar os vídeos. */
+const replayMeta = {
+  _db: null,
+  async db(){
+    if (this._db) return this._db;
+    this._db = await new Promise((res, rej) => {
+      const rq = indexedDB.open("gravei-gallery", 1);
+      rq.onupgradeneeded = () => {
+        const db = rq.result;
+        if (!db.objectStoreNames.contains("replayMeta")){
+          db.createObjectStore("replayMeta", { keyPath: "replayId" });
+        }
+      };
+      rq.onsuccess = () => {
+        const db = rq.result;
+        db.onversionchange = () => {
+          db.close();
+          if (this._db === db) this._db = null;
+        };
+        res(db);
+      };
+      rq.onerror = () => rej(rq.error);
+    });
+    return this._db;
+  },
+  async put(meta){
+    const db = await this.db();
+    return new Promise((res, rej) => {
+      const tx = db.transaction("replayMeta", "readwrite");
+      tx.objectStore("replayMeta").put(meta);
+      tx.oncomplete = res;
+      tx.onerror = () => rej(tx.error);
+    });
+  },
+  async all(){
+    const db = await this.db();
+    return new Promise((res, rej) => {
+      const rq = db.transaction("replayMeta", "readonly").objectStore("replayMeta").getAll();
+      rq.onsuccess = () => res(rq.result || []);
+      rq.onerror = () => rej(rq.error);
+    });
+  },
+  async clear(){
+    const db = await this.db();
+    return new Promise((res, rej) => {
+      const tx = db.transaction("replayMeta", "readwrite");
+      tx.objectStore("replayMeta").clear();
+      tx.oncomplete = res;
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+};
+
+function replayItemSize(item){
+  if (item && item.bytes instanceof ArrayBuffer) return item.bytes.byteLength;
+  if (item && item.bytes && ArrayBuffer.isView(item.bytes)) return item.bytes.byteLength;
+  if (item && item.blob && Number.isFinite(item.blob.size)) return item.blob.size;
+  return 0;
+}
+
+function makeReplayMeta(replayId, item, requestedDuration = null){
+  return {
+    schemaVersion: 1,
+    replayId,
+    name: item && item.name ? item.name : "gravei-replay-" + replayId + ".mp4",
+    type: item && item.type ? item.type : "video/mp4",
+    size: replayItemSize(item),
+    createdAt: Number(item && item.t) || Date.now(),
+    requestedDuration: Number.isFinite(requestedDuration) ? requestedDuration : null,
+    actualDuration: null,
+    width: null,
+    height: null,
+    orientation: null,
+    favorite: false,
+    thumbStatus: "none",
+    thumbType: null
+  };
+}
+
+async function backfillReplayMeta(replayId){
+  const item = await vault.get(replayId);
+  if (!item) return null;
+  const meta = makeReplayMeta(replayId, item);
+  await replayMeta.put(meta);
+  return meta;
+}
+
+let replayMetaSyncQueue = Promise.resolve();
+function reconcileReplayMetadata(keys){
+  const task = replayMetaSyncQueue.then(async () => {
+    let metas = await replayMeta.all();
+    const byId = new Map(metas.map(meta => [meta.replayId, meta]));
+    for (const key of keys){
+      if (byId.has(key)) continue;
+      if (state.active) break;
+      const meta = await backfillReplayMeta(key);
+      if (meta) byId.set(key, meta);
+      await new Promise(res => setTimeout(res, 0));
+    }
+    metas = await replayMeta.all();
+    const keySet = new Set(keys);
+    const valid = metas.filter(meta => keySet.has(meta.replayId));
+    return {
+      metas: valid,
+      complete: keys.every(key => valid.some(meta => meta.replayId === key))
+    };
+  });
+  replayMetaSyncQueue = task.catch(() => {});
+  return task;
+}
+
+async function getReplayStorageSummary(){
+  let keys;
+  try{
+    keys = await vault.keys();
+  }catch(err){
+    console.warn("gravei metadata keys", err);
+    return { count: await vault.count(), bytes: 0, sizeAvailable: false };
+  }
+  if (!keys.length){
+    try{ await metadataWithTimeout(replayMeta.clear(), 1200); }catch(err){ console.warn("gravei metadata clear", err); }
+    return { count: 0, bytes: 0, sizeAvailable: true };
+  }
+  try{
+    const result = await metadataWithTimeout(reconcileReplayMetadata(keys), 3000);
+    const bytes = result.metas.reduce((sum, meta) => sum + (Number(meta.size) || 0), 0);
+    return { count: keys.length, bytes, sizeAvailable: result.complete };
+  }catch(err){
+    console.warn("gravei metadata sync", err);
+    return { count: keys.length, bytes: 0, sizeAvailable: false };
+  }
+}
+
+function formatReplayBytes(bytes){
+  const mb = bytes / (1024 * 1024);
+  if (mb < 1) return Math.max(0, bytes / 1024).toLocaleString("pt-BR", { maximumFractionDigits: 0 }) + " KB";
+  if (mb < 10) return mb.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " MB";
+  if (mb < 1024) return mb.toLocaleString("pt-BR", { maximumFractionDigits: 0 }) + " MB";
+  return (mb / 1024).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " GB";
+}
+function metadataWithTimeout(promise, ms){
+  return new Promise((res, rej) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      rej(Error("Tempo limite dos metadados"));
+    }, ms);
+    Promise.resolve(promise).then(value => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      res(value);
+    }, err => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      rej(err);
+    });
+  });
+}
 
 /* Compat: itens novos guardam bytes crus (o Safari falha ao armazenar
    Blob no IndexedDB — bug conhecido do WebKit); itens antigos, Blob. */
@@ -1271,7 +1452,28 @@ function chooseReplay(snapshot,duration){if(!snapshot.length)return[];const targ
 function rewriteFragment(f,seq,bases){const a=f.bytes.slice(),info=fragmentTfdt(a);if(info.mfhd)put32(a,info.mfhd.data+4,seq);for(const t of info.tracks){if(bases[t.id]===undefined)bases[t.id]=t.base;const v=t.base-bases[t.id];t.version===1?put64(a,t.pos,v):put32(a,t.pos,v)}return a}
 function makeFmp4(selected){if(!state.initSegment||!selected.length)throw Error('Buffer incompleto');const bases={},parts=[state.initSegment];selected.forEach((f,i)=>parts.push(rewriteFragment(f,i+1,bases)));return joinBytes(parts)}
 async function flattenMp4(bytes){const M=window.Mediabunny;if(!M)throw Error('Mediabunny indisponivel');const input=new M.Input({source:new M.BufferSource(bytes),formats:M.ALL_FORMATS}),target=new M.BufferTarget(),output=new M.Output({format:new M.Mp4OutputFormat({fastStart:'in-memory'}),target});const conv=await M.Conversion.init({input,output});if(!conv.isValid||conv.discardedTracks.length)throw Error('Trilhas MP4 incompativeis');await conv.execute();const a=new Uint8Array(target.buffer||new ArrayBuffer(0)),types=boxes(a).map(x=>x.type);if(!a.byteLength||!types.includes('ftyp')||!types.includes('moov')||!types.includes('mdat')||types.includes('moof'))throw Error('MP4 final invalido');return new Blob([a],{type:'video/mp4'})}
-async function persistReplayBlob(blob){if(!blob||!blob.size)throw Error('Video vazio');state.replayCount++;const d=new Date(),name='gravei-replay-'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+String(d.getSeconds()).padStart(2,'0')+'-'+state.replayCount+'.mp4';try{await vault.add({name,type:'video/mp4',bytes:await blob.arrayBuffer(),t:Date.now()});const n=await vault.count();updateCountChip(n);flashOK();toast('Replay '+n+' guardado','ok',1800)}catch(_){await deliver(blob,name)}}
+async function persistReplayBlob(blob, requestedDuration){
+  if(!blob||!blob.size)throw Error('Video vazio');
+  state.replayCount++;
+  const d=new Date(),name='gravei-replay-'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+String(d.getSeconds()).padStart(2,'0')+'-'+state.replayCount+'.mp4';
+  const item={name,type:'video/mp4',bytes:await blob.arrayBuffer(),t:Date.now()};
+  let replayId;
+  try{
+    replayId=await vault.add(item);
+  }catch(_){
+    await deliver(blob,name);
+    return;
+  }
+  try{
+    await metadataWithTimeout(replayMeta.put(makeReplayMeta(replayId,item,requestedDuration)),1200);
+  }catch(err){
+    console.warn('gravei metadata save',err);
+  }
+  const n=await vault.count();
+  updateCountChip(n);
+  flashOK();
+  toast('Replay '+n+' guardado','ok',1800);
+}
 async function saveReplay(){
   if(state.saving)return;
   if(!state.captureRec||state.captureRec.state!=='recording'){
@@ -1288,7 +1490,7 @@ async function saveReplay(){
     const selected=chooseReplay(snapshot,replayDuration);
     if(!selected.length)throw Error('Ainda nao ha video para salvar');
     state.fragments=[];state.bufferSeconds=0;
-    const blob=await flattenMp4(makeFmp4(selected));await persistReplayBlob(blob);
+    const blob=await flattenMp4(makeFmp4(selected));await persistReplayBlob(blob,replayDuration);
   }catch(err){
     console.error('gravei save',err);
     if(snapshot.length){state.fragments=snapshot.concat(state.fragments);pruneBuffer()}
@@ -1376,10 +1578,12 @@ async function saveAll(){
 }
 
 async function refreshVaultUI(){
-  const n = await vault.count();
+  const summary = await getReplayStorageSummary();
+  const n = summary.count;
   // central de replays
   $("ended-msg").textContent = n > 0
-    ? "Você tem " + n + " replay" + (n > 1 ? "s" : "") + " guardado" + (n > 1 ? "s" : "") + "."
+    ? "Você tem " + n + " replay" + (n > 1 ? "s" : "") + " guardado" + (n > 1 ? "s" : "") +
+      (summary.sizeAvailable ? " · " + formatReplayBytes(summary.bytes) + " no Gravei." : ".")
     : "Nenhum replay guardado.";
   $("b-saveall").style.display = n > 0 ? "block" : "none";
   $("b-saveall").textContent = "Salvar ou compartilhar (" + n + ")";
