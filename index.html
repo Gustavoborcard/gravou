@@ -353,7 +353,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v75</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v76</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -680,7 +680,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v75 - captura unica e MP4 plano
+   Gravei v76 - biblioteca persistente
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
@@ -688,8 +688,8 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 "use strict";
 
 /* ---------- cofre local de replays (IndexedDB) ----------
-   Os replays ficam guardados no aparelho durante a partida e
-   são salvos todos de uma vez no final — sem interromper o jogo. */
+   Os replays ficam guardados no Gravei até uma exclusão explícita.
+   Gravar novamente ou compartilhar nunca limpa esta biblioteca. */
 const vault = {
   _db: null,
   async db(){
@@ -714,7 +714,7 @@ const vault = {
     });
   },
   async entries(){
-    // retorna [{key, item}] para permitir remoção seletiva após entrega
+    // retorna [{key, item}] para leitura e exclusões explícitas na galeria
     const db = await this.db();
     const store = db.transaction("replays", "readonly").objectStore("replays");
     const [keys, vals] = await Promise.all([
@@ -962,7 +962,7 @@ const $ = id => document.getElementById(id);
 const DURATIONS = [10,15,20,30,45,60];
 
 const state = {
- duration:20,facing:"user",cams:[],camIndex:-1,stream:null,mime:"",ext:"mp4",
+ duration:20,facing:"user",cams:[],camIndex:-1,stream:null,mime:"",ext:"mp4",pendingShareKeys:null,
  captureRec:null,captureGeneration:0,initSegment:null,dataEventSerial:0,processedEventSerial:0,fragments:[],fragmentQueue:Promise.resolve(),flushWaiters:[],
  lastChunkAt:0,bufferSeconds:0,captureRecovering:false,formatProbeFailures:0,formatRejected:false,timerId:null,wakeLock:null,saving:false,replayCount:0,active:false
 };
@@ -1079,17 +1079,6 @@ function stopSession(){
 /* ---------- fluxo ---------- */
 $("b-start").onclick = async () => {
   if (!pickMime()){ showFormatUnsupported(); return; }
-  const n = await vault.count();
-  if (n > 0){
-    openConfirm(
-      "Começar do zero?",
-      "Você tem " + n + " replay" + (n > 1 ? "s" : "") + " não salvo" + (n > 1 ? "s" : "") +
-      ". Uma nova gravação descarta o que está guardado.",
-      "Descartar e começar",
-      async () => { await vault.clear(); await refreshVaultUI(); show("s-perm"); }
-    );
-    return;
-  }
   show("s-perm");
 };
 $("b-perm-back").onclick = () => show("s-home");
@@ -1125,6 +1114,7 @@ $("b-discard").onclick = async () => {
     "Descartar",
     async () => {
       await vault.clear();
+      state.pendingShareKeys = null;
       await refreshVaultUI();
       toast("Replays descartados", "info");
     }
@@ -1598,6 +1588,7 @@ async function persistReplayBlob(blob, requestedDuration){
   let replayId;
   try{
     replayId=await vault.add(item);
+    if(Array.isArray(state.pendingShareKeys)&&!state.pendingShareKeys.includes(replayId))state.pendingShareKeys.push(replayId);
   }catch(_){
     await deliver(blob,name);
     return;
@@ -1638,66 +1629,84 @@ async function saveReplay(){
   }finally{state.saving=false;clearTimeout(state.saveGuard)}
 }
 
-/* ---------- salvar todos os replays de uma vez ---------- */
+/* ---------- salvar ou compartilhar sem remover da biblioteca ---------- */
 let savingAll = false;
 const SHARE_MSG = "O lance foi tão bom que virou replay no Gravei 🔥";
 
 /* Compartilha um grupo de replays. Se o sistema recusar por excesso
-   (memória/limite), divide ao meio e tenta as metades — recursivo e
-   invisível. Remove do cofre apenas o que foi realmente entregue.
-   Retorna: "done" | "cancelled" | "blocked"                        */
+   (memória/limite), divide ao meio e tenta as metades. O resultado leva
+   as chaves entregues em memória; nenhum replay é removido do cofre. */
 async function shareGroup(entries){
   const files = entries.map(e => new File([itemBlob(e.item)], e.item.name, { type: e.item.type }));
   try{
     await navigator.share({ files, title: SHARE_MSG, text: SHARE_MSG });
-    const deliveredKeys = entries.map(e => e.key);
-    await vault.removeKeys(deliveredKeys);
-    try{ await metadataWithTimeout(replayMeta.removeKeys(deliveredKeys), 1200); }
-    catch(err){ console.warn("gravei shared metadata cleanup", err); }
-    return "done";
+    return { status:"done", deliveredKeys:entries.map(e => e.key), error:null };
   }catch(err){
-    if (err && err.name === "AbortError") return "cancelled";     // usuário fechou: para tudo
-    if (err && err.name === "NotAllowedError") return "blocked";  // sistema exige novo toque
-    if (entries.length <= 1) throw err;                           // não dá para dividir mais
-    // bisseção: tenta cada metade
+    if (err && err.name === "AbortError") return { status:"cancelled", deliveredKeys:[], error:null };
+    if (err && err.name === "NotAllowedError") return { status:"blocked", deliveredKeys:[], error:null };
+    if (entries.length <= 1) return { status:"failed", deliveredKeys:[], error:err };
     const mid = Math.ceil(entries.length / 2);
-    const a = await shareGroup(entries.slice(0, mid));
-    if (a !== "done") return a;
-    return await shareGroup(entries.slice(mid));
+    const first = await shareGroup(entries.slice(0, mid));
+    if (first.status !== "done") return first;
+    const second = await shareGroup(entries.slice(mid));
+    return {
+      status: second.status,
+      deliveredKeys: first.deliveredKeys.concat(second.deliveredKeys),
+      error: second.error || null
+    };
   }
+}
+
+function pendingShareEntries(allEntries){
+  if(!Array.isArray(state.pendingShareKeys)||!state.pendingShareKeys.length)return allEntries;
+  const byKey=new Map(allEntries.map(entry=>[entry.key,entry]));
+  const pending=state.pendingShareKeys.map(key=>byKey.get(key)).filter(Boolean);
+  if(!pending.length){state.pendingShareKeys=null;return allEntries}
+  state.pendingShareKeys=pending.map(entry=>entry.key);
+  return pending;
+}
+function rememberPendingShare(entries,deliveredKeys){
+  const delivered=new Set(deliveredKeys);
+  const remaining=entries.map(entry=>entry.key).filter(key=>!delivered.has(key));
+  state.pendingShareKeys=remaining.length?remaining:null;
+  return remaining.length;
 }
 
 async function saveAll(){
   if (savingAll) return;
   savingAll = true;
   try{
-    const entries = await vault.entries();
-    if (!entries.length){ toast("Nenhum replay para salvar", "info"); return; }
+    const allEntries = await vault.entries();
+    if (!allEntries.length){ state.pendingShareKeys=null; toast("Nenhum replay para salvar", "info"); return; }
+    const entries = pendingShareEntries(allEntries);
     const total = entries.length;
 
-    // 1) caminho principal: compartilhamento nativo com bisseção automática
+    // 1) compartilhamento nativo com bisseção e retomada sem excluir arquivos
     const probe = [new File([itemBlob(entries[0].item)], entries[0].item.name, { type: entries[0].item.type })];
     if (navigator.canShare && navigator.canShare({ files: probe })){
-      hideToast();                                   // a caixa do sistema fala por si
+      hideToast();
       const result = await shareGroup(entries);
-      const remaining = await refreshVaultUI();
-      if (result === "done" && remaining === 0){
+      const delivered = result.deliveredKeys.length;
+      const remaining = rememberPendingShare(entries, result.deliveredKeys);
+      if(result.status === "done" || (result.status === "cancelled" && delivered === 0))state.pendingShareKeys=null;
+      await refreshVaultUI();
+      if (result.status === "done"){
         flashOK();
-        toast("Tudo certo! " + total + " replay" + (total > 1 ? "s" : "") + " entregue" + (total > 1 ? "s" : ""), "ok");
-      }else if (result === "blocked" && remaining > 0){
-        // caso raro: o sistema pediu um novo gesto entre as levas
-        const sent = total - remaining;
-        toast((sent > 0 ? sent + " entregues — " : "") + "toque de novo para enviar os " + remaining + " restantes", "info", 4000);
-      }else if (result === "cancelled" && remaining < total && remaining > 0){
-        toast((total - remaining) + " entregues — " + remaining + " continuam guardados", "info", 3000);
+        toast(total + " replay" + (total > 1 ? "s compartilhados" : " compartilhado") + " · continuam no Gravei", "ok", 4000);
+      }else if (result.status === "blocked"){
+        toast((delivered ? delivered + " compartilhados · " : "") + "toque de novo para enviar " + remaining + ". Todos continuam no Gravei.", "info", 4500);
+      }else if (result.status === "cancelled"){
+        if(delivered)toast(delivered + " compartilhados · " + remaining + " aguardam. Todos continuam no Gravei.", "info", 4000);
+        else hideToast();
       }else{
-        hideToast();                                 // cancelou sem entregar nada: silêncio
+        if(result.error)console.error("gravei share group",result.error);
+        toast((delivered ? delivered + " compartilhados · " + remaining + " aguardam. " : "") + "Não foi possível compartilhar", "err", 4000);
       }
       return;
     }
 
-    // 2) fallback: downloads em sequência
-    toast("Salvando " + total + " replays…", "info", 0);
+    // 2) fallback: inicia downloads, mas mantém a biblioteca intacta
+    toast("Preparando " + total + " replay" + (total > 1 ? "s" : "") + "…", "info", 0);
     for (const e of entries){
       const url = URL.createObjectURL(itemBlob(e.item));
       const a = document.createElement("a");
@@ -1706,20 +1715,20 @@ async function saveAll(){
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-      await sleep(600);                              // dá tempo do navegador aceitar cada um
+      await sleep(600);
     }
-    await vault.clear();
-    refreshVaultUI();
+    state.pendingShareKeys = null;
+    await refreshVaultUI();
     flashOK();
-    toast(total + " vídeos baixados — veja a notificação de downloads", "ok", 5000);
+    toast(total + " download" + (total > 1 ? "s iniciados" : " iniciado") + " · os replays continuam no Gravei", "ok", 5000);
   }catch(err){
+    console.error("gravei save all",err);
     await refreshVaultUI();
     toast("Não foi possível salvar", "err");
   }finally{
     savingAll = false;
   }
 }
-
 async function refreshVaultUI(){
   const summary = await getReplayStorageSummary();
   const n = summary.count;
@@ -1731,7 +1740,10 @@ async function refreshVaultUI(){
     : "Nenhum replay guardado.";
   $("b-gallery").style.display = n > 0 ? "block" : "none";
   $("b-saveall").style.display = n > 0 ? "block" : "none";
-  $("b-saveall").textContent = "Salvar ou compartilhar (" + n + ")";
+  const pendingShareCount = Array.isArray(state.pendingShareKeys) ? state.pendingShareKeys.length : 0;
+  $("b-saveall").textContent = pendingShareCount
+    ? "Continuar compartilhando (" + pendingShareCount + ")"
+    : "Salvar ou compartilhar (" + n + ")";
   $("b-saveall").className = "btn btn-ghost";
   $("b-discard").style.display = n > 0 ? "block" : "none";
   $("b-again").textContent = resumable ? "Continuar gravando" : "Iniciar nova gravação";
@@ -2377,6 +2389,12 @@ function deleteCurrentReplay(){
       }
       try{ await metadataWithTimeout(replayMeta.removeKeys([entry.key]), 1200); }
       catch(err){ console.warn("gravei gallery metadata delete", err); }
+      try{
+        if(Array.isArray(state.pendingShareKeys)){
+          state.pendingShareKeys=state.pendingShareKeys.filter(key=>key!==entry.key);
+          if(!state.pendingShareKeys.length)state.pendingShareKeys=null;
+        }
+      }catch(_){}
       playerLoadToken++;
       clearPlayerMedia();
       try{ galleryEntries = await listGalleryEntries(); }
