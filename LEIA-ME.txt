@@ -1,30 +1,21 @@
-GRAVEI v66 — PACOTE DE PUBLICAÇÃO
+﻿GRAVEI v69 — CAPTURA ÚNICA + MP4 PLANO
 
-Esta entrega parte da v65 e preserva a sentinela contra congelamento da câmera e o escurecimento OLED.
+Arquivo para publicar: index.html
 
-Publique estes arquivos preservando exatamente a estrutura:
+Mudança central:
+- um único MediaRecorder, sem clones e sem pool de três encoders;
+- fragmentos de aproximadamente 1 segundo em buffer circular;
+- normalização de mfhd/tfdt no toque;
+- remontagem local como MP4 plano (ftyp + moov + mdat), sem moof;
+- Mediabunny 1.44.2 incorporada no próprio HTML, sem CDN para o processamento.
 
-gravei-v66/
-  index.html
-  replay-worker.js
-  vendor/
-    mediabunny.min.mjs
-    MEDIABUNNY-LICENSE.txt
+O restante do aplicativo v68 foi preservado: telas, cofre, compartilhamento, câmera, controle remoto, modo economia e sentinela.
 
-IMPORTANTE
-1. Substitua o index.html atual e envie também replay-worker.js e a pasta vendor.
-2. Mantenha o seu icon-gravei-1024.png ao lado de index.html; ele não foi anexado a esta tarefa.
-3. Use HTTPS. A câmera e o Worker de preparação não devem ser executados por file://.
-4. O servidor deve servir arquivos .mjs como JavaScript (text/javascript ou application/javascript).
-5. Não renomeie nem mova replay-worker.js ou a pasta vendor sem ajustar os caminhos no index.html.
+Teste recomendado no iPhone:
+1. Substitua o index.html do site por este arquivo.
+2. Abra no Safari e confirme que aparece v69.
+3. Selecione 20s, aguarde o anel completar e salve três replays consecutivos.
+4. Reproduza cada replay no app, em Fotos e no WhatsApp.
+5. Faça depois um teste de 30s ou 60s.
 
-CONTRATO DE DURAÇÃO
-- O botão de replay só é habilitado depois que existe o histórico completo escolhido.
-- O arquivo bruto íntegro é guardado primeiro em ArrayBuffer, preservando a compatibilidade do cofre no Safari.
-- A preparação ocorre somente depois que a câmera é encerrada.
-- O resultado é aceito apenas entre 90% e 110% do tempo escolhido.
-- O primeiro caminho corta sem recompressão; se necessário, a contingência recodifica só o vídeo e copia o áudio original.
-- Áudio, vídeo, dimensões, leitura, início e fim do arquivo são validados.
-- Se não houver resultado válido, o bruto permanece guardado e nada fora da tolerância é entregue silenciosamente.
-
-A biblioteca de mídia é local; o corte não depende de internet.
+Observação: o primeiro teste precisa ser feito no iPhone real porque MediaRecorder e o comportamento da câmera são implementações do WebKit. A conversão MP4 desta versão foi validada contra a captura bruta real usada na bancada.

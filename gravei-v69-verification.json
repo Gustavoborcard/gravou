@@ -1,0 +1,26 @@
+{
+  "file": "gravei-v69-single-recorder.html",
+  "bytes": 675561,
+  "sha256": "2330e4cc75a8f1bce18133e125105031459578a83cb0f7b14c44e9e658b331ad",
+  "version": "v69",
+  "javascriptSyntax": "ok",
+  "mediabunnyEmbedded": true,
+  "mediaRecorderFactories": 1,
+  "timesliceMilliseconds": 1000,
+  "legacyTokens": [],
+  "flushUsesProcessedEventSerial": true,
+  "flatMp4Requires": [
+    "ftyp",
+    "moov",
+    "mdat"
+  ],
+  "flatMp4Rejects": [
+    "moof"
+  ],
+  "bench20s": {
+    "conversionValid": true,
+    "discardedTracks": 0,
+    "outputBytes": 6442654,
+    "iphonePlaybackPreviouslyConfirmed": true
+  }
+}
