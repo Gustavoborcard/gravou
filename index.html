@@ -276,6 +276,17 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .sheet .stack{margin-left:auto;margin-right:auto}
 @media (orientation:landscape){#modal{align-items:center}.sheet{border-radius:20px;margin:0 20px}}
 
+#chip-dur{pointer-events:auto;cursor:pointer;font:inherit;color:var(--accent);appearance:none}
+#chip-dur:active{transform:scale(.95)}
+#chip-dur svg{transition:transform .18s ease}
+#chip-dur[aria-expanded="true"] svg{transform:rotate(180deg)}
+#duration-picker{position:fixed;inset:0;z-index:31;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.6)}
+#duration-picker.open{display:flex}
+#duration-picker .chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;max-width:320px;margin:24px auto 0}
+#duration-picker .chip{width:100%;padding:12px 8px}
+#duration-picker .stack{margin:22px auto 0}
+@media (orientation:landscape){#duration-picker{align-items:center}#duration-picker .sheet{border-radius:20px;margin:0 20px}}
+
 .hint{margin-top:26px;font-size:13px;color:var(--text-dim);line-height:1.6;max-width:300px}
 a{color:var(--accent)}
 </style>
@@ -292,7 +303,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v70</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v71</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -342,7 +353,7 @@ a{color:var(--accent)}
   <div class="stack">
     <button class="btn btn-primary" id="b-go">Iniciar gravação</button>
   </div>
-  <p class="hint">O <b>+</b> é porque o vídeo pode vir com alguns segundos extras no início. O replay salva só o que aconteceu <b>antes</b> do toque — nunca depois.</p>
+  <p class="hint">O replay salva o que aconteceu antes do toque, nada depois.</p>
 </section>
 
 <!-- GRAVAÇÃO -->
@@ -351,7 +362,10 @@ a{color:var(--accent)}
   <div id="shade"></div>
   <div class="rec-top">
     <div class="badge"><span class="rec-dot"></span>Gravando</div>
-    <div class="badge time-chip" id="chip-dur">20s</div>
+    <button type="button" class="badge time-chip" id="chip-dur" aria-label="Alterar duração do replay" aria-haspopup="dialog" aria-expanded="false">
+      <span id="chip-dur-value">20s</span>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="7 10 12 15 17 10"/></svg>
+    </button>
     <button class="badge" id="chip-count"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg><span id="count-n">0</span></button>
     <button class="badge" id="chip-remote" aria-label="Controle remoto"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><path d="M7.8 16.2a6 6 0 0 1 0-8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 19.1a10 10 0 0 1 0-14.2M19.1 4.9a10 10 0 0 1 0 14.2"/></svg></button>
   </div>
@@ -414,6 +428,15 @@ a{color:var(--accent)}
 
 <div id="toast"></div>
 <div id="flash"></div>
+
+<!-- SELETOR DE DURACAO -->
+<div id="duration-picker" role="dialog" aria-modal="true" aria-labelledby="duration-title">
+  <div class="sheet">
+    <h2 id="duration-title">Quanto tempo quer salvar?</h2>
+    <div class="chips" id="duration-chips"></div>
+    <div class="stack"><button type="button" class="btn btn-ghost" id="duration-cancel">Cancelar</button></div>
+  </div>
+</div>
 
 <!-- CONFIRMAÇÃO -->
 <div id="modal">
@@ -569,7 +592,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v70 - captura unica e MP4 plano
+   Gravei v71 - captura unica e MP4 plano
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
@@ -681,16 +704,67 @@ function hideToast(){ clearTimeout(toastId); $("toast").classList.remove("show")
 
 /* ---------- chips de duração ---------- */
 const chipsBox = $("chips");
-DURATIONS.forEach(d => {
-  const c = document.createElement("button");
-  c.className = "chip" + (d === state.duration ? " sel" : "");
-  c.textContent = d + "s+";
-  c.onclick = () => {
-    state.duration = d;
-    chipsBox.querySelectorAll(".chip").forEach(x => x.classList.toggle("sel", x === c));
-  };
-  chipsBox.appendChild(c);
-});
+const durationChipsBox = $("duration-chips");
+function syncDurationChips(){
+  document.querySelectorAll("[data-duration]").forEach(c => {
+    const selected = Number(c.dataset.duration) === state.duration;
+    c.classList.toggle("sel", selected);
+    c.setAttribute("aria-pressed", selected ? "true" : "false");
+  });
+}
+function setDuration(d, announce = false){
+  if (!DURATIONS.includes(d)) return false;
+  if (state.saving){ if (announce) toast("Aguarde este replay terminar", "info", 2200); return false; }
+  const previous = state.duration;
+  state.duration = d;
+  pruneBuffer();
+  updateDurLabels();
+  syncDurationChips();
+  const available = Math.min(state.bufferSeconds, state.duration);
+  $("btn-save").style.setProperty("--buf", (available / state.duration) * 100);
+  if (announce){
+    toast(d > previous && state.bufferSeconds < d
+      ? d + "s selecionado — aguarde o anel completar"
+      : d + "s selecionado", "info", 2400);
+  }
+  return true;
+}
+function renderDurationChips(box, closeAfter){
+  DURATIONS.forEach(d => {
+    const c = document.createElement("button");
+    c.type = "button";
+    c.className = "chip";
+    c.dataset.duration = String(d);
+    c.textContent = d + "s";
+    c.onclick = () => { if (setDuration(d, closeAfter) && closeAfter) closeDurationPicker(); };
+    box.appendChild(c);
+  });
+}
+let durationPickerOpen = false;
+function openDurationPicker(){
+  if (!state.active || !$("rec-screen").classList.contains("active")) return;
+  if (state.saving){ toast("Aguarde este replay terminar", "info", 2200); return; }
+  durationPickerOpen = true;
+  syncDurationChips();
+  disarmDim();
+  $("duration-picker").classList.add("open");
+  $("chip-dur").setAttribute("aria-expanded", "true");
+  setTimeout(() => $("duration-chips").querySelector(".chip.sel")?.focus(), 0);
+}
+function closeDurationPicker(rearm = true){
+  if (!durationPickerOpen) return;
+  durationPickerOpen = false;
+  $("duration-picker").classList.remove("open");
+  $("chip-dur").setAttribute("aria-expanded", "false");
+  if (rearm && state.active && $("rec-screen").classList.contains("active")) armDim();
+}
+renderDurationChips(chipsBox, false);
+renderDurationChips(durationChipsBox, true);
+syncDurationChips();
+$("chip-dur").onclick = openDurationPicker;
+$("duration-cancel").onclick = () => closeDurationPicker();
+$("duration-picker").onclick = e => { if (e.target === $("duration-picker")) closeDurationPicker(); };
+document.addEventListener("keydown", e => { if (e.key === "Escape" && durationPickerOpen) closeDurationPicker(); });
 
 /* ---------- confirmação genérica ---------- */
 let confirmFn = null;
@@ -792,8 +866,9 @@ async function requestPermission(){
 }
 
 function updateDurLabels(){
-  $("save-secs").textContent = state.duration + "s+";
-  $("chip-dur").textContent = state.duration + "s+";
+  $("save-secs").textContent = state.duration + "s";
+  $("chip-dur-value").textContent = state.duration + "s" + (state.stallCount ? " \u26A1" + state.stallCount : "");
+  $("chip-dur").setAttribute("aria-label", "Alterar dura\u00e7\u00e3o do replay, atual " + state.duration + " segundos");
 }
 
 /* ---------- MIME / compatibilidade ---------- */
@@ -890,7 +965,7 @@ async function onCamStall(){
   if (camRecovering || !state.active) return;
   camRecovering = true;
   state.stallCount = (state.stallCount || 0) + 1;
-  try{ $("chip-dur").textContent = state.duration + "s+ ⚡" + state.stallCount; }catch(_){}
+  try{ updateDurLabels(); }catch(_){}
   try{
     toast("Religando a câmera…", "info", 0);
     await openStream(state.cams[state.camIndex] || undefined);
@@ -1190,12 +1265,34 @@ function ripple(e){
 function vibrate(ms){ try{ navigator.vibrate && navigator.vibrate(ms); }catch(_){} }
 
 function joinBytes(parts){const n=parts.reduce((s,p)=>s+p.byteLength,0),o=new Uint8Array(n);let at=0;for(const p of parts){o.set(p,at);at+=p.byteLength}return o}
-function chooseReplay(snapshot){if(!snapshot.length)return[];const target=snapshot[snapshot.length-1].endAt-state.duration*1000;let pick=0;for(let i=0;i<snapshot.length;i++)if(snapshot[i].startAt<=target)pick=i;return snapshot.slice(pick)}
+function chooseReplay(snapshot,duration){if(!snapshot.length)return[];const target=snapshot[snapshot.length-1].endAt-duration*1000;let pick=0;for(let i=0;i<snapshot.length;i++)if(snapshot[i].startAt<=target)pick=i;return snapshot.slice(pick)}
 function rewriteFragment(f,seq,bases){const a=f.bytes.slice(),info=fragmentTfdt(a);if(info.mfhd)put32(a,info.mfhd.data+4,seq);for(const t of info.tracks){if(bases[t.id]===undefined)bases[t.id]=t.base;const v=t.base-bases[t.id];t.version===1?put64(a,t.pos,v):put32(a,t.pos,v)}return a}
 function makeFmp4(selected){if(!state.initSegment||!selected.length)throw Error('Buffer incompleto');const bases={},parts=[state.initSegment];selected.forEach((f,i)=>parts.push(rewriteFragment(f,i+1,bases)));return joinBytes(parts)}
 async function flattenMp4(bytes){const M=window.Mediabunny;if(!M)throw Error('Mediabunny indisponivel');const input=new M.Input({source:new M.BufferSource(bytes),formats:M.ALL_FORMATS}),target=new M.BufferTarget(),output=new M.Output({format:new M.Mp4OutputFormat({fastStart:'in-memory'}),target});const conv=await M.Conversion.init({input,output});if(!conv.isValid||conv.discardedTracks.length)throw Error('Trilhas MP4 incompativeis');await conv.execute();const a=new Uint8Array(target.buffer||new ArrayBuffer(0)),types=boxes(a).map(x=>x.type);if(!a.byteLength||!types.includes('ftyp')||!types.includes('moov')||!types.includes('mdat')||types.includes('moof'))throw Error('MP4 final invalido');return new Blob([a],{type:'video/mp4'})}
 async function persistReplayBlob(blob){if(!blob||!blob.size)throw Error('Video vazio');state.replayCount++;const d=new Date(),name='gravei-replay-'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+String(d.getSeconds()).padStart(2,'0')+'-'+state.replayCount+'.mp4';try{await vault.add({name,type:'video/mp4',bytes:await blob.arrayBuffer(),t:Date.now()});const n=await vault.count();updateCountChip(n);flashOK();toast('Replay '+n+' guardado','ok',1800)}catch(_){await deliver(blob,name)}}
-async function saveReplay(){if(state.saving)return;if(!state.captureRec||state.captureRec.state!=='recording'){restartCaptureRecorder();toast('Gravacao retomada - aguarde o buffer encher','err',2600);return}state.saving=true;clearTimeout(state.saveGuard);state.saveGuard=setTimeout(()=>{if(state.saving)toast('O replay ainda esta sendo preparado','info',3000)},30000);let snapshot=[];try{await flushCurrentChunk();snapshot=state.fragments.slice();const selected=chooseReplay(snapshot);if(!selected.length)throw Error('Ainda nao ha video para salvar');state.fragments=[];state.bufferSeconds=0;const blob=await flattenMp4(makeFmp4(selected));await persistReplayBlob(blob)}catch(err){console.error('gravei save',err);if(snapshot.length){state.fragments=snapshot.concat(state.fragments);pruneBuffer()}toast(err&&err.message==='Ainda nao ha video para salvar'?err.message:'Nao foi possivel preparar o replay','err',2800)}finally{state.saving=false;clearTimeout(state.saveGuard)}}
+async function saveReplay(){
+  if(state.saving)return;
+  if(!state.captureRec||state.captureRec.state!=='recording'){
+    restartCaptureRecorder();toast('Gravacao retomada - aguarde o buffer encher','err',2600);return;
+  }
+  const replayDuration=state.duration;
+  state.saving=true;
+  closeDurationPicker();
+  clearTimeout(state.saveGuard);
+  state.saveGuard=setTimeout(()=>{if(state.saving)toast('O replay ainda esta sendo preparado','info',3000)},30000);
+  let snapshot=[];
+  try{
+    await flushCurrentChunk();snapshot=state.fragments.slice();
+    const selected=chooseReplay(snapshot,replayDuration);
+    if(!selected.length)throw Error('Ainda nao ha video para salvar');
+    state.fragments=[];state.bufferSeconds=0;
+    const blob=await flattenMp4(makeFmp4(selected));await persistReplayBlob(blob);
+  }catch(err){
+    console.error('gravei save',err);
+    if(snapshot.length){state.fragments=snapshot.concat(state.fragments);pruneBuffer()}
+    toast(err&&err.message==='Ainda nao ha video para salvar'?err.message:'Nao foi possivel preparar o replay','err',2800);
+  }finally{state.saving=false;clearTimeout(state.saveGuard)}
+}
 
 /* ---------- salvar todos os replays de uma vez ---------- */
 let savingAll = false;
