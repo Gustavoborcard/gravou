@@ -343,10 +343,14 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .gallery-selection-bar{display:grid;grid-template-columns:1fr 1fr;gap:10px;flex-shrink:0;padding:10px 16px calc(10px + var(--safe-b));border-top:1px solid var(--line);background:rgba(18,18,18,.98);z-index:3}
 .gallery-selection-bar[hidden]{display:none}
 .gallery-selection-bar button{min-height:46px;border-radius:999px;font:inherit;font-size:14px;font-weight:800;cursor:pointer}
-.gallery-selection-bar button:disabled{opacity:.38;cursor:default}
+.gallery-selection-bar button:disabled{opacity:.52;cursor:default}
+.gallery-selection-note{grid-column:1/-1;margin:0 4px 1px;color:#ffc46b;font-size:12px;line-height:1.35;text-align:center}
+.gallery-selection-note[hidden]{display:none}
 #gallery-share-selected{grid-column:1/-1;border:0;background:var(--rec);color:#fff}
+#gallery-share-selected:disabled{background:#383838;color:var(--text-dim)}
 #gallery-select-all{border:1px solid var(--line);background:var(--surface);color:var(--text)}
 #gallery-delete-selected{border:1px solid rgba(255,59,48,.6);background:transparent;color:var(--rec)}
+#b-saveall:disabled{opacity:.52;cursor:default;color:var(--text-dim)}
 .player-screen{background:#000}
 .player-header{background:rgba(0,0,0,.96);border-color:rgba(255,255,255,.12)}
 .player-position{text-align:center;font-size:14px;font-weight:700;color:var(--text-dim)}
@@ -382,7 +386,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v79</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v80</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -493,6 +497,7 @@ a{color:var(--accent)}
     <p class="gallery-empty" id="gallery-empty" hidden>Nenhum replay guardado.</p>
   </main>
   <footer class="gallery-selection-bar" id="gallery-selection-bar" hidden>
+    <p class="gallery-selection-note" id="gallery-selection-note" role="status" hidden></p>
     <button type="button" id="gallery-share-selected" disabled>Salvar ou compartilhar</button>
     <button type="button" id="gallery-select-all">Selecionar todos</button>
     <button type="button" id="gallery-delete-selected" disabled>Excluir</button>
@@ -720,7 +725,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v79 - compartilhar seleção
+   Gravei v80 - compartilhamento único até 200 MB
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
@@ -1723,6 +1728,17 @@ async function saveAll(){
   if (savingAll) return;
   savingAll = true;
   try{
+    const shareSummary = await getReplayStorageSummary();
+    if (!shareSummary.sizeAvailable){
+      toast("Abra Meus Replays para preparar a seleção com segurança.", "info", 3800);
+      return;
+    }
+    if (shareSummary.bytes > SELECTED_SHARE_MAX_BYTES){
+      state.pendingShareKeys = null;
+      await refreshVaultUI();
+      toast("Escolha até 200 MB em Meus Replays para compartilhar.", "info", 4200);
+      return;
+    }
     const allEntries = await vault.entries();
     if (!allEntries.length){ state.pendingShareKeys=null; toast("Nenhum replay para salvar", "info"); return; }
     const entries = pendingShareEntries(allEntries);
@@ -1788,9 +1804,13 @@ async function refreshVaultUI(){
   $("b-gallery").style.display = n > 0 ? "block" : "none";
   $("b-saveall").style.display = n > 0 ? "block" : "none";
   const pendingShareCount = Array.isArray(state.pendingShareKeys) ? state.pendingShareKeys.length : 0;
-  $("b-saveall").textContent = pendingShareCount
-    ? "Continuar compartilhando (" + pendingShareCount + ")"
-    : "Salvar ou compartilhar (" + n + ")";
+  const centralShareTooLarge = summary.sizeAvailable && summary.bytes > SELECTED_SHARE_MAX_BYTES;
+  $("b-saveall").textContent = centralShareTooLarge
+    ? "Escolha até 200 MB em Meus Replays"
+    : (pendingShareCount
+      ? "Continuar compartilhando (" + pendingShareCount + ")"
+      : "Salvar ou compartilhar (" + n + ")");
+  $("b-saveall").disabled = centralShareTooLarge;
   $("b-saveall").className = "btn btn-ghost";
   $("b-discard").style.display = n > 0 ? "block" : "none";
   $("b-again").textContent = resumable ? "Continuar gravando" : "Iniciar nova gravação";
@@ -1822,6 +1842,16 @@ let selectedReplayKeys = new Set();
 let selectionBusy = false;
 let selectionOperation = null;
 let selectedPreparedShareBatch = null;
+let selectedSharePreparationToken = 0;
+let selectedSharePreparationTimer = null;
+let selectedShareStatus = "idle";
+let selectedShareBytes = 0;
+let selectedShareLoaded = 0;
+let selectedShareTotal = 0;
+let selectedShareNativeReady = false;
+let selectedShareSizeIsEstimate = false;
+const SELECTED_SHARE_MAX_BYTES = 200000000;
+const SELECTED_SHARE_UNKNOWN_BYTES = 32 * 1024 * 1024;
 let galleryLoadToken = 0;
 let playerLoadToken = 0;
 let playerObjectUrl = null;
@@ -1894,6 +1924,30 @@ function syncSelectionCard(card, entry){
   updateGalleryCardLabels(card, entry);
 }
 
+function selectedShareEntries(){
+  return galleryAllEntries.filter(entry => selectedReplayKeys.has(entry.key));
+}
+
+function selectedShareSizeInfo(entries){
+  let knownBytes = 0;
+  let unknownCount = 0;
+  for (const entry of entries){
+    const size = Number(entry && entry.meta && entry.meta.size);
+    if (Number.isFinite(size) && size > 0) knownBytes += size;
+    else unknownCount++;
+  }
+  return {
+    knownBytes,
+    unknownCount,
+    estimatedBytes: knownBytes + unknownCount * SELECTED_SHARE_UNKNOWN_BYTES
+  };
+}
+
+function selectedShareBytesText(bytes, estimated = false){
+  const value = Math.max(0, Math.ceil(Number(bytes || 0) / 1000000));
+  return (estimated ? "~" : "") + value + " MB";
+}
+
 function updateSelectionUI(){
   const screen = $("s-gallery");
   screen.classList.toggle("selection-mode", gallerySelecting);
@@ -1904,12 +1958,32 @@ function updateSelectionUI(){
   $("gallery-selection-bar").hidden = !gallerySelecting;
   const count = selectedReplayKeys.size;
   const allSelected = galleryEntries.length > 0 && galleryEntries.every(entry => selectedReplayKeys.has(entry.key));
-  $("gallery-share-selected").textContent = selectionOperation === "share"
-    ? "Preparando…"
-    : (selectedPreparedShareBatch && selectedPreparedShareBatch.length
-      ? "Compartilhar lote pronto (" + selectedPreparedShareBatch.length + ")"
-      : (count ? "Salvar ou compartilhar (" + count + ")" : "Salvar ou compartilhar"));
-  $("gallery-share-selected").disabled = selectionBusy || count === 0;
+  const shareButton = $("gallery-share-selected");
+  const note = $("gallery-selection-note");
+  let shareLabel = count ? "Salvar ou compartilhar (" + count + ")" : "Salvar ou compartilhar";
+  let noteText = "";
+  if (selectionOperation === "share" || selectedShareStatus === "sharing"){
+    shareLabel = "Compartilhando…";
+  }else if (selectedShareStatus === "queued"){
+    shareLabel = "Preparando " + count + " replay" + (count === 1 ? "" : "s") + "…";
+  }else if (selectedShareStatus === "preparing"){
+    shareLabel = "Preparando " + selectedShareLoaded + " de " + selectedShareTotal + "…";
+  }else if (selectedShareStatus === "ready"){
+    shareLabel = "Salvar ou compartilhar (" + count + ") · " + selectedShareBytesText(selectedShareBytes);
+    if (!selectedShareNativeReady) noteText = "O compartilhamento de arquivos não está disponível aqui. O navegador fará downloads individuais.";
+  }else if (selectedShareStatus === "too-large"){
+    shareLabel = "Compartilhar (" + count + ") · " + selectedShareBytesText(selectedShareBytes, selectedShareSizeIsEstimate);
+    noteText = selectedShareSizeIsEstimate
+      ? "Essa seleção pode passar de 200 MB. Desmarque alguns replays para compartilhar."
+      : "Essa seleção ficou pesada para enviar de uma vez. Deixe até 200 MB.";
+  }else if (selectedShareStatus === "failed"){
+    shareLabel = "Tentar preparar novamente";
+    noteText = "Não foi possível preparar a seleção. Seus replays continuam guardados.";
+  }
+  shareButton.textContent = shareLabel;
+  shareButton.disabled = selectionBusy || count === 0 || (selectedShareStatus !== "ready" && selectedShareStatus !== "failed");
+  note.textContent = noteText;
+  note.hidden = !gallerySelecting || !noteText;
   $("gallery-select-all").textContent = allSelected ? "Desmarcar todos" : "Selecionar todos";
   $("gallery-select-all").disabled = selectionBusy || galleryEntries.length === 0;
   $("gallery-delete-selected").textContent = selectionOperation === "delete"
@@ -1924,7 +1998,132 @@ function updateSelectionUI(){
 }
 
 function clearSelectedPreparedShareBatch(){
+  selectedSharePreparationToken++;
+  if (selectedSharePreparationTimer){
+    clearTimeout(selectedSharePreparationTimer);
+    selectedSharePreparationTimer = null;
+  }
   selectedPreparedShareBatch = null;
+  selectedShareStatus = "idle";
+  selectedShareBytes = 0;
+  selectedShareLoaded = 0;
+  selectedShareTotal = 0;
+  selectedShareNativeReady = false;
+  selectedShareSizeIsEstimate = false;
+}
+
+function selectedShareIsCurrent(entries, token){
+  if (token !== selectedSharePreparationToken || !gallerySelecting) return false;
+  const current = selectedShareEntries();
+  return current.length === entries.length && current.every((entry, index) => entry.key === entries[index].key);
+}
+
+function scheduleSelectedSharePreparation(){
+  if (selectedSharePreparationTimer){
+    clearTimeout(selectedSharePreparationTimer);
+    selectedSharePreparationTimer = null;
+  }
+  const token = ++selectedSharePreparationToken;
+  selectedPreparedShareBatch = null;
+  selectedShareNativeReady = false;
+  selectedShareLoaded = 0;
+  const entries = selectedShareEntries();
+  selectedShareTotal = entries.length;
+  if (!gallerySelecting || !entries.length){
+    selectedShareStatus = "idle";
+    selectedShareBytes = 0;
+    selectedShareSizeIsEstimate = false;
+    updateSelectionUI();
+    startThumbnailObservation();
+    return;
+  }
+  const sizeInfo = selectedShareSizeInfo(entries);
+  selectedShareBytes = sizeInfo.estimatedBytes;
+  selectedShareSizeIsEstimate = sizeInfo.unknownCount > 0;
+  if (sizeInfo.estimatedBytes > SELECTED_SHARE_MAX_BYTES){
+    selectedShareStatus = "too-large";
+    updateSelectionUI();
+    startThumbnailObservation();
+    return;
+  }
+  selectedShareStatus = "queued";
+  stopThumbnailWork();
+  updateSelectionUI();
+  selectedSharePreparationTimer = setTimeout(() => {
+    selectedSharePreparationTimer = null;
+    prepareSelectedShare(entries, token);
+  }, 220);
+}
+
+async function prepareSelectedShare(entries, token){
+  if (!selectedShareIsCurrent(entries, token)) return;
+  selectedShareStatus = "preparing";
+  selectedShareLoaded = 0;
+  updateSelectionUI();
+  const prepared = [];
+  const missingKeys = [];
+  let actualBytes = 0;
+  try{
+    for (let index = 0; index < entries.length; index++){
+      const entry = entries[index];
+      const item = await vault.get(entry.key);
+      if (!selectedShareIsCurrent(entries, token)) return;
+      if (!item){
+        missingKeys.push(entry.key);
+        selectedShareLoaded = index + 1;
+        updateSelectionUI();
+        continue;
+      }
+      const blob = itemBlob(item);
+      const file = new File([blob], item.name || (entry.meta && entry.meta.name) || ("gravei-replay-" + entry.key + ".mp4"), {
+        type: item.type || blob.type || "video/mp4",
+        lastModified: Number(item.t) || Date.now()
+      });
+      actualBytes += file.size;
+      selectedShareBytes = actualBytes;
+      selectedShareSizeIsEstimate = false;
+      selectedShareLoaded = index + 1;
+      if (actualBytes > SELECTED_SHARE_MAX_BYTES){
+        prepared.length = 0;
+        selectedPreparedShareBatch = null;
+        selectedShareStatus = "too-large";
+        updateSelectionUI();
+        startThumbnailObservation();
+        return;
+      }
+      prepared.push({ key: entry.key, file });
+      updateSelectionUI();
+    }
+    if (!selectedShareIsCurrent(entries, token)) return;
+    for (const key of missingKeys) selectedReplayKeys.delete(key);
+    if (!prepared.length){
+      selectedShareStatus = "failed";
+      selectedShareBytes = 0;
+      updateSelectionUI();
+      startThumbnailObservation();
+      return;
+    }
+    const files = prepared.map(entry => entry.file);
+    try{
+      selectedShareNativeReady = !!(navigator.share && navigator.canShare && navigator.canShare({ files }));
+    }catch(_){
+      selectedShareNativeReady = false;
+    }
+    selectedPreparedShareBatch = prepared;
+    selectedShareStatus = "ready";
+    selectedShareTotal = prepared.length;
+    selectedShareLoaded = prepared.length;
+    selectedShareBytes = actualBytes;
+    selectedShareSizeIsEstimate = false;
+    updateSelectionUI();
+  }catch(err){
+    if (!selectedShareIsCurrent(entries, token)) return;
+    console.error("gravei selected prepare", err);
+    selectedPreparedShareBatch = null;
+    selectedShareStatus = "failed";
+    updateSelectionUI();
+    startThumbnailObservation();
+  }
 }
 
 function toggleSelectionMode(){
@@ -1950,6 +2149,7 @@ function exitSelectionMode(){
   selectedReplayKeys.clear();
   selectionOperation = null;
   updateSelectionUI();
+  startThumbnailObservation();
   return true;
 }
 
@@ -1959,6 +2159,7 @@ function toggleReplaySelection(entry){
   if (selectedReplayKeys.has(entry.key)) selectedReplayKeys.delete(entry.key);
   else selectedReplayKeys.add(entry.key);
   updateSelectionUI();
+  scheduleSelectedSharePreparation();
 }
 
 function toggleSelectAllVisible(){
@@ -1970,49 +2171,17 @@ function toggleSelectAllVisible(){
     else selectedReplayKeys.add(entry.key);
   }
   updateSelectionUI();
+  scheduleSelectedSharePreparation();
 }
 
-const SELECTED_SHARE_MAX_FILES = 4;
-const SELECTED_SHARE_MAX_BYTES = 120 * 1024 * 1024;
-const SELECTED_SHARE_UNKNOWN_BYTES = 32 * 1024 * 1024;
-
-function selectedShareCandidates(entries){
-  const candidates = [];
-  let estimatedBytes = 0;
-  for (const entry of entries){
-    if (candidates.length >= SELECTED_SHARE_MAX_FILES) break;
-    const knownSize = Number(entry && entry.meta && entry.meta.size);
-    const estimate = Number.isFinite(knownSize) && knownSize > 0 ? knownSize : SELECTED_SHARE_UNKNOWN_BYTES;
-    if (candidates.length && estimatedBytes + estimate > SELECTED_SHARE_MAX_BYTES) break;
-    candidates.push(entry);
-    estimatedBytes += estimate;
-  }
-  return candidates;
-}
-
-async function loadSelectedShareBatch(entries){
-  const candidates = selectedShareCandidates(entries);
-  const batch = [];
-  let actualBytes = 0;
-  for (const entry of candidates){
-    const item = await vault.get(entry.key);
-    if (!item){ selectedReplayKeys.delete(entry.key); continue; }
-    const size = replayItemSize(item);
-    if (batch.length && actualBytes + size > SELECTED_SHARE_MAX_BYTES) break;
-    batch.push({ key: entry.key, item });
-    actualBytes += size;
-  }
-  return batch;
-}
-
-async function downloadSelectedShareBatch(entries){
+async function downloadSelectedPreparedFiles(entries){
   const deliveredKeys = [];
   try{
     for (const entry of entries){
-      const url = URL.createObjectURL(itemBlob(entry.item));
+      const url = URL.createObjectURL(entry.file);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = entry.item.name;
+      anchor.download = entry.file.name;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -2037,86 +2206,93 @@ function markSelectedDelivered(keys){
   }catch(_){}
 }
 
-async function shareSelectedReplays(){
+function finishSelectedShareSuccess(batch, nativeShare){
+  const deliveredKeys = batch.map(entry => entry.key);
+  const delivered = deliveredKeys.length;
+  clearSelectedPreparedShareBatch();
+  markSelectedDelivered(deliveredKeys);
+  selectionBusy = false;
+  selectionOperation = null;
+  if (!selectedReplayKeys.size){
+    gallerySelecting = false;
+    selectedReplayKeys.clear();
+  }
+  updateSelectionUI();
+  startThumbnailObservation();
+  flashOK();
+  toast(nativeShare
+    ? delivered + " replay" + (delivered === 1 ? " entregue" : "s entregues") + " · continua" + (delivered === 1 ? "" : "m") + " no Gravei"
+    : delivered + " download" + (delivered === 1 ? " iniciado" : "s iniciados") + " · os replays continuam no Gravei", "ok", 4500);
+}
+
+function restoreSelectedShareAfterError(error){
+  selectionBusy = false;
+  selectionOperation = null;
+  selectedShareStatus = selectedPreparedShareBatch && selectedPreparedShareBatch.length ? "ready" : "failed";
+  updateSelectionUI();
+  if (error && error.name === "AbortError"){
+    hideToast();
+    return;
+  }
+  console.error("gravei selected share", error);
+  toast("Não foi possível compartilhar. Sua seleção continua pronta.", "err", 3800);
+}
+
+function finishSelectedDownloadResult(result, batch){
+  const deliveredKeys = Array.isArray(result && result.deliveredKeys) ? result.deliveredKeys : [];
+  if (result && result.status === "done" && deliveredKeys.length === batch.length){
+    finishSelectedShareSuccess(batch, false);
+    return;
+  }
+  clearSelectedPreparedShareBatch();
+  markSelectedDelivered(deliveredKeys);
+  selectionBusy = false;
+  selectionOperation = null;
+  if (!selectedReplayKeys.size) gallerySelecting = false;
+  updateSelectionUI();
+  if (selectedReplayKeys.size) scheduleSelectedSharePreparation();
+  startThumbnailObservation();
+  if (result && result.error) console.error("gravei selected download", result.error);
+  toast(deliveredKeys.length
+    ? deliveredKeys.length + " download" + (deliveredKeys.length === 1 ? " iniciado" : "s iniciados") + " · os demais continuam selecionados"
+    : "Não foi possível baixar a seleção", "err", 4200);
+}
+
+// Não é async: a folha nativa é chamada diretamente no mesmo gesto do botão.
+function shareSelectedReplays(){
   if (!gallerySelecting || selectionBusy || !selectedReplayKeys.size) return;
-  const selectedEntries = galleryAllEntries.filter(entry => selectedReplayKeys.has(entry.key));
-  if (!selectedEntries.length){ selectedReplayKeys.clear(); updateSelectionUI(); return; }
-  const initialCount = selectedReplayKeys.size;
+  if (selectedShareStatus === "failed"){
+    scheduleSelectedSharePreparation();
+    return;
+  }
+  const batch = selectedPreparedShareBatch;
+  if (selectedShareStatus !== "ready" || !batch || batch.length !== selectedReplayKeys.size) return;
+  const files = batch.map(entry => entry.file);
   selectionBusy = true;
   selectionOperation = "share";
-  updateSelectionUI();
-  stopThumbnailWork();
-  toast("Preparando o próximo lote…", "info", 0);
-  try{
-    let batch = selectedPreparedShareBatch;
-    if (batch && !batch.every(entry => selectedReplayKeys.has(entry.key))) clearSelectedPreparedShareBatch();
-    batch = selectedPreparedShareBatch;
-    if (!batch){
-      batch = await loadSelectedShareBatch(selectedEntries);
-      if (batch.length) selectedPreparedShareBatch = batch;
-    }
-    if (!batch.length) throw Error("Nenhum replay disponível");
-    let nativeShare = false;
+  selectedShareStatus = "sharing";
+  if (selectedShareNativeReady){
+    let sharePromise;
     try{
-      const probe = new File([itemBlob(batch[0].item)], batch[0].item.name, { type: batch[0].item.type });
-      nativeShare = !!(navigator.share && navigator.canShare && navigator.canShare({ files:[probe] }));
-    }catch(_){}
-    let result;
-    if (nativeShare){
-      hideToast();
-      result = await shareGroup(batch);
-    }else{
-      result = await downloadSelectedShareBatch(batch);
-    }
-    const deliveredKeys = Array.isArray(result.deliveredKeys) ? result.deliveredKeys : [];
-    const keepPreparedBatch = nativeShare && result.status === "blocked" && deliveredKeys.length === 0;
-    if (!keepPreparedBatch) clearSelectedPreparedShareBatch();
-    markSelectedDelivered(deliveredKeys);
-    const delivered = deliveredKeys.length;
-    const remaining = selectedReplayKeys.size;
-    const deliveredText = delivered + " replay" + (delivered === 1 ? " entregue" : "s entregues");
-    const remainingText = remaining + " selecionado" + (remaining === 1 ? "" : "s");
-    selectionBusy = false;
-    selectionOperation = null;
-    if (delivered > 0 && remaining === 0){
-      gallerySelecting = false;
-      selectedReplayKeys.clear();
-      updateSelectionUI();
-      startThumbnailObservation();
-      flashOK();
-      toast(nativeShare
-        ? deliveredText + " · continua" + (delivered === 1 ? "" : "m") + " no Gravei"
-        : delivered + " download" + (delivered === 1 ? " iniciado" : "s iniciados") + " · os replays continuam no Gravei", "ok", 4500);
+      sharePromise = navigator.share({ files, title: SHARE_MSG, text: SHARE_MSG });
+    }catch(error){
+      restoreSelectedShareAfterError(error);
       return;
     }
     updateSelectionUI();
-    startThumbnailObservation();
-    if (result.status === "done" && delivered > 0){
-      toast(nativeShare
-        ? deliveredText + " · " + remainingText + ". Toque novamente para continuar."
-        : delivered + " download" + (delivered === 1 ? " iniciado" : "s iniciados") + " · " + remainingText + ". Toque novamente para continuar.", "info", 4800);
-    }else if (result.status === "cancelled"){
-      if (delivered) toast(deliveredText + " · " + remainingText, "info", 3800);
-      else hideToast();
-    }else if (result.status === "blocked"){
-      toast((delivered ? deliveredText + " · " : "") + "toque novamente para " + remainingText, "info", 4200);
-    }else{
-      if(result.error)console.error("gravei selected share", result.error);
-      toast((delivered ? deliveredText + " · " + remainingText + ". " : "") + "Não foi possível compartilhar", "err", 4200);
-    }
-  }catch(err){
-    console.error("gravei selected share", err);
-    clearSelectedPreparedShareBatch();
-    selectionBusy = false;
-    selectionOperation = null;
-    updateSelectionUI();
-    startThumbnailObservation();
-    toast("Não foi possível preparar a seleção", "err", 3000);
+    hideToast();
+    Promise.resolve(sharePromise).then(() => {
+      finishSelectedShareSuccess(batch, true);
+    }).catch(error => {
+      restoreSelectedShareAfterError(error);
+    });
+    return;
   }
-}
-function deleteSelectedReplays(){
+  updateSelectionUI();
+  toast("Iniciando downloads…", "info", 0);
+  downloadSelectedPreparedFiles(batch).then(result => finishSelectedDownloadResult(result, batch));
+}function deleteSelectedReplays(){
   if (!gallerySelecting || selectionBusy || !selectedReplayKeys.size) return;
-  clearSelectedPreparedShareBatch();
   const selectedEntries = galleryAllEntries.filter(entry => selectedReplayKeys.has(entry.key));
   if (!selectedEntries.length){ selectedReplayKeys.clear(); updateSelectionUI(); return; }
   const keys = selectedEntries.map(entry => entry.key);
@@ -2127,6 +2303,7 @@ function deleteSelectedReplays(){
     ? "A seleção inclui " + favorites + " favorito" + (favorites === 1 ? "" : "s") + ". " + (count === 1 ? "O replay será apagado" : "Os " + count + " replays serão apagados") + " definitivamente do Gravei."
     : (count === 1 ? "Este replay será apagado" : "Estes replays serão apagados") + " definitivamente do Gravei.";
   openConfirm(title, message, favorites ? "Excluir mesmo assim" : "Excluir", async () => {
+    clearSelectedPreparedShareBatch();
     selectionBusy = true;
     selectionOperation = "delete";
     updateSelectionUI();
