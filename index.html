@@ -297,6 +297,8 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
   padding:calc(12px + var(--safe-t)) 16px 12px;border-bottom:1px solid var(--line);background:rgba(18,18,18,.96);z-index:2;
 }
 .gallery-back{border:0;background:transparent;color:var(--text);font:inherit;font-size:15px;font-weight:600;min-height:44px;padding:0;text-align:left;cursor:pointer}
+.gallery-select{justify-self:end;border:0;background:transparent;color:var(--accent);font:inherit;font-size:15px;font-weight:700;min-width:76px;min-height:44px;padding:0;text-align:right;cursor:pointer}
+.gallery-select:disabled{color:var(--text-dim);opacity:.45;cursor:default}
 .gallery-header-copy{text-align:center;min-width:0}
 .gallery-header h2{font-size:20px;white-space:nowrap}
 .gallery-header p{font-size:12px;color:var(--text-dim);margin-top:2px;white-space:nowrap}
@@ -304,11 +306,19 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .gallery-filters{display:grid;grid-template-columns:1fr 1fr;gap:4px;width:calc(100% - 32px);max-width:420px;margin:10px auto 0;padding:4px;border:1px solid var(--line);border-radius:14px;background:var(--surface);flex-shrink:0}
 .gallery-filter{min-height:44px;border:0;border-radius:10px;background:transparent;color:var(--text-dim);font:inherit;font-size:14px;font-weight:700;cursor:pointer}
 .gallery-filter[aria-selected="true"]{background:#2d2d2d;color:var(--text);box-shadow:0 1px 6px rgba(0,0,0,.24)}
+.gallery-filter:disabled{opacity:.4;cursor:default}
 .gallery-scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 16px calc(28px + var(--safe-b))}
 .gallery-list{display:flex;flex-direction:column;gap:16px;width:100%;max-width:640px;margin:0 auto}
 .replay-card{position:relative;display:block;width:100%;aspect-ratio:16/9;min-height:180px;overflow:hidden;border:1px solid var(--line);border-radius:18px;background:#181818;color:var(--text);padding:0;text-align:left;font:inherit;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.2)}
 .replay-card:active{transform:scale(.992)}
 .replay-card.favorite-removing{opacity:0;transform:scale(.97);transition:opacity .16s ease,transform .16s ease}
+.replay-card.is-selected{border-color:var(--rec);box-shadow:0 0 0 2px rgba(255,59,48,.6),0 8px 24px rgba(0,0,0,.2)}
+.replay-card-select{position:absolute;top:10px;right:10px;z-index:4;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:2px solid rgba(255,255,255,.78);border-radius:50%;background:rgba(0,0,0,.48);color:#fff;opacity:0;transform:scale(.88);transition:opacity .14s ease,transform .14s ease,background .14s ease}
+.replay-card-select svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;opacity:0}
+.selection-mode .replay-card-select{opacity:1;transform:scale(1)}
+.selection-mode .replay-card-favorite{display:none}
+.replay-card.is-selected .replay-card-select{background:var(--rec);border-color:var(--rec)}
+.replay-card.is-selected .replay-card-select svg{opacity:1}
 .replay-card-visual{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 35%,#333 0,#202020 42%,#151515 100%)}
 .replay-card-mark{font-family:'Poppins',sans-serif;font-size:clamp(24px,8vw,42px);font-weight:800;letter-spacing:-.04em;color:rgba(250,250,247,.16)}
 .replay-card-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
@@ -330,6 +340,13 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .player-favorite{justify-self:end;background:transparent}
 .gallery-empty{max-width:360px;margin:18vh auto 0;text-align:center;color:var(--text-dim);line-height:1.55;padding:0 24px}
 .gallery-empty[hidden]{display:none}
+.gallery-selection-bar{display:grid;grid-template-columns:1fr 1fr;gap:10px;flex-shrink:0;padding:10px 16px calc(10px + var(--safe-b));border-top:1px solid var(--line);background:rgba(18,18,18,.98);z-index:3}
+.gallery-selection-bar[hidden]{display:none}
+.gallery-selection-bar button{min-height:46px;border-radius:999px;font:inherit;font-size:14px;font-weight:800;cursor:pointer}
+.gallery-selection-bar button:disabled{opacity:.38;cursor:default}
+#gallery-select-all{border:1px solid var(--line);background:var(--surface);color:var(--text)}
+#gallery-delete-selected{border:0;background:var(--rec);color:#fff}
+#gallery-delete-selected:disabled{opacity:.38;cursor:default}
 .player-screen{background:#000}
 .player-header{background:rgba(0,0,0,.96);border-color:rgba(255,255,255,.12)}
 .player-position{text-align:center;font-size:14px;font-weight:700;color:var(--text-dim)}
@@ -365,7 +382,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v77</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v78</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -465,7 +482,7 @@ a{color:var(--accent)}
       <h2>Meus Replays</h2>
       <p id="gallery-summary">Carregando…</p>
     </div>
-    <span class="gallery-header-spacer" aria-hidden="true"></span>
+    <button type="button" class="gallery-select" id="gallery-select">Selecionar</button>
   </header>
   <nav class="gallery-filters" role="tablist" aria-label="Filtrar replays">
     <button type="button" class="gallery-filter" id="gallery-filter-all" role="tab" aria-selected="true">Todos</button>
@@ -475,6 +492,10 @@ a{color:var(--accent)}
     <div class="gallery-list" id="gallery-list"></div>
     <p class="gallery-empty" id="gallery-empty" hidden>Nenhum replay guardado.</p>
   </main>
+  <footer class="gallery-selection-bar" id="gallery-selection-bar" hidden>
+    <button type="button" id="gallery-select-all">Selecionar todos</button>
+    <button type="button" id="gallery-delete-selected" disabled>Excluir</button>
+  </footer>
 </section>
 
 <!-- PLAYER INDIVIDUAL -->
@@ -698,7 +719,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v77 - favoritos persistentes
+   Gravei v78 - seleção múltipla
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
@@ -1120,6 +1141,9 @@ $("b-gallery").onclick = openGallery;
 $("b-gallery-back").onclick = closeGalleryToCentral;
 $("gallery-filter-all").onclick = () => setGalleryFilter("all");
 $("gallery-filter-favorites").onclick = () => setGalleryFilter("favorites");
+$("gallery-select").onclick = toggleSelectionMode;
+$("gallery-select-all").onclick = toggleSelectAllVisible;
+$("gallery-delete-selected").onclick = deleteSelectedReplays;
 $("b-player-back").onclick = closePlayerToGallery;
 $("player-favorite").onclick = toggleCurrentFavorite;
 $("player-prev").onclick = () => openReplayAt(galleryIndex - 1);
@@ -1791,6 +1815,9 @@ let playerEntries = [];
 let galleryIndex = -1;
 let galleryScrollTop = 0;
 let favoriteBusyKeys = new Set();
+let gallerySelecting = false;
+let selectedReplayKeys = new Set();
+let selectionBusy = false;
 let galleryLoadToken = 0;
 let playerLoadToken = 0;
 let playerObjectUrl = null;
@@ -1854,9 +1881,133 @@ function applyGalleryFilter(){
   syncGalleryFilterControls();
 }
 
+function syncSelectionCard(card, entry){
+  if (!card || !entry) return;
+  const selected = selectedReplayKeys.has(entry.key);
+  card.classList.toggle("is-selected", gallerySelecting && selected);
+  if (gallerySelecting) card.setAttribute("aria-pressed", selected ? "true" : "false");
+  else card.removeAttribute("aria-pressed");
+  updateGalleryCardLabels(card, entry);
+}
+
+function updateSelectionUI(){
+  const screen = $("s-gallery");
+  screen.classList.toggle("selection-mode", gallerySelecting);
+  $("gallery-select").textContent = gallerySelecting ? "Cancelar" : "Selecionar";
+  $("gallery-select").disabled = selectionBusy || (!gallerySelecting && galleryEntries.length === 0);
+  $("gallery-filter-all").disabled = selectionBusy;
+  $("gallery-filter-favorites").disabled = selectionBusy;
+  $("gallery-selection-bar").hidden = !gallerySelecting;
+  const count = selectedReplayKeys.size;
+  const allSelected = galleryEntries.length > 0 && galleryEntries.every(entry => selectedReplayKeys.has(entry.key));
+  $("gallery-select-all").textContent = allSelected ? "Desmarcar todos" : "Selecionar todos";
+  $("gallery-select-all").disabled = selectionBusy || galleryEntries.length === 0;
+  $("gallery-delete-selected").textContent = count ? "Excluir (" + count + ")" : "Excluir";
+  $("gallery-delete-selected").disabled = selectionBusy || count === 0;
+  for (const card of Array.from($("gallery-list").children)){
+    const entry = galleryEntries.find(item => String(item.key) === card.dataset.replayKey);
+    if (entry) syncSelectionCard(card, entry);
+  }
+  updateGallerySummary();
+}
+
+function toggleSelectionMode(){
+  if (selectionBusy) return;
+  if (gallerySelecting){
+    gallerySelecting = false;
+    selectedReplayKeys.clear();
+  }else{
+    if (!galleryEntries.length) return;
+    gallerySelecting = true;
+    selectedReplayKeys.clear();
+  }
+  updateSelectionUI();
+}
+
+function exitSelectionMode(){
+  if (!gallerySelecting || selectionBusy) return false;
+  gallerySelecting = false;
+  selectedReplayKeys.clear();
+  updateSelectionUI();
+  return true;
+}
+
+function toggleReplaySelection(entry){
+  if (!gallerySelecting || selectionBusy || !entry) return;
+  if (selectedReplayKeys.has(entry.key)) selectedReplayKeys.delete(entry.key);
+  else selectedReplayKeys.add(entry.key);
+  updateSelectionUI();
+}
+
+function toggleSelectAllVisible(){
+  if (!gallerySelecting || selectionBusy || !galleryEntries.length) return;
+  const allSelected = galleryEntries.every(entry => selectedReplayKeys.has(entry.key));
+  for (const entry of galleryEntries){
+    if (allSelected) selectedReplayKeys.delete(entry.key);
+    else selectedReplayKeys.add(entry.key);
+  }
+  updateSelectionUI();
+}
+
+function deleteSelectedReplays(){
+  if (!gallerySelecting || selectionBusy || !selectedReplayKeys.size) return;
+  const selectedEntries = galleryAllEntries.filter(entry => selectedReplayKeys.has(entry.key));
+  if (!selectedEntries.length){ selectedReplayKeys.clear(); updateSelectionUI(); return; }
+  const keys = selectedEntries.map(entry => entry.key);
+  const count = keys.length;
+  const favorites = selectedEntries.filter(entry => !!(entry.meta && entry.meta.favorite)).length;
+  const title = favorites ? "Excluir seleção com favoritos?" : "Excluir " + count + " replay" + (count === 1 ? "?" : "s?");
+  const message = favorites
+    ? "A seleção inclui " + favorites + " favorito" + (favorites === 1 ? "" : "s") + ". " + (count === 1 ? "O replay será apagado" : "Os " + count + " replays serão apagados") + " definitivamente do Gravei."
+    : (count === 1 ? "Este replay será apagado" : "Estes replays serão apagados") + " definitivamente do Gravei.";
+  openConfirm(title, message, favorites ? "Excluir mesmo assim" : "Excluir", async () => {
+    selectionBusy = true;
+    updateSelectionUI();
+    stopThumbnailWork();
+    try{
+      await vault.removeKeys(keys);
+    }catch(err){
+      console.error("gravei selected delete", err);
+      selectionBusy = false;
+      updateSelectionUI();
+      startThumbnailObservation();
+      toast("Não foi possível excluir a seleção", "err", 2800);
+      return;
+    }
+    try{ await metadataWithTimeout(replayMeta.removeKeys(keys), 1200); }
+    catch(err){ console.warn("gravei selected metadata delete", err); }
+    try{
+      if(Array.isArray(state.pendingShareKeys)){
+        const removed = new Set(keys);
+        state.pendingShareKeys = state.pendingShareKeys.filter(key => !removed.has(key));
+        if(!state.pendingShareKeys.length)state.pendingShareKeys = null;
+      }
+    }catch(_){}
+    selectedReplayKeys.clear();
+    gallerySelecting = false;
+    selectionBusy = false;
+    try{ galleryAllEntries = await listGalleryEntries(); }
+    catch(_){
+      const removed = new Set(keys);
+      galleryAllEntries = galleryAllEntries.filter(entry => !removed.has(entry.key));
+    }
+    applyGalleryFilter();
+    updateSelectionUI();
+    await refreshVaultUI();
+    if (!galleryAllEntries.length){
+      show("s-ended");
+    }else{
+      show("s-gallery");
+      renderGalleryCards();
+      requestAnimationFrame(() => { $("gallery-scroll").scrollTop = galleryScrollTop; });
+    }
+    toast(count + " replay" + (count === 1 ? " excluído" : "s excluídos"), "info", 2200);
+  });
+}
 function setGalleryFilter(next){
   if (next !== "all" && next !== "favorites") return;
   if (galleryFilter === next){ syncGalleryFilterControls(); return; }
+  if (gallerySelecting) exitSelectionMode();
   stopThumbnailWork();
   galleryFilter = next;
   galleryScrollTop = 0;
@@ -1956,6 +2107,11 @@ async function toggleCurrentFavorite(){
   if (entry) await toggleReplayFavorite(entry, null);
 }
 function updateGallerySummary(){
+  if (gallerySelecting){
+    const selected = selectedReplayKeys.size;
+    $("gallery-summary").textContent = selected + " de " + galleryEntries.length + " selecionado" + (selected === 1 ? "" : "s");
+    return;
+  }
   const n = galleryEntries.length;
   const allSizesKnown = n > 0 && galleryEntries.every(entry => Number.isFinite(Number(entry.meta.size)));
   const bytes = allSizesKnown ? galleryEntries.reduce((sum, entry) => sum + Number(entry.meta.size) + (Number(entry.meta.thumbSize) || 0), 0) : 0;
@@ -2035,7 +2191,12 @@ function updateGalleryCardLabels(card, entry){
   const date = card.querySelector(".replay-card-date");
   if (duration) duration.textContent = replayDurationText(entry.meta);
   if (date) date.textContent = replayDateText(entry.meta);
-  card.setAttribute("aria-label", "Abrir " + (entry.meta && entry.meta.favorite ? "replay favorito, " : "replay, ") + replayDurationText(entry.meta) + ", " + replayDateText(entry.meta));
+  const details = replayDurationText(entry.meta) + ", " + replayDateText(entry.meta);
+  if (gallerySelecting){
+    card.setAttribute("aria-label", (selectedReplayKeys.has(entry.key) ? "Desmarcar " : "Selecionar ") + details);
+  }else{
+    card.setAttribute("aria-label", "Abrir " + (entry.meta && entry.meta.favorite ? "replay favorito, " : "replay, ") + details);
+  }
 }
 
 function stopThumbnailWork(){
@@ -2357,6 +2518,11 @@ function renderGalleryCards(){
     meta.appendChild(date);
     overlay.appendChild(meta);
 
+    const selection = document.createElement("span");
+    selection.className = "replay-card-select";
+    selection.setAttribute("aria-hidden", "true");
+    selection.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="5 12.5 9.5 17 19 7"/></svg>';
+
     const favorite = createFavoriteButton("replay-card-favorite");
     updateFavoriteButton(favorite, entry);
     favorite.onclick = event => {
@@ -2370,32 +2536,42 @@ function renderGalleryCards(){
     };
     card.onclick = event => {
       if (event.target.closest && event.target.closest(".favorite-btn")) return;
+      if (gallerySelecting){ toggleReplaySelection(entry); return; }
       openCard();
     };
     card.onkeydown = event => {
       if (event.target !== card || (event.key !== "Enter" && event.key !== " ")) return;
       event.preventDefault();
-      openCard();
+      if (gallerySelecting) toggleReplaySelection(entry);
+      else openCard();
     };
 
     card.appendChild(visual);
     card.appendChild(overlay);
+    card.appendChild(selection);
     card.appendChild(favorite);
     updateGalleryCardLabels(card, entry);
     box.appendChild(card);
     attachThumbnailToCard(card, entry);
   });
+  updateSelectionUI();
   startThumbnailObservation();
 }
 async function openGallery(){
   stopThumbnailWork();
+  gallerySelecting = false;
+  selectionBusy = false;
+  selectedReplayKeys.clear();
   releaseGalleryThumbUrls();
   const token = ++galleryLoadToken;
+  galleryAllEntries = [];
+  galleryEntries = [];
   $("gallery-list").textContent = "";
   $("gallery-empty").hidden = false;
   $("gallery-empty").textContent = "Carregando replays…";
-  $("gallery-summary").textContent = "Carregando…";
   show("s-gallery");
+  updateSelectionUI();
+  $("gallery-summary").textContent = "Carregando…";
   try{
     const entries = await listGalleryEntries();
     if (token !== galleryLoadToken) return;
@@ -2415,6 +2591,7 @@ async function openGallery(){
 }
 
 async function closeGalleryToCentral(){
+  if (gallerySelecting){ exitSelectionMode(); return; }
   galleryLoadToken++;
   stopThumbnailWork();
   releaseGalleryThumbUrls();
