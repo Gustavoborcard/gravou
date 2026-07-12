@@ -289,7 +289,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 #duration-picker .stack{margin:22px auto 0}
 @media (orientation:landscape){#duration-picker{align-items:center}#duration-picker .sheet{border-radius:20px;margin:0 20px}}
 
-/* ---- galeria MVP: uma coluna, sem miniaturas nesta fase ---- */
+/* ---- galeria: uma coluna, miniaturas e favoritos persistentes ---- */
 .gallery-screen,.player-screen{padding:0;text-align:left;align-items:stretch;justify-content:flex-start;overflow:hidden;background:var(--bg)}
 .gallery-screen > *,.player-screen > *{flex-shrink:1}
 .gallery-header,.player-header{
@@ -301,10 +301,14 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .gallery-header h2{font-size:20px;white-space:nowrap}
 .gallery-header p{font-size:12px;color:var(--text-dim);margin-top:2px;white-space:nowrap}
 .gallery-header-spacer{display:block;min-width:76px}
+.gallery-filters{display:grid;grid-template-columns:1fr 1fr;gap:4px;width:calc(100% - 32px);max-width:420px;margin:10px auto 0;padding:4px;border:1px solid var(--line);border-radius:14px;background:var(--surface);flex-shrink:0}
+.gallery-filter{min-height:44px;border:0;border-radius:10px;background:transparent;color:var(--text-dim);font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.gallery-filter[aria-selected="true"]{background:#2d2d2d;color:var(--text);box-shadow:0 1px 6px rgba(0,0,0,.24)}
 .gallery-scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 16px calc(28px + var(--safe-b))}
 .gallery-list{display:flex;flex-direction:column;gap:16px;width:100%;max-width:640px;margin:0 auto}
 .replay-card{position:relative;display:block;width:100%;aspect-ratio:16/9;min-height:180px;overflow:hidden;border:1px solid var(--line);border-radius:18px;background:#181818;color:var(--text);padding:0;text-align:left;font:inherit;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.2)}
 .replay-card:active{transform:scale(.992)}
+.replay-card.favorite-removing{opacity:0;transform:scale(.97);transition:opacity .16s ease,transform .16s ease}
 .replay-card-visual{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 35%,#333 0,#202020 42%,#151515 100%)}
 .replay-card-mark{font-family:'Poppins',sans-serif;font-size:clamp(24px,8vw,42px);font-weight:800;letter-spacing:-.04em;color:rgba(250,250,247,.16)}
 .replay-card-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
@@ -313,9 +317,17 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .thumbnail-worker{position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:.01;pointer-events:none;z-index:-1}
 .replay-card-play{position:absolute;width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,59,48,.92);box-shadow:0 5px 18px rgba(0,0,0,.35)}
 .replay-card-play::after{content:"";margin-left:4px;border-top:9px solid transparent;border-bottom:9px solid transparent;border-left:14px solid #fff}
-.replay-card-overlay{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:34px 16px 14px;background:linear-gradient(transparent,rgba(0,0,0,.88))}
+.replay-card-overlay{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:flex-end;padding:34px 68px 14px 16px;background:linear-gradient(transparent,rgba(0,0,0,.88))}
+.replay-card-meta{display:flex;flex-direction:column;gap:2px;min-width:0}
 .replay-card-duration{font-size:17px;font-weight:800;color:#fff}
-.replay-card-date{font-size:13px;font-weight:600;color:rgba(255,255,255,.8);text-align:right}
+.replay-card-date{font-size:13px;font-weight:600;color:rgba(255,255,255,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.favorite-btn{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border:0;border-radius:50%;background:rgba(0,0,0,.46);color:#fff;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.favorite-btn svg{width:24px;height:24px;fill:transparent;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:fill .14s ease,color .14s ease,transform .14s ease}
+.favorite-btn.is-favorite{color:var(--rec)}
+.favorite-btn.is-favorite svg{fill:currentColor;transform:scale(1.04)}
+.favorite-btn:disabled{opacity:.55;cursor:default}
+.replay-card-favorite{position:absolute;right:10px;bottom:8px;z-index:3}
+.player-favorite{justify-self:end;background:transparent}
 .gallery-empty{max-width:360px;margin:18vh auto 0;text-align:center;color:var(--text-dim);line-height:1.55;padding:0 24px}
 .gallery-empty[hidden]{display:none}
 .player-screen{background:#000}
@@ -353,7 +365,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v76</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v77</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -445,7 +457,7 @@ a{color:var(--accent)}
   </div>
 </section>
 
-<!-- GALERIA MVP: cartões verticais; miniaturas entram na próxima fase -->
+<!-- GALERIA: cartões verticais, miniaturas e favoritos -->
 <section class="screen gallery-screen" id="s-gallery">
   <header class="gallery-header">
     <button type="button" class="gallery-back" id="b-gallery-back">‹ Central</button>
@@ -455,6 +467,10 @@ a{color:var(--accent)}
     </div>
     <span class="gallery-header-spacer" aria-hidden="true"></span>
   </header>
+  <nav class="gallery-filters" role="tablist" aria-label="Filtrar replays">
+    <button type="button" class="gallery-filter" id="gallery-filter-all" role="tab" aria-selected="true">Todos</button>
+    <button type="button" class="gallery-filter" id="gallery-filter-favorites" role="tab" aria-selected="false">Favoritos</button>
+  </nav>
   <main class="gallery-scroll" id="gallery-scroll">
     <div class="gallery-list" id="gallery-list"></div>
     <p class="gallery-empty" id="gallery-empty" hidden>Nenhum replay guardado.</p>
@@ -466,7 +482,9 @@ a{color:var(--accent)}
   <header class="player-header">
     <button type="button" class="gallery-back" id="b-player-back">‹ Replays</button>
     <span class="player-position" id="player-position">1 de 1</span>
-    <span class="gallery-header-spacer" aria-hidden="true"></span>
+    <button type="button" class="favorite-btn player-favorite" id="player-favorite" aria-label="Adicionar aos favoritos" aria-pressed="false" disabled>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.7-7.5 1.1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg>
+    </button>
   </header>
   <div class="player-stage">
     <video id="gallery-player" controls playsinline preload="metadata"></video>
@@ -680,7 +698,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v76 - biblioteca persistente
+   Gravei v77 - favoritos persistentes
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
@@ -1100,7 +1118,10 @@ $("b-home").onclick = async () => {
 $("b-saveall").onclick = saveAll;
 $("b-gallery").onclick = openGallery;
 $("b-gallery-back").onclick = closeGalleryToCentral;
+$("gallery-filter-all").onclick = () => setGalleryFilter("all");
+$("gallery-filter-favorites").onclick = () => setGalleryFilter("favorites");
 $("b-player-back").onclick = closePlayerToGallery;
+$("player-favorite").onclick = toggleCurrentFavorite;
 $("player-prev").onclick = () => openReplayAt(galleryIndex - 1);
 $("player-next").onclick = () => openReplayAt(galleryIndex + 1);
 $("player-share").onclick = shareCurrentReplay;
@@ -1762,10 +1783,14 @@ async function refreshVaultUI(){
   return n;
 }
 
-/* ---------- galeria MVP: metadados na lista, um Blob no player ---------- */
+/* ---------- galeria: metadados, filtros e um Blob no player ---------- */
+let galleryAllEntries = [];
 let galleryEntries = [];
+let galleryFilter = "all";
+let playerEntries = [];
 let galleryIndex = -1;
 let galleryScrollTop = 0;
+let favoriteBusyKeys = new Set();
 let galleryLoadToken = 0;
 let playerLoadToken = 0;
 let playerObjectUrl = null;
@@ -1816,12 +1841,126 @@ async function listGalleryEntries(){
   }));
 }
 
+function syncGalleryFilterControls(){
+  const favorites = galleryFilter === "favorites";
+  $("gallery-filter-all").setAttribute("aria-selected", favorites ? "false" : "true");
+  $("gallery-filter-favorites").setAttribute("aria-selected", favorites ? "true" : "false");
+}
+
+function applyGalleryFilter(){
+  galleryEntries = galleryFilter === "favorites"
+    ? galleryAllEntries.filter(entry => !!(entry.meta && entry.meta.favorite))
+    : galleryAllEntries.slice();
+  syncGalleryFilterControls();
+}
+
+function setGalleryFilter(next){
+  if (next !== "all" && next !== "favorites") return;
+  if (galleryFilter === next){ syncGalleryFilterControls(); return; }
+  stopThumbnailWork();
+  galleryFilter = next;
+  galleryScrollTop = 0;
+  applyGalleryFilter();
+  renderGalleryCards();
+  $("gallery-scroll").scrollTop = 0;
+}
+
+function findReplayEntry(replayKey){
+  return galleryAllEntries.find(entry => entry.key === replayKey)
+    || playerEntries.find(entry => entry.key === replayKey)
+    || galleryEntries.find(entry => entry.key === replayKey)
+    || null;
+}
+
+function replaceReplayMeta(replayKey, meta){
+  for (const list of [galleryAllEntries, galleryEntries, playerEntries]){
+    for (const entry of list){
+      if (entry.key === replayKey) entry.meta = meta;
+    }
+  }
+}
+
+const FAVORITE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.7-7.5 1.1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg>';
+function createFavoriteButton(extraClass){
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "favorite-btn " + (extraClass || "");
+  button.innerHTML = FAVORITE_ICON;
+  return button;
+}
+
+function updateFavoriteButton(button, entry){
+  if (!button) return;
+  const available = !!entry;
+  const favorite = !!(entry && entry.meta && entry.meta.favorite);
+  button.classList.toggle("is-favorite", favorite);
+  button.setAttribute("aria-pressed", favorite ? "true" : "false");
+  button.setAttribute("aria-label", favorite ? "Remover dos favoritos" : "Adicionar aos favoritos");
+  button.disabled = !available || favoriteBusyKeys.has(entry.key);
+}
+
+function currentPlayerEntry(){
+  return galleryIndex >= 0 && galleryIndex < playerEntries.length ? playerEntries[galleryIndex] : null;
+}
+
+function syncFavoriteControls(entry){
+  if (!entry) return;
+  const card = findGalleryCard(entry.key);
+  if (card){
+    updateFavoriteButton(card.querySelector(".replay-card-favorite"), entry);
+    updateGalleryCardLabels(card, entry);
+  }
+  const current = currentPlayerEntry();
+  if (current && current.key === entry.key) updateFavoriteButton($("player-favorite"), current);
+}
+
+async function toggleReplayFavorite(entry, card){
+  if (!entry || favoriteBusyKeys.has(entry.key)) return false;
+  const replayKey = entry.key;
+  const previousFavorite = !!(entry.meta && entry.meta.favorite);
+  const optimistic = { ...entry.meta, replayId: replayKey, favorite: !previousFavorite };
+  favoriteBusyKeys.add(replayKey);
+  replaceReplayMeta(replayKey, optimistic);
+  syncFavoriteControls(findReplayEntry(replayKey));
+  let saved = false;
+  try{
+    const latest = findReplayEntry(replayKey);
+    const persisted = { ...(latest ? latest.meta : optimistic), replayId: replayKey, favorite: !previousFavorite };
+    replaceReplayMeta(replayKey, persisted);
+    await replayMeta.put(persisted);
+    saved = true;
+  }catch(err){
+    console.warn("gravei favorite metadata", err);
+    const latest = findReplayEntry(replayKey);
+    const rollback = { ...(latest ? latest.meta : entry.meta), replayId: replayKey, favorite: previousFavorite };
+    replaceReplayMeta(replayKey, rollback);
+    toast("Não foi possível atualizar o favorito", "err", 2600);
+  }finally{
+    favoriteBusyKeys.delete(replayKey);
+    syncFavoriteControls(findReplayEntry(replayKey));
+  }
+  if (saved && galleryFilter === "favorites" && previousFavorite && card){
+    card.classList.add("favorite-removing");
+    setTimeout(() => {
+      applyGalleryFilter();
+      renderGalleryCards();
+    }, 160);
+  }else{
+    updateGallerySummary();
+  }
+  return saved;
+}
+
+async function toggleCurrentFavorite(){
+  const entry = currentPlayerEntry();
+  if (entry) await toggleReplayFavorite(entry, null);
+}
 function updateGallerySummary(){
   const n = galleryEntries.length;
   const allSizesKnown = n > 0 && galleryEntries.every(entry => Number.isFinite(Number(entry.meta.size)));
   const bytes = allSizesKnown ? galleryEntries.reduce((sum, entry) => sum + Number(entry.meta.size) + (Number(entry.meta.thumbSize) || 0), 0) : 0;
-  $("gallery-summary").textContent = n + " replay" + (n === 1 ? "" : "s") +
-    (allSizesKnown ? " · " + formatReplayBytes(bytes) : "");
+  const label = galleryFilter === "favorites" ? (n === 1 ? " favorito" : " favoritos") : (n === 1 ? " replay" : " replays");
+  $("gallery-summary").textContent = n + label + (allSizesKnown ? " · " + formatReplayBytes(bytes) : "");
 }
 
 function thumbnailCancelError(){
@@ -1896,7 +2035,7 @@ function updateGalleryCardLabels(card, entry){
   const date = card.querySelector(".replay-card-date");
   if (duration) duration.textContent = replayDurationText(entry.meta);
   if (date) date.textContent = replayDateText(entry.meta);
-  card.setAttribute("aria-label", "Abrir " + replayDurationText(entry.meta) + ", " + replayDateText(entry.meta));
+  card.setAttribute("aria-label", "Abrir " + (entry.meta && entry.meta.favorite ? "replay favorito, " : "replay, ") + replayDurationText(entry.meta) + ", " + replayDateText(entry.meta));
 }
 
 function stopThumbnailWork(){
@@ -2078,17 +2217,17 @@ async function generateThumbnailForEntry(entry, generation){
 }
 
 async function markThumbnailFailure(entry){
+  const current = findReplayEntry(entry.key) || entry;
   const updated = {
-    ...entry.meta,
+    ...current.meta,
     thumbStatus: "failed",
     thumbType: null,
     thumbBytes: null,
     thumbSize: 0,
-    thumbAttempts: (Number(entry.meta.thumbAttempts) || 0) + 1,
+    thumbAttempts: (Number(current.meta.thumbAttempts) || 0) + 1,
     thumbErrorAt: Date.now()
   };
-  const index = galleryEntries.findIndex(item => item.key === entry.key);
-  if (index >= 0) galleryEntries[index] = { key: entry.key, meta: updated };
+  replaceReplayMeta(entry.key, updated);
   try{ await metadataWithTimeout(replayMeta.put(updated), 1200); }
   catch(err){ console.warn("gravei thumbnail failure metadata", err); }
 }
@@ -2116,17 +2255,19 @@ async function runThumbnailQueue(){
       const generation = thumbnailGeneration;
       thumbnailActiveKey = entry.key;
       try{
-        const updated = await generateThumbnailForEntry(entry, generation);
+        let updated = await generateThumbnailForEntry(entry, generation);
         if (generation !== thumbnailGeneration) continue;
-        const index = galleryEntries.findIndex(item => item.key === entry.key);
-        if (index >= 0) galleryEntries[index] = { key: entry.key, meta: updated };
+        const latest = findReplayEntry(entry.key);
+        updated = { ...(latest ? latest.meta : {}), ...updated, favorite: !!(latest && latest.meta && latest.meta.favorite) };
+        replaceReplayMeta(entry.key, updated);
         try{ await metadataWithTimeout(replayMeta.put(updated), 1200); }
         catch(err){ console.warn("gravei thumbnail metadata", err); }
         const card = findGalleryCard(entry.key);
         if (card){
-          const freshEntry = { key: entry.key, meta: updated };
+          const freshEntry = findReplayEntry(entry.key) || { key: entry.key, meta: updated };
           attachThumbnailToCard(card, freshEntry);
           updateGalleryCardLabels(card, freshEntry);
+          syncFavoriteControls(freshEntry);
         }
         updateGallerySummary();
       }catch(err){
@@ -2180,14 +2321,16 @@ function renderGalleryCards(){
   while (box.firstChild) box.removeChild(box.firstChild);
   const empty = $("gallery-empty");
   empty.hidden = galleryEntries.length > 0;
-  empty.textContent = galleryEntries.length ? "" : "Nenhum replay guardado.";
+  empty.textContent = galleryEntries.length
+    ? ""
+    : (galleryFilter === "favorites" ? "Nenhum favorito ainda. Toque no coração dos melhores lances." : "Nenhum replay guardado.");
   updateGallerySummary();
   galleryEntries.forEach((entry, index) => {
-    const card = document.createElement("button");
-    card.type = "button";
+    const card = document.createElement("article");
     card.className = "replay-card";
     card.dataset.replayKey = String(entry.key);
-    card.setAttribute("aria-label", "Abrir " + replayDurationText(entry.meta) + ", " + replayDateText(entry.meta));
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
 
     const visual = document.createElement("span");
     visual.className = "replay-card-visual";
@@ -2202,27 +2345,48 @@ function renderGalleryCards(){
 
     const overlay = document.createElement("span");
     overlay.className = "replay-card-overlay";
+    const meta = document.createElement("span");
+    meta.className = "replay-card-meta";
     const duration = document.createElement("span");
     duration.className = "replay-card-duration";
     duration.textContent = replayDurationText(entry.meta);
     const date = document.createElement("span");
     date.className = "replay-card-date";
     date.textContent = replayDateText(entry.meta);
-    overlay.appendChild(duration);
-    overlay.appendChild(date);
+    meta.appendChild(duration);
+    meta.appendChild(date);
+    overlay.appendChild(meta);
+
+    const favorite = createFavoriteButton("replay-card-favorite");
+    updateFavoriteButton(favorite, entry);
+    favorite.onclick = event => {
+      event.stopPropagation();
+      void toggleReplayFavorite(entry, card);
+    };
+
+    const openCard = () => {
+      galleryScrollTop = $("gallery-scroll").scrollTop;
+      openReplayAt(index, true);
+    };
+    card.onclick = event => {
+      if (event.target.closest && event.target.closest(".favorite-btn")) return;
+      openCard();
+    };
+    card.onkeydown = event => {
+      if (event.target !== card || (event.key !== "Enter" && event.key !== " ")) return;
+      event.preventDefault();
+      openCard();
+    };
 
     card.appendChild(visual);
     card.appendChild(overlay);
-    card.onclick = () => {
-      galleryScrollTop = $("gallery-scroll").scrollTop;
-      openReplayAt(index);
-    };
+    card.appendChild(favorite);
+    updateGalleryCardLabels(card, entry);
     box.appendChild(card);
     attachThumbnailToCard(card, entry);
   });
   startThumbnailObservation();
 }
-
 async function openGallery(){
   stopThumbnailWork();
   releaseGalleryThumbUrls();
@@ -2235,12 +2399,14 @@ async function openGallery(){
   try{
     const entries = await listGalleryEntries();
     if (token !== galleryLoadToken) return;
-    galleryEntries = entries;
+    galleryAllEntries = entries;
+    applyGalleryFilter();
     renderGalleryCards();
     requestAnimationFrame(() => { $("gallery-scroll").scrollTop = galleryScrollTop; });
   }catch(err){
     console.error("gravei gallery list", err);
     if (token !== galleryLoadToken) return;
+    galleryAllEntries = [];
     galleryEntries = [];
     $("gallery-empty").hidden = false;
     $("gallery-empty").textContent = "Não foi possível abrir seus replays.";
@@ -2271,12 +2437,13 @@ function clearPlayerMedia(){
   playerInfo = null;
   playerShareBusy = false;
   $("player-share").disabled = true;
+  updateFavoriteButton($("player-favorite"), null);
 }
 
 function updatePlayerNavigation(){
-  $("player-position").textContent = (galleryIndex + 1) + " de " + galleryEntries.length;
+  $("player-position").textContent = (galleryIndex + 1) + " de " + playerEntries.length;
   $("player-prev").disabled = galleryIndex <= 0;
-  $("player-next").disabled = galleryIndex < 0 || galleryIndex >= galleryEntries.length - 1;
+  $("player-next").disabled = galleryIndex < 0 || galleryIndex >= playerEntries.length - 1;
 }
 
 async function enrichReplayFromPlayer(entry, video, token){
@@ -2297,23 +2464,26 @@ async function enrichReplayFromPlayer(entry, video, token){
     height,
     orientation: width && height ? (height > width ? "portrait" : "landscape") : base.orientation
   };
-  galleryEntries[galleryIndex] = { key: entry.key, meta: updated };
+  replaceReplayMeta(entry.key, updated);
+  syncFavoriteControls(findReplayEntry(entry.key));
   try{ await metadataWithTimeout(replayMeta.put(updated), 1200); }
   catch(err){ console.warn("gravei player metadata", err); }
 }
 
-async function openReplayAt(index){
-  if (index < 0 || index >= galleryEntries.length) return;
+async function openReplayAt(index, resetSnapshot = false){
+  if (resetSnapshot || !playerEntries.length) playerEntries = galleryEntries.slice();
+  if (index < 0 || index >= playerEntries.length) return;
   stopThumbnailWork();
   releaseGalleryThumbUrls();
   const token = ++playerLoadToken;
   clearPlayerMedia();
   galleryIndex = index;
+  const entry = playerEntries[index];
   updatePlayerNavigation();
+  updateFavoriteButton($("player-favorite"), entry);
   $("player-loading").hidden = false;
   $("player-loading").textContent = "Preparando replay…";
   show("s-player");
-  const entry = galleryEntries[index];
   try{
     const item = await vault.get(entry.key);
     if (token !== playerLoadToken) return;
@@ -2350,10 +2520,12 @@ async function openReplayAt(index){
     $("player-share").disabled = true;
   }
 }
-
 function closePlayerToGallery(){
   playerLoadToken++;
   clearPlayerMedia();
+  playerEntries = [];
+  galleryIndex = -1;
+  applyGalleryFilter();
   show("s-gallery");
   renderGalleryCards();
   requestAnimationFrame(() => { $("gallery-scroll").scrollTop = galleryScrollTop; });
@@ -2372,9 +2544,9 @@ async function shareCurrentReplay(){
 }
 
 function deleteCurrentReplay(){
-  if (galleryIndex < 0 || galleryIndex >= galleryEntries.length) return;
+  const entry = currentPlayerEntry();
+  if (!entry) return;
   try{ $("gallery-player").pause(); }catch(_){}
-  const entry = galleryEntries[galleryIndex];
   openConfirm(
     "Excluir replay?",
     "Este replay será apagado definitivamente do Gravei.",
@@ -2397,10 +2569,13 @@ function deleteCurrentReplay(){
       }catch(_){}
       playerLoadToken++;
       clearPlayerMedia();
-      try{ galleryEntries = await listGalleryEntries(); }
-      catch(_){ galleryEntries = galleryEntries.filter(item => item.key !== entry.key); }
+      playerEntries = [];
+      galleryIndex = -1;
+      try{ galleryAllEntries = await listGalleryEntries(); }
+      catch(_){ galleryAllEntries = galleryAllEntries.filter(item => item.key !== entry.key); }
+      applyGalleryFilter();
       await refreshVaultUI();
-      if (!galleryEntries.length){
+      if (!galleryAllEntries.length){
         show("s-ended");
       }else{
         show("s-gallery");
@@ -2411,7 +2586,6 @@ function deleteCurrentReplay(){
     }
   );
 }
-
 async function deliver(blob, name){
   const file = new File([blob], name, { type: blob.type });
 
