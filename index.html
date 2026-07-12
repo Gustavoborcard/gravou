@@ -235,7 +235,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
   position:relative;overflow:hidden;
 }
 #btn-save .rw{line-height:0}
-#btn-save .rw svg{width:52px;height:52px;transform:scaleY(-1);transform-origin:center;transform-box:fill-box}
+#btn-save .rw svg{width:52px;height:52px}
 #btn-save .lbl{font-size:19px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
 #btn-save .secs{font-size:42px;font-weight:900;color:var(--accent)}
 .ripple{position:absolute;border-radius:50%;background:rgba(255,59,48,.45);transform:scale(0);animation:rip .5s ease-out;pointer-events:none}
@@ -386,7 +386,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v81</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v80</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -471,8 +471,8 @@ a{color:var(--accent)}
   <p class="tagline" id="ended-msg">Nenhum replay guardado.</p>
   <div class="stack" id="central-actions">
     <button class="btn btn-primary" id="b-again">Continuar gravando</button>
-    <button class="btn btn-ghost" id="b-gallery" style="display:none">Meus Replays</button>
-    <button class="btn btn-ghost" id="b-saveall" style="display:none" aria-hidden="true" tabindex="-1" disabled>Salvar ou compartilhar</button>
+    <button class="btn btn-ghost" id="b-gallery" style="display:none">Ver meus replays</button>
+    <button class="btn btn-ghost" id="b-saveall" style="display:none">Salvar ou compartilhar</button>
     <button class="btn btn-ghost" id="b-home">Início</button>
     <button class="btn btn-ghost" id="b-discard" style="display:none;color:var(--text-dim)">Descartar tudo</button>
   </div>
@@ -725,7 +725,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v81 - central simplificada e ícone de replay invertido
+   Gravei v80 - compartilhamento único até 200 MB
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
@@ -1142,6 +1142,7 @@ $("b-home").onclick = async () => {
   await refreshVaultUI();
   show("s-home");
 };
+$("b-saveall").onclick = saveAll;
 $("b-gallery").onclick = openGallery;
 $("b-gallery-back").onclick = closeGalleryToCentral;
 $("gallery-filter-all").onclick = () => setGalleryFilter("all");
@@ -1801,11 +1802,16 @@ async function refreshVaultUI(){
       (summary.sizeAvailable ? " · " + formatReplayBytes(summary.bytes) + " no Gravei." : ".")
     : "Nenhum replay guardado.";
   $("b-gallery").style.display = n > 0 ? "block" : "none";
-  // v81: o compartilhamento múltiplo vive apenas em Meus Replays.
-  $("b-saveall").style.display = "none";
-  $("b-saveall").disabled = true;
-  $("b-saveall").setAttribute("aria-hidden", "true");
-  $("b-saveall").tabIndex = -1;
+  $("b-saveall").style.display = n > 0 ? "block" : "none";
+  const pendingShareCount = Array.isArray(state.pendingShareKeys) ? state.pendingShareKeys.length : 0;
+  const centralShareTooLarge = summary.sizeAvailable && summary.bytes > SELECTED_SHARE_MAX_BYTES;
+  $("b-saveall").textContent = centralShareTooLarge
+    ? "Escolha até 200 MB em Meus Replays"
+    : (pendingShareCount
+      ? "Continuar compartilhando (" + pendingShareCount + ")"
+      : "Salvar ou compartilhar (" + n + ")");
+  $("b-saveall").disabled = centralShareTooLarge;
+  $("b-saveall").className = "btn btn-ghost";
   $("b-discard").style.display = n > 0 ? "block" : "none";
   $("b-again").textContent = resumable ? "Continuar gravando" : "Iniciar nova gravação";
   $("b-again").className = "btn " + ((resumable || n === 0) ? "btn-primary" : "btn-ghost");
