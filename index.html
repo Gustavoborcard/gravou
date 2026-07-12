@@ -289,6 +289,50 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 #duration-picker .stack{margin:22px auto 0}
 @media (orientation:landscape){#duration-picker{align-items:center}#duration-picker .sheet{border-radius:20px;margin:0 20px}}
 
+/* ---- galeria MVP: uma coluna, sem miniaturas nesta fase ---- */
+.gallery-screen,.player-screen{padding:0;text-align:left;align-items:stretch;justify-content:flex-start;overflow:hidden;background:var(--bg)}
+.gallery-screen > *,.player-screen > *{flex-shrink:1}
+.gallery-header,.player-header{
+  display:grid;grid-template-columns:minmax(76px,1fr) auto minmax(76px,1fr);align-items:center;gap:8px;
+  padding:calc(12px + var(--safe-t)) 16px 12px;border-bottom:1px solid var(--line);background:rgba(18,18,18,.96);z-index:2;
+}
+.gallery-back{border:0;background:transparent;color:var(--text);font:inherit;font-size:15px;font-weight:600;min-height:44px;padding:0;text-align:left;cursor:pointer}
+.gallery-header-copy{text-align:center;min-width:0}
+.gallery-header h2{font-size:20px;white-space:nowrap}
+.gallery-header p{font-size:12px;color:var(--text-dim);margin-top:2px;white-space:nowrap}
+.gallery-header-spacer{display:block;min-width:76px}
+.gallery-scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 16px calc(28px + var(--safe-b))}
+.gallery-list{display:flex;flex-direction:column;gap:16px;width:100%;max-width:640px;margin:0 auto}
+.replay-card{position:relative;display:block;width:100%;aspect-ratio:16/9;min-height:180px;overflow:hidden;border:1px solid var(--line);border-radius:18px;background:#181818;color:var(--text);padding:0;text-align:left;font:inherit;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.replay-card:active{transform:scale(.992)}
+.replay-card-visual{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 35%,#333 0,#202020 42%,#151515 100%)}
+.replay-card-mark{font-family:'Poppins',sans-serif;font-size:clamp(24px,8vw,42px);font-weight:800;letter-spacing:-.04em;color:rgba(250,250,247,.16)}
+.replay-card-play{position:absolute;width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,59,48,.92);box-shadow:0 5px 18px rgba(0,0,0,.35)}
+.replay-card-play::after{content:"";margin-left:4px;border-top:9px solid transparent;border-bottom:9px solid transparent;border-left:14px solid #fff}
+.replay-card-overlay{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:34px 16px 14px;background:linear-gradient(transparent,rgba(0,0,0,.88))}
+.replay-card-duration{font-size:17px;font-weight:800;color:#fff}
+.replay-card-date{font-size:13px;font-weight:600;color:rgba(255,255,255,.8);text-align:right}
+.gallery-empty{max-width:360px;margin:18vh auto 0;text-align:center;color:var(--text-dim);line-height:1.55;padding:0 24px}
+.gallery-empty[hidden]{display:none}
+.player-screen{background:#000}
+.player-header{background:rgba(0,0,0,.96);border-color:rgba(255,255,255,.12)}
+.player-position{text-align:center;font-size:14px;font-weight:700;color:var(--text-dim)}
+.player-stage{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:#000}
+#gallery-player{display:block;width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;background:#000}
+.player-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;color:var(--text-dim);font-size:14px;pointer-events:none}
+.player-loading[hidden]{display:none}
+.player-footer{display:flex;flex-direction:column;gap:10px;padding:12px 16px calc(14px + var(--safe-b));background:var(--bg);border-top:1px solid var(--line)}
+.player-footer .btn{width:100%;max-width:420px;margin:0 auto;padding:13px 20px;font-size:15px}
+.player-nav{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;max-width:420px;margin:0 auto}
+.player-nav button{border:1px solid var(--line);border-radius:999px;min-height:42px;background:var(--surface);color:var(--text);font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.player-nav button:disabled,.player-footer .btn:disabled{opacity:.35;cursor:default}
+#player-delete{color:var(--rec)}
+@media (orientation:landscape) and (max-height:600px){
+  .player-screen.active{display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,34vw);grid-template-rows:auto minmax(0,1fr)}
+  .player-header{grid-column:1/-1}.player-stage{grid-column:1;grid-row:2}.player-footer{grid-column:2;grid-row:2;justify-content:center;border-top:0;border-left:1px solid var(--line);padding:12px calc(12px + var(--safe-r,0px)) calc(12px + var(--safe-b)) 12px}
+  .gallery-scroll{padding-top:12px}.replay-card{max-width:520px;margin:0 auto}
+}
+
 .hint{margin-top:26px;font-size:13px;color:var(--text-dim);line-height:1.6;max-width:300px}
 a{color:var(--accent)}
 </style>
@@ -305,7 +349,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v73</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v74</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -386,14 +430,52 @@ a{color:var(--accent)}
 <!-- CENTRAL DE REPLAYS -->
 <section class="screen" id="s-ended">
   <div class="status-icon ok"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg></div>
-  <h2>Seus replays</h2>
+  <h2>Central de Replays</h2>
   <p class="tagline" id="ended-msg">Nenhum replay guardado.</p>
-  <div class="stack">
-    <button class="btn btn-primary" id="b-saveall" style="display:none">Salvar ou compartilhar</button>
-    <button class="btn btn-ghost" id="b-again">Voltar a gravar</button>
+  <div class="stack" id="central-actions">
+    <button class="btn btn-primary" id="b-again">Continuar gravando</button>
+    <button class="btn btn-ghost" id="b-gallery" style="display:none">Ver meus replays</button>
+    <button class="btn btn-ghost" id="b-saveall" style="display:none">Salvar ou compartilhar</button>
     <button class="btn btn-ghost" id="b-home">Início</button>
     <button class="btn btn-ghost" id="b-discard" style="display:none;color:var(--text-dim)">Descartar tudo</button>
   </div>
+</section>
+
+<!-- GALERIA MVP: cartões verticais; miniaturas entram na próxima fase -->
+<section class="screen gallery-screen" id="s-gallery">
+  <header class="gallery-header">
+    <button type="button" class="gallery-back" id="b-gallery-back">‹ Central</button>
+    <div class="gallery-header-copy">
+      <h2>Meus Replays</h2>
+      <p id="gallery-summary">Carregando…</p>
+    </div>
+    <span class="gallery-header-spacer" aria-hidden="true"></span>
+  </header>
+  <main class="gallery-scroll" id="gallery-scroll">
+    <div class="gallery-list" id="gallery-list"></div>
+    <p class="gallery-empty" id="gallery-empty" hidden>Nenhum replay guardado.</p>
+  </main>
+</section>
+
+<!-- PLAYER INDIVIDUAL -->
+<section class="screen player-screen" id="s-player">
+  <header class="player-header">
+    <button type="button" class="gallery-back" id="b-player-back">‹ Replays</button>
+    <span class="player-position" id="player-position">1 de 1</span>
+    <span class="gallery-header-spacer" aria-hidden="true"></span>
+  </header>
+  <div class="player-stage">
+    <video id="gallery-player" controls playsinline preload="metadata"></video>
+    <div class="player-loading" id="player-loading">Preparando replay…</div>
+  </div>
+  <footer class="player-footer">
+    <div class="player-nav">
+      <button type="button" id="player-prev">‹ Anterior</button>
+      <button type="button" id="player-next">Próximo ›</button>
+    </div>
+    <button type="button" class="btn btn-primary" id="player-share" disabled>Salvar ou compartilhar</button>
+    <button type="button" class="btn btn-ghost" id="player-delete">Excluir replay</button>
+  </footer>
 </section>
 
 <!-- MODO CONTROLE -->
@@ -594,7 +676,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v73 - captura unica e MP4 plano
+   Gravei v74 - captura unica e MP4 plano
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
@@ -726,6 +808,17 @@ const replayMeta = {
       const rq = db.transaction("replayMeta", "readonly").objectStore("replayMeta").getAll();
       rq.onsuccess = () => res(rq.result || []);
       rq.onerror = () => rej(rq.error);
+    });
+  },
+  async removeKeys(keys){
+    if (!keys.length) return;
+    const db = await this.db();
+    return new Promise((res, rej) => {
+      const tx = db.transaction("replayMeta", "readwrite");
+      const store = tx.objectStore("replayMeta");
+      keys.forEach(key => store.delete(key));
+      tx.oncomplete = res;
+      tx.onerror = () => rej(tx.error);
     });
   },
   async clear(){
@@ -1009,6 +1102,13 @@ $("b-home").onclick = async () => {
   show("s-home");
 };
 $("b-saveall").onclick = saveAll;
+$("b-gallery").onclick = openGallery;
+$("b-gallery-back").onclick = closeGalleryToCentral;
+$("b-player-back").onclick = closePlayerToGallery;
+$("player-prev").onclick = () => openReplayAt(galleryIndex - 1);
+$("player-next").onclick = () => openReplayAt(galleryIndex + 1);
+$("player-share").onclick = shareCurrentReplay;
+$("player-delete").onclick = deleteCurrentReplay;
 $("b-recover").onclick = async () => { await refreshVaultUI(); show("s-ended"); };
 $("b-discard").onclick = async () => {
   const n = await vault.count();
@@ -1580,20 +1680,306 @@ async function saveAll(){
 async function refreshVaultUI(){
   const summary = await getReplayStorageSummary();
   const n = summary.count;
+  const resumable = !!state.everRecorded;
   // central de replays
   $("ended-msg").textContent = n > 0
     ? "Você tem " + n + " replay" + (n > 1 ? "s" : "") + " guardado" + (n > 1 ? "s" : "") +
       (summary.sizeAvailable ? " · " + formatReplayBytes(summary.bytes) + " no Gravei." : ".")
     : "Nenhum replay guardado.";
+  $("b-gallery").style.display = n > 0 ? "block" : "none";
   $("b-saveall").style.display = n > 0 ? "block" : "none";
   $("b-saveall").textContent = "Salvar ou compartilhar (" + n + ")";
+  $("b-saveall").className = "btn btn-ghost";
   $("b-discard").style.display = n > 0 ? "block" : "none";
-  // tela inicial: rótulos dinâmicos
+  $("b-again").textContent = resumable ? "Continuar gravando" : "Iniciar nova gravação";
+  $("b-again").className = "btn " + ((resumable || n === 0) ? "btn-primary" : "btn-ghost");
+  $("b-gallery").className = "btn " + ((!resumable && n > 0) ? "btn-primary" : "btn-ghost");
+  $("b-again").style.order = resumable ? "0" : "2";
+  $("b-gallery").style.order = resumable ? "1" : "0";
+  $("b-saveall").style.order = resumable ? "2" : "1";
+  $("b-home").style.order = "3";
+  $("b-discard").style.order = "4";
+  // tela inicial: entrada explícita para replays guardados
   $("b-recover").style.display = n > 0 ? "block" : "none";
-  $("b-recover").textContent = "Continuar (" + n + " replay" + (n > 1 ? "s" : "") + ")";
+  $("b-recover").textContent = "Meus Replays (" + n + ")";
   $("b-start").textContent = n > 0 ? "Nova gravação" : "Começar agora";
   updateCountChip(n);
   return n;
+}
+
+/* ---------- galeria MVP: metadados na lista, um Blob no player ---------- */
+let galleryEntries = [];
+let galleryIndex = -1;
+let galleryScrollTop = 0;
+let galleryLoadToken = 0;
+let playerLoadToken = 0;
+let playerObjectUrl = null;
+let playerBlob = null;
+let playerInfo = null;
+let playerShareBusy = false;
+
+const replayDateFormatter = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit"
+});
+
+function replayDurationText(meta){
+  const actual = Number(meta && meta.actualDuration);
+  const requested = Number(meta && meta.requestedDuration);
+  const seconds = Number.isFinite(actual) && actual > 0 ? actual : requested;
+  return Number.isFinite(seconds) && seconds > 0 ? Math.max(1, Math.round(seconds)) + "s" : "Replay";
+}
+
+function replayDateText(meta){
+  const time = Number(meta && meta.createdAt);
+  if (!Number.isFinite(time) || time <= 0) return "Data indisponível";
+  return replayDateFormatter.format(new Date(time)).replace(",", " ·");
+}
+
+async function listGalleryEntries(){
+  const keys = await vault.keys();
+  let metas = [];
+  try{ metas = await metadataWithTimeout(replayMeta.all(), 1200); }
+  catch(err){ console.warn("gravei gallery metadata", err); }
+  const byId = new Map(metas.map(meta => [meta.replayId, meta]));
+  return keys.slice().reverse().map(key => ({
+    key,
+    meta: byId.get(key) || {
+      schemaVersion: 1, replayId: key, name: "gravei-replay-" + key + ".mp4",
+      type: "video/mp4", size: null, createdAt: null, requestedDuration: null,
+      actualDuration: null, width: null, height: null, orientation: null,
+      favorite: false, thumbStatus: "none", thumbType: null
+    }
+  }));
+}
+
+function updateGallerySummary(){
+  const n = galleryEntries.length;
+  const allSizesKnown = n > 0 && galleryEntries.every(entry => Number.isFinite(Number(entry.meta.size)));
+  const bytes = allSizesKnown ? galleryEntries.reduce((sum, entry) => sum + Number(entry.meta.size), 0) : 0;
+  $("gallery-summary").textContent = n + " replay" + (n === 1 ? "" : "s") +
+    (allSizesKnown ? " · " + formatReplayBytes(bytes) : "");
+}
+
+function renderGalleryCards(){
+  const box = $("gallery-list");
+  while (box.firstChild) box.removeChild(box.firstChild);
+  const empty = $("gallery-empty");
+  empty.hidden = galleryEntries.length > 0;
+  empty.textContent = galleryEntries.length ? "" : "Nenhum replay guardado.";
+  updateGallerySummary();
+  galleryEntries.forEach((entry, index) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "replay-card";
+    card.setAttribute("aria-label", "Abrir " + replayDurationText(entry.meta) + ", " + replayDateText(entry.meta));
+
+    const visual = document.createElement("span");
+    visual.className = "replay-card-visual";
+    const mark = document.createElement("span");
+    mark.className = "replay-card-mark";
+    mark.textContent = "GRAVEI";
+    const play = document.createElement("span");
+    play.className = "replay-card-play";
+    play.setAttribute("aria-hidden", "true");
+    visual.appendChild(mark);
+    visual.appendChild(play);
+
+    const overlay = document.createElement("span");
+    overlay.className = "replay-card-overlay";
+    const duration = document.createElement("span");
+    duration.className = "replay-card-duration";
+    duration.textContent = replayDurationText(entry.meta);
+    const date = document.createElement("span");
+    date.className = "replay-card-date";
+    date.textContent = replayDateText(entry.meta);
+    overlay.appendChild(duration);
+    overlay.appendChild(date);
+
+    card.appendChild(visual);
+    card.appendChild(overlay);
+    card.onclick = () => {
+      galleryScrollTop = $("gallery-scroll").scrollTop;
+      openReplayAt(index);
+    };
+    box.appendChild(card);
+  });
+}
+
+async function openGallery(){
+  const token = ++galleryLoadToken;
+  $("gallery-list").textContent = "";
+  $("gallery-empty").hidden = false;
+  $("gallery-empty").textContent = "Carregando replays…";
+  $("gallery-summary").textContent = "Carregando…";
+  show("s-gallery");
+  try{
+    const entries = await listGalleryEntries();
+    if (token !== galleryLoadToken) return;
+    galleryEntries = entries;
+    renderGalleryCards();
+    requestAnimationFrame(() => { $("gallery-scroll").scrollTop = galleryScrollTop; });
+  }catch(err){
+    console.error("gravei gallery list", err);
+    if (token !== galleryLoadToken) return;
+    galleryEntries = [];
+    $("gallery-empty").hidden = false;
+    $("gallery-empty").textContent = "Não foi possível abrir seus replays.";
+    $("gallery-summary").textContent = "Tente novamente";
+  }
+}
+
+async function closeGalleryToCentral(){
+  galleryLoadToken++;
+  await refreshVaultUI();
+  show("s-ended");
+}
+
+function clearPlayerMedia(){
+  const video = $("gallery-player");
+  video.onloadedmetadata = null;
+  video.onerror = null;
+  try{ video.pause(); }catch(_){}
+  video.removeAttribute("src");
+  try{ video.load(); }catch(_){}
+  if (playerObjectUrl){
+    URL.revokeObjectURL(playerObjectUrl);
+    playerObjectUrl = null;
+  }
+  playerBlob = null;
+  playerInfo = null;
+  playerShareBusy = false;
+  $("player-share").disabled = true;
+}
+
+function updatePlayerNavigation(){
+  $("player-position").textContent = (galleryIndex + 1) + " de " + galleryEntries.length;
+  $("player-prev").disabled = galleryIndex <= 0;
+  $("player-next").disabled = galleryIndex < 0 || galleryIndex >= galleryEntries.length - 1;
+}
+
+async function enrichReplayFromPlayer(entry, video, token){
+  if (token !== playerLoadToken || !playerBlob || !playerInfo) return;
+  const width = Number(video.videoWidth) || null;
+  const height = Number(video.videoHeight) || null;
+  const duration = Number(video.duration);
+  const base = entry.meta && entry.meta.createdAt
+    ? entry.meta
+    : makeReplayMeta(entry.key, playerInfo, entry.meta && entry.meta.requestedDuration);
+  const updated = {
+    ...base,
+    name: playerInfo.name,
+    type: playerInfo.type,
+    size: playerBlob.size,
+    actualDuration: Number.isFinite(duration) && duration > 0 ? duration : base.actualDuration,
+    width,
+    height,
+    orientation: width && height ? (height > width ? "portrait" : "landscape") : base.orientation
+  };
+  galleryEntries[galleryIndex] = { key: entry.key, meta: updated };
+  try{ await metadataWithTimeout(replayMeta.put(updated), 1200); }
+  catch(err){ console.warn("gravei player metadata", err); }
+}
+
+async function openReplayAt(index){
+  if (index < 0 || index >= galleryEntries.length) return;
+  const token = ++playerLoadToken;
+  clearPlayerMedia();
+  galleryIndex = index;
+  updatePlayerNavigation();
+  $("player-loading").hidden = false;
+  $("player-loading").textContent = "Preparando replay…";
+  show("s-player");
+  const entry = galleryEntries[index];
+  try{
+    const item = await vault.get(entry.key);
+    if (token !== playerLoadToken) return;
+    if (!item) throw Error("Replay não encontrado");
+    const blob = itemBlob(item);
+    if (!blob.size) throw Error("Replay vazio");
+    playerBlob = blob;
+    playerInfo = {
+      name: item.name || entry.meta.name || "gravei-replay.mp4",
+      type: item.type || blob.type || "video/mp4",
+      t: item.t || entry.meta.createdAt,
+      blob
+    };
+    playerObjectUrl = URL.createObjectURL(blob);
+    const video = $("gallery-player");
+    video.onloadedmetadata = () => {
+      if (token !== playerLoadToken) return;
+      $("player-loading").hidden = true;
+      void enrichReplayFromPlayer(entry, video, token);
+    };
+    video.onerror = () => {
+      if (token !== playerLoadToken) return;
+      $("player-loading").hidden = false;
+      $("player-loading").textContent = "Não foi possível reproduzir este replay.";
+    };
+    video.src = playerObjectUrl;
+    video.load();
+    $("player-share").disabled = false;
+  }catch(err){
+    console.error("gravei player", err);
+    if (token !== playerLoadToken) return;
+    $("player-loading").hidden = false;
+    $("player-loading").textContent = "Não foi possível abrir este replay.";
+    $("player-share").disabled = true;
+  }
+}
+
+function closePlayerToGallery(){
+  playerLoadToken++;
+  clearPlayerMedia();
+  renderGalleryCards();
+  show("s-gallery");
+  requestAnimationFrame(() => { $("gallery-scroll").scrollTop = galleryScrollTop; });
+}
+
+async function shareCurrentReplay(){
+  if (playerShareBusy || !playerBlob || !playerInfo) return;
+  playerShareBusy = true;
+  $("player-share").disabled = true;
+  try{
+    await deliver(playerBlob, playerInfo.name);
+  }finally{
+    playerShareBusy = false;
+    $("player-share").disabled = !playerBlob;
+  }
+}
+
+function deleteCurrentReplay(){
+  if (galleryIndex < 0 || galleryIndex >= galleryEntries.length) return;
+  try{ $("gallery-player").pause(); }catch(_){}
+  const entry = galleryEntries[galleryIndex];
+  openConfirm(
+    "Excluir replay?",
+    "Este replay será apagado definitivamente do Gravei.",
+    "Excluir",
+    async () => {
+      try{
+        await vault.removeKeys([entry.key]);
+      }catch(err){
+        console.error("gravei gallery delete", err);
+        toast("Não foi possível excluir o replay", "err");
+        return;
+      }
+      try{ await metadataWithTimeout(replayMeta.removeKeys([entry.key]), 1200); }
+      catch(err){ console.warn("gravei gallery metadata delete", err); }
+      playerLoadToken++;
+      clearPlayerMedia();
+      try{ galleryEntries = await listGalleryEntries(); }
+      catch(_){ galleryEntries = galleryEntries.filter(item => item.key !== entry.key); }
+      await refreshVaultUI();
+      if (!galleryEntries.length){
+        show("s-ended");
+      }else{
+        renderGalleryCards();
+        show("s-gallery");
+        requestAnimationFrame(() => { $("gallery-scroll").scrollTop = galleryScrollTop; });
+      }
+      toast("Replay excluído", "info", 1800);
+    }
+  );
 }
 
 async function deliver(blob, name){
