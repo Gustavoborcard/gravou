@@ -97,6 +97,8 @@ body{
   transition:all .12s ease;
 }
 .chip.sel{background:var(--accent);border-color:var(--accent);color:#141200;transform:scale(1.05)}
+#s-time #chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;max-width:320px}
+#s-time #chips .chip{width:100%;padding:12px 8px}
 
 /* ---- ícones de status ---- */
 .status-icon{width:76px;height:76px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:22px;font-size:34px;background:var(--surface-2)}
@@ -303,7 +305,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v71</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v72</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -592,7 +594,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v71 - captura unica e MP4 plano
+   Gravei v72 - captura unica e MP4 plano
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
