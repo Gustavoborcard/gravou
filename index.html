@@ -386,7 +386,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v82a diagnóstico</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v82c keyframe</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -725,7 +725,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v82a - diagnóstico persistente, sem mudança de comportamento
+   Gravei v82c - replay iniciado em keyframe de video
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
@@ -737,7 +737,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v82a-diagnostico";
+  const VERSION = "v82c-keyframe";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -1136,7 +1136,7 @@ const DURATIONS = [10,15,20,30,45,60];
 
 const state = {
  duration:20,facing:"user",cams:[],camIndex:-1,stream:null,mime:"",ext:"mp4",pendingShareKeys:null,
- captureRec:null,captureGeneration:0,initSegment:null,dataEventSerial:0,processedEventSerial:0,fragments:[],fragmentQueue:Promise.resolve(),flushWaiters:[],
+ captureRec:null,captureGeneration:0,initSegment:null,videoTrackId:null,defaultSampleFlags:{},lastReplaySelectionReason:"empty",dataEventSerial:0,processedEventSerial:0,fragments:[],fragmentQueue:Promise.resolve(),flushWaiters:[],
  lastChunkAt:0,bufferSeconds:0,captureRecovering:false,formatProbeFailures:0,formatRejected:false,timerId:null,wakeLock:null,saving:false,replayCount:0,active:false
 };
 
@@ -1646,6 +1646,7 @@ try{
 }catch(_){}
 
 /* ---------- captura unica + buffer circular ---------- */
+function u24(a,o){return a[o]*65536+a[o+1]*256+a[o+2]}
 function u32(a,o){return new DataView(a.buffer,a.byteOffset,a.byteLength).getUint32(o)}
 function u64(a,o){return u32(a,o)*4294967296+u32(a,o+4)}
 function put32(a,o,v){new DataView(a.buffer,a.byteOffset,a.byteLength).setUint32(o,Number(v)>>>0)}
@@ -1654,9 +1655,83 @@ function btype(a,o){return String.fromCharCode(a[o],a[o+1],a[o+2],a[o+3])}
 function boxes(a,s=0,e=a.byteLength){const z=[];for(let p=s;p+8<=e;){let n=u32(a,p),head=8;const type=btype(a,p+4);if(n===1){if(p+16>e)break;n=u64(a,p+8);head=16}else if(n===0)n=e-p;if(!Number.isSafeInteger(n)||n<head||p+n>e)break;z.push({type,start:p,end:p+n,data:p+head});p+=n}return z}
 function child(a,p,t){return boxes(a,p.data,p.end).find(x=>x.type===t)}
 function fragmentTfdt(a){const moof=boxes(a).find(x=>x.type==='moof');if(!moof)throw Error('Fragmento sem moof');const mfhd=child(a,moof,'mfhd'),tracks=[];for(const traf of boxes(a,moof.data,moof.end).filter(x=>x.type==='traf')){const tfhd=child(a,traf,'tfhd'),tfdt=child(a,traf,'tfdt');if(!tfhd||!tfdt)continue;const id=u32(a,tfhd.data+4),version=a[tfdt.data],pos=tfdt.data+4;tracks.push({id,version,pos,base:version===1?u64(a,pos):u32(a,pos)})}if(!tracks.length)throw Error('Fragmento sem tempos');return{mfhd,tracks}}
+function initTrackInfo(a){
+  const result={videoTrackId:null,defaultSampleFlags:{}};
+  try{
+    const moov=boxes(a).find(x=>x.type==='moov');
+    if(!moov)return result;
+    for(const trak of boxes(a,moov.data,moov.end).filter(x=>x.type==='trak')){
+      const tkhd=child(a,trak,'tkhd'),mdia=child(a,trak,'mdia');
+      if(!tkhd||!mdia)continue;
+      const hdlr=child(a,mdia,'hdlr');
+      if(!hdlr||hdlr.data+12>hdlr.end||btype(a,hdlr.data+8)!=='vide')continue;
+      const version=a[tkhd.data],idPos=version===1?tkhd.data+20:tkhd.data+12;
+      if(idPos+4<=tkhd.end){result.videoTrackId=u32(a,idPos);break}
+    }
+    const mvex=child(a,moov,'mvex');
+    if(mvex)for(const trex of boxes(a,mvex.data,mvex.end).filter(x=>x.type==='trex')){
+      if(trex.data+24<=trex.end)result.defaultSampleFlags[u32(a,trex.data+4)]=u32(a,trex.data+20)
+    }
+  }catch(err){diag("fragment.trackInfo.error",{error:err})}
+  return result
+}
+function installInitSegment(init,generation,eventName,types){
+  state.initSegment=init;state.formatProbeFailures=0;
+  const info=initTrackInfo(init);
+  state.videoTrackId=info.videoTrackId;state.defaultSampleFlags=info.defaultSampleFlags;
+  diag(eventName,{generation,initBytes:init.byteLength,types});
+  diag("fragment.trackInfo",{generation,videoTrackId:state.videoTrackId,defaultSampleFlags:state.defaultSampleFlags})
+}
+function fragmentVideoStartKey(a){
+  if(!Number.isInteger(state.videoTrackId))return null;
+  try{
+    const moof=boxes(a).find(x=>x.type==='moof');
+    if(!moof)return null;
+    for(const traf of boxes(a,moof.data,moof.end).filter(x=>x.type==='traf')){
+      const tfhd=child(a,traf,'tfhd');
+      if(!tfhd||tfhd.data+8>tfhd.end)continue;
+      const trackId=u32(a,tfhd.data+4);
+      if(trackId!==state.videoTrackId)continue;
+      const tfhdFlags=u24(a,tfhd.data+1);
+      let p=tfhd.data+8,defaultFlags=state.defaultSampleFlags[trackId];
+      if(tfhdFlags&1)p+=8;
+      if(tfhdFlags&2)p+=4;
+      if(tfhdFlags&8)p+=4;
+      if(tfhdFlags&16)p+=4;
+      if(p>tfhd.end)return null;
+      if(tfhdFlags&32){
+        if(p+4>tfhd.end)return null;
+        defaultFlags=u32(a,p)
+      }
+      for(const trun of boxes(a,traf.data,traf.end).filter(x=>x.type==='trun')){
+        if(trun.data+8>trun.end)continue;
+        const trunFlags=u24(a,trun.data+1),sampleCount=u32(a,trun.data+4);
+        if(!sampleCount)continue;
+        let q=trun.data+8,sampleFlags=defaultFlags;
+        if(trunFlags&1)q+=4;
+        if(trunFlags&4){
+          if(q+4>trun.end)return null;
+          sampleFlags=u32(a,q)
+        }else{
+          if(trunFlags&256)q+=4;
+          if(trunFlags&512)q+=4;
+          if(q>trun.end)return null;
+          if(trunFlags&1024){
+            if(q+4>trun.end)return null;
+            sampleFlags=u32(a,q)
+          }
+        }
+        return Number.isInteger(sampleFlags)?(sampleFlags&65536)===0:null
+      }
+      return null
+    }
+  }catch(err){diag("fragment.keyframeParse.error",{error:err})}
+  return null
+}
 function settleFlush(force=false){const keep=[];for(const x of state.flushWaiters){if(force||state.processedEventSerial>=x.target){clearTimeout(x.timer);x.resolve()}else keep.push(x)}state.flushWaiters=keep}
 function updateBuffer(){const a=state.fragments[0],b=state.fragments[state.fragments.length-1];state.bufferSeconds=a&&b?Math.max(0,(b.endAt-a.startAt)/1000):0}
-function pruneBuffer(){const cutoff=performance.now()-(state.duration+3)*1000;while(state.fragments.length>2&&state.fragments[1].endAt<cutoff)state.fragments.shift();updateBuffer()}
+const KEYFRAME_MARGIN_SECONDS=6;
+function pruneBuffer(){const cutoff=performance.now()-(state.duration+KEYFRAME_MARGIN_SECONDS)*1000;while(state.fragments.length>2&&state.fragments[1].endAt<cutoff)state.fragments.shift();updateBuffer()}
 async function ingestChunk(blob,generation){
   if(generation!==state.captureGeneration||!blob||!blob.size){
     diag("fragment.skip", { generation, currentGeneration: state.captureGeneration, blobSize: blob ? blob.size : 0 });
@@ -1671,8 +1746,13 @@ async function ingestChunk(blob,generation){
   if(!state.initSegment){
     const m=moofs[0];
     if(!m){
+      const types=top.map(x=>x.type);
+      if(types.includes('ftyp')&&types.includes('moov')){
+        installInitSegment(a.slice(),generation,"fragment.initOnly",types);
+        return;
+      }
       const failures=++state.formatProbeFailures;
-      diag("fragment.noMoof", { generation, byteLength: a.byteLength, failures, topTypes: top.map(x=>x.type) });
+      diag("fragment.noMoof", { generation, byteLength: a.byteLength, failures, topTypes: types });
       if(failures>=3)failCaptureFormat();
       return;
     }
@@ -1682,17 +1762,17 @@ async function ingestChunk(blob,generation){
       failCaptureFormat();
       return;
     }
-    state.initSegment=init;state.formatProbeFailures=0;
-    diag("fragment.init", { generation, initBytes: init.byteLength, types });
+    installInitSegment(init,generation,"fragment.init",types);
   }
   let previous=state.fragments[state.fragments.length-1];
   for(let i=0;i<moofs.length;i++){
     const start=moofs[i].start,end=i+1<moofs.length?moofs[i+1].start:a.byteLength,bytes=a.slice(start,end);
-    fragmentTfdt(bytes);const endAt=performance.now(),startAt=previous?previous.endAt:endAt-1000;
-    previous={bytes,startAt,endAt};state.fragments.push(previous)
+    fragmentTfdt(bytes);
+    const videoStartKey=fragmentVideoStartKey(bytes),endAt=performance.now(),startAt=previous?previous.endAt:endAt-1000;
+    previous={bytes,startAt,endAt,videoStartKey};state.fragments.push(previous)
   }
   if(moofs.length){state.lastChunkAt=Date.now();pruneBuffer()}
-  diag("fragment.ingested", { generation, chunkBytes: a.byteLength, moofs: moofs.length, fragments: state.fragments.length, bufferSeconds: Number(state.bufferSeconds.toFixed(2)) });
+  diag("fragment.ingested", { generation, chunkBytes: a.byteLength, moofs: moofs.length, keyStarts: moofs.length?state.fragments.slice(-moofs.length).map(x=>x.videoStartKey):[], fragments: state.fragments.length, bufferSeconds: Number(state.bufferSeconds.toFixed(2)) });
 }
 function makeRecorder(stream){
   const options={videoBitsPerSecond:2500000,mimeType:state.mime};
@@ -1708,7 +1788,7 @@ function startCaptureRecorder(){
     return;
   }
   const gen=++state.captureGeneration;
-  state.initSegment=null;state.dataEventSerial=0;state.processedEventSerial=0;state.formatProbeFailures=0;state.formatRejected=false;
+  state.initSegment=null;state.videoTrackId=null;state.defaultSampleFlags={};state.lastReplaySelectionReason="empty";state.dataEventSerial=0;state.processedEventSerial=0;state.formatProbeFailures=0;state.formatRejected=false;
   state.fragments=[];state.bufferSeconds=0;state.fragmentQueue=Promise.resolve();state.flushWaiters=[];
   let rec;
   try{ rec=makeRecorder(state.stream); }
@@ -1744,7 +1824,7 @@ function stopCaptureRecorder(reset){
   state.captureRec=null;state.captureGeneration++;
   if(rec)try{rec.ondataavailable=null;rec.onerror=null;rec.onstop=null;if(rec.state!=='inactive')rec.stop()}catch(err){diag("recorder.stop.error", { error: err })}
   settleFlush(true);
-  if(reset){state.initSegment=null;state.fragments=[];state.bufferSeconds=0;state.fragmentQueue=Promise.resolve()}
+  if(reset){state.initSegment=null;state.videoTrackId=null;state.defaultSampleFlags={};state.lastReplaySelectionReason="empty";state.fragments=[];state.bufferSeconds=0;state.fragmentQueue=Promise.resolve()}
   diag("recorder.stop.done", { generation: state.captureGeneration, reset: !!reset });
 }
 async function restartCaptureRecorder(source="unknown"){
@@ -1849,7 +1929,33 @@ function ripple(e){
 function vibrate(ms){ try{ navigator.vibrate && navigator.vibrate(ms); }catch(_){} }
 
 function joinBytes(parts){const n=parts.reduce((s,p)=>s+p.byteLength,0),o=new Uint8Array(n);let at=0;for(const p of parts){o.set(p,at);at+=p.byteLength}return o}
-function chooseReplay(snapshot,duration){if(!snapshot.length)return[];const target=snapshot[snapshot.length-1].endAt-duration*1000;let pick=0;for(let i=0;i<snapshot.length;i++)if(snapshot[i].startAt<=target)pick=i;return snapshot.slice(pick)}
+function chooseReplay(snapshot,duration){
+  state.lastReplaySelectionReason="empty";
+  if(!snapshot.length)return[];
+  const target=snapshot[snapshot.length-1].endAt-duration*1000;
+  let requestedPick=0;
+  for(let i=0;i<snapshot.length;i++)if(snapshot[i].startAt<=target)requestedPick=i;
+  const hasKeyMetadata=snapshot.some(x=>typeof x.videoStartKey==="boolean");
+  if(!hasKeyMetadata){
+    state.lastReplaySelectionReason="fallback";
+    diag("replay.selection",{strategy:"metadata-unavailable",requestedPick,selectedFrom:requestedPick,total:snapshot.length});
+    return snapshot.slice(requestedPick)
+  }
+  let keyPick=-1,strategy="previous";
+  for(let i=requestedPick;i>=0;i--)if(snapshot[i].videoStartKey===true){keyPick=i;break}
+  if(keyPick<0){
+    strategy="following";
+    for(let i=requestedPick+1;i<snapshot.length;i++)if(snapshot[i].videoStartKey===true){keyPick=i;break}
+  }
+  if(keyPick<0){
+    state.lastReplaySelectionReason="no-keyframe";
+    diag("replay.selection",{strategy:"no-keyframe",requestedPick,total:snapshot.length});
+    return[]
+  }
+  state.lastReplaySelectionReason="keyframe";
+  diag("replay.selection",{strategy,requestedPick,selectedFrom:keyPick,total:snapshot.length,offsetMs:Math.round(target-snapshot[keyPick].startAt)});
+  return snapshot.slice(keyPick)
+}
 function rewriteFragment(f,seq,bases){const a=f.bytes.slice(),info=fragmentTfdt(a);if(info.mfhd)put32(a,info.mfhd.data+4,seq);for(const t of info.tracks){if(bases[t.id]===undefined)bases[t.id]=t.base;const v=t.base-bases[t.id];t.version===1?put64(a,t.pos,v):put32(a,t.pos,v)}return a}
 function makeFmp4(selected){if(!state.initSegment||!selected.length)throw Error('Buffer incompleto');const bases={},parts=[state.initSegment];selected.forEach((f,i)=>parts.push(rewriteFragment(f,i+1,bases)));return joinBytes(parts)}
 function readMp4MovieDuration(bytes){
@@ -1883,13 +1989,13 @@ function readMp4MovieDuration(bytes){
 }
 async function flattenMp4(bytes){
   const startedAt=performance.now();
-  let phase="create";
+  let phase="create",input=null;
   diag("flatten.begin", { inputBytes: bytes ? bytes.byteLength : 0 });
   try{
     const M=window.Mediabunny;
     if(!M)throw Error('Mediabunny indisponivel');
-    const input=new M.Input({source:new M.BufferSource(bytes),formats:M.ALL_FORMATS}),
-      target=new M.BufferTarget(),
+    input=new M.Input({source:new M.BufferSource(bytes),formats:M.ALL_FORMATS});
+    const target=new M.BufferTarget(),
       output=new M.Output({format:new M.Mp4OutputFormat({fastStart:'in-memory'}),target});
     phase="init";
     const conv=await M.Conversion.init({input,output});
@@ -1905,6 +2011,9 @@ async function flattenMp4(bytes){
   }catch(err){
     diag("flatten.error", { phase, elapsedMs: Math.round(performance.now()-startedAt), error: err });
     throw err;
+  }finally{
+    try{if(input&&typeof input.dispose==="function")input.dispose()}
+    catch(err){diag("flatten.dispose.error",{error:err})}
   }
 }
 async function persistReplayBlob(blob, requestedDuration){
@@ -1956,14 +2065,14 @@ async function saveReplay(){
   closeDurationPicker();
   clearTimeout(state.saveGuard);
   state.saveGuard=setTimeout(()=>{if(state.saving){diag("save.guard.30s",{saveId});toast('O replay ainda esta sendo preparado','info',3000)}},30000);
-  let snapshot=[];
+  let snapshot=[],bufferDetached=false;
   try{
     await flushCurrentChunk();
     snapshot=state.fragments.slice();
     diag("save.snapshot", { saveId, fragments: snapshot.length, generation: state.captureGeneration, elapsedMs: Math.round(performance.now()-saveStartedAt) });
     const selected=chooseReplay(snapshot,replayDuration);
-    if(!selected.length)throw Error('Ainda nao ha video para salvar');
-    state.fragments=[];state.bufferSeconds=0;
+    if(!selected.length)throw Error(state.lastReplaySelectionReason==='no-keyframe'?'Aguarde mais um instante para salvar':'Ainda nao ha video para salvar');
+    state.fragments=[];state.bufferSeconds=0;bufferDetached=true;
     const fmp4=makeFmp4(selected);
     diag("save.fmp4", { saveId, selected: selected.length, bytes: fmp4.byteLength, elapsedMs: Math.round(performance.now()-saveStartedAt) });
     const blob=await flattenMp4(fmp4);
@@ -1973,8 +2082,8 @@ async function saveReplay(){
   }catch(err){
     diag("save.error", { saveId, elapsedMs: Math.round(performance.now()-saveStartedAt), generation: state.captureGeneration, snapshotFragments: snapshot.length, liveFragments: state.fragments.length, error: err });
     console.error('gravei save',err);
-    if(snapshot.length){state.fragments=snapshot.concat(state.fragments);pruneBuffer()}
-    toast(err&&err.message==='Ainda nao ha video para salvar'?err.message:'Nao foi possivel preparar o replay','err',2800);
+    if(bufferDetached&&snapshot.length){state.fragments=snapshot.concat(state.fragments);pruneBuffer()}
+    toast(err&&(err.message==='Ainda nao ha video para salvar'||err.message==='Aguarde mais um instante para salvar')?err.message:'Nao foi possivel preparar o replay','err',2800);
   }finally{
     state.saving=false;clearTimeout(state.saveGuard);
     diag("save.finally", { saveId, elapsedMs: Math.round(performance.now()-saveStartedAt), generation: state.captureGeneration, fragments: state.fragments.length });
