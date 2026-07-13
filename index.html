@@ -386,7 +386,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v81</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v82a diagnóstico</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -725,12 +725,140 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v81 - central simplificada e ícone de replay invertido
+   Gravei v82a - diagnóstico persistente, sem mudança de comportamento
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
    ========================================================= */
 "use strict";
+
+/* ---------- diagnóstico local v82a ----------
+   Guarda apenas eventos técnicos; nunca guarda vídeo, áudio ou imagens.
+   O histórico é circular, limitado e persiste após uma atualização. */
+const GRAVEI_DIAG = (() => {
+  const KEY = "gravei-diagnostic-v1";
+  const VERSION = "v82a-diagnostico";
+  const MAX_EVENTS = 500;
+  const MAX_CHARS = 180000;
+  const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+  let persistTimer = null;
+  let report;
+
+  function clean(value, depth = 0){
+    if (value === null || value === undefined || typeof value === "boolean" || typeof value === "number") return value;
+    if (typeof value === "string") return value.slice(0, 500);
+    if (value instanceof Error) return {
+      name: value.name || "Error",
+      message: String(value.message || value).slice(0, 800),
+      stack: String(value.stack || "").slice(0, 1800)
+    };
+    if (depth >= 3) return Object.prototype.toString.call(value);
+    if (Array.isArray(value)) return value.slice(0, 24).map(v => clean(v, depth + 1));
+    if (typeof value === "object"){
+      const out = {};
+      for (const key of Object.keys(value).slice(0, 30)){
+        if (/^(bytes|blob|data|stream|srcObject)$/i.test(key)){
+          const v = value[key];
+          out[key + "Info"] = v && typeof v.byteLength === "number" ? { byteLength: v.byteLength }
+            : v && typeof v.size === "number" ? { size: v.size, type: v.type || "" } : "omitido";
+        }else{
+          try{ out[key] = clean(value[key], depth + 1); }catch(_){ out[key] = "indisponível"; }
+        }
+      }
+      return out;
+    }
+    return String(value).slice(0, 300);
+  }
+
+  function baseReport(){
+    let referrerHost = "";
+    try{ referrerHost = document.referrer ? new URL(document.referrer).hostname : ""; }catch(_){}
+    return {
+      schema: 1,
+      appVersion: VERSION,
+      createdAt: new Date().toISOString(),
+      device: {
+        userAgent: navigator.userAgent || "",
+        platform: navigator.platform || "",
+        language: navigator.language || "",
+        screen: { width: screen.width, height: screen.height, dpr: window.devicePixelRatio || 1 },
+        standalone: !!(window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true,
+        referrerHost
+      },
+      events: []
+    };
+  }
+
+  try{
+    const saved = JSON.parse(localStorage.getItem(KEY) || "null");
+    report = saved && saved.schema === 1 && Array.isArray(saved.events) ? saved : baseReport();
+  }catch(_){ report = baseReport(); }
+  report.appVersion = VERSION;
+
+  function persist(){
+    clearTimeout(persistTimer); persistTimer = null;
+    try{
+      report.events = report.events.slice(-MAX_EVENTS);
+      let json = JSON.stringify(report);
+      while (json.length > MAX_CHARS && report.events.length > 50){
+        report.events.splice(0, 25);
+        json = JSON.stringify(report);
+      }
+      localStorage.setItem(KEY, json);
+    }catch(_){}
+  }
+
+  function log(event, details){
+    try{
+      report.events.push({
+        seq: (report.events[report.events.length - 1]?.seq || 0) + 1,
+        at: new Date().toISOString(),
+        monoMs: Math.round(performance.now()),
+        session,
+        visibility: document.visibilityState,
+        event,
+        details: clean(details || {})
+      });
+      if (report.events.length > MAX_EVENTS) report.events.splice(0, report.events.length - MAX_EVENTS);
+      if (!persistTimer) persistTimer = setTimeout(persist, 1500);
+    }catch(_){}
+  }
+
+  function json(){ persist(); return JSON.stringify(report, null, 2); }
+
+  function share(){
+    const body = json();
+    const file = new File([body], "gravei-diagnostico-" + new Date().toISOString().replace(/[:.]/g, "-") + ".json", { type: "application/json" });
+    if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))){
+      return navigator.share({ title: "Diagnóstico Gravei", files: [file] });
+    }
+    const url = URL.createObjectURL(file);
+    const a = document.createElement("a");
+    a.href = url; a.download = file.name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    return Promise.resolve();
+  }
+
+  window.addEventListener("error", e => log("global.error", { message: e.message, file: String(e.filename || "").split("/").pop(), line: e.lineno, column: e.colno, error: e.error }));
+  window.addEventListener("unhandledrejection", e => log("global.unhandledrejection", { reason: e.reason }));
+  window.addEventListener("pagehide", () => { log("page.hide"); persist(); });
+  document.addEventListener("visibilitychange", () => log("page.visibility", { state: document.visibilityState }));
+
+  setTimeout(() => {
+    if (!new URLSearchParams(location.search).has("diag")) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Compartilhar diagnóstico";
+    button.setAttribute("aria-label", "Compartilhar relatório técnico do Gravei");
+    button.style.cssText = "position:fixed;left:12px;bottom:12px;z-index:10000;border:1px solid #555;border-radius:999px;padding:10px 14px;background:#222;color:#fff;font:600 12px system-ui;box-shadow:0 4px 20px #0008";
+    button.onclick = () => { log("diagnostic.share.tap"); share().catch(err => log("diagnostic.share.error", { error: err })); };
+    document.body.appendChild(button);
+  }, 0);
+
+  log("app.boot", { version: VERSION });
+  return { log, persist, share, json, session, version: VERSION };
+})();
+const diag = (event, details) => GRAVEI_DIAG.log(event, details);
 
 /* ---------- cofre local de replays (IndexedDB) ----------
    Os replays ficam guardados no Gravei até uma exclusão explícita.
@@ -1014,6 +1142,7 @@ const state = {
 
 /* ---------- navegação entre telas ---------- */
 function show(id){
+  diag("ui.screen", { id });
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
   $(id).classList.add("active");
 }
@@ -1021,6 +1150,7 @@ function show(id){
 /* ---------- toast ---------- */
 let toastId = null;
 function toast(msg, kind = "info", ms = 2600){
+  diag("ui.toast", { kind, msg, ms });
   const t = $("toast");
   const icon = kind === "ok" ? "✓ " : kind === "err" ? "✕ " : "";
   t.textContent = icon + msg;
@@ -1112,6 +1242,7 @@ $("m-yes").onclick = async () => {
 
 /* ---------- parar sessão (câmera/energia) ---------- */
 function stopSession(){
+  diag("session.stop", { active: state.active, saving: state.saving, generation: state.captureGeneration, fragments: state.fragments.length });
   state.active = false;
   sentinelStop();
   clearInterval(state.timerId);
@@ -1123,6 +1254,7 @@ function stopSession(){
 
 /* ---------- fluxo ---------- */
 $("b-start").onclick = async () => {
+  diag("ui.start.tap");
   if (!pickMime()){ showFormatUnsupported(); return; }
   show("s-perm");
 };
@@ -1131,8 +1263,9 @@ $("b-format-back").onclick = () => show("s-home");
 $("b-perm").onclick = requestPermission;
 $("b-retry-perm").onclick = requestPermission;
 $("b-retry-cam").onclick = requestPermission;
-$("b-go").onclick = startRecording;
+$("b-go").onclick = () => { diag("ui.record.start.tap", { source: "duration" }); startRecording(); };
 $("b-again").onclick = () => {
+  diag("ui.record.start.tap", { source: "central", everRecorded: !!state.everRecorded });
   // volta a gravar: replays ficam intactos; usa a duração já escolhida
   if (state.everRecorded) startRecording();
   else show("s-time");
@@ -1174,6 +1307,7 @@ $("b-discard").onclick = async () => {
 
 // contador de replays abre a central (pausa a câmera para poupar bateria)
 $("chip-count").onclick = async () => {
+  diag("ui.central.tap", { saving: state.saving, active: state.active, fragments: state.fragments.length });
   vibrate(20);
   stopSession();
   await refreshVaultUI();
@@ -1184,13 +1318,16 @@ $("chip-count").onclick = async () => {
 refreshVaultUI();
 
 async function requestPermission(){
+  diag("permission.begin");
   if (!pickMime()){ showFormatUnsupported(); return; }
   try{
     const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    diag("permission.granted", { videoTracks: s.getVideoTracks().length, audioTracks: s.getAudioTracks().length });
     s.getTracks().forEach(t => t.stop());       // só validamos a permissão
     updateDurLabels();
     show("s-time");
   }catch(err){
+    diag("permission.error", { error: err });
     if (err && (err.name === "NotAllowedError" || err.name === "SecurityError")) show("s-denied");
     else show("s-nocam");
   }
@@ -1204,14 +1341,24 @@ function updateDurLabels(){
 
 /* ---------- MIME / compatibilidade ---------- */
 function pickMime(){
-  if (!window.MediaRecorder || typeof MediaRecorder.isTypeSupported !== "function") return null;
-  const list = ["video/mp4", "video/mp4;codecs=avc1.42E01E,mp4a.40.2"];
-  for (const candidate of list){
-    try{ if (MediaRecorder.isTypeSupported(candidate)) return [candidate, "mp4"]; }catch(_){}
+  if (!window.MediaRecorder || typeof MediaRecorder.isTypeSupported !== "function"){
+    diag("format.probe", { result: null, reason: !window.MediaRecorder ? "MediaRecorder ausente" : "isTypeSupported ausente" });
+    return null;
   }
+  const list = ["video/mp4", "video/mp4;codecs=avc1.42E01E,mp4a.40.2"];
+  const results = [];
+  for (const candidate of list){
+    try{
+      const supported = MediaRecorder.isTypeSupported(candidate);
+      results.push({ candidate, supported });
+      if (supported){ diag("format.probe", { result: candidate, results }); return [candidate, "mp4"]; }
+    }catch(err){ results.push({ candidate, error: err }); }
+  }
+  diag("format.probe", { result: null, results });
   return null;
 }
 function showFormatUnsupported(){
+  diag("format.unsupported", { hasMediaRecorder: !!window.MediaRecorder, hasProbe: !!(window.MediaRecorder && MediaRecorder.isTypeSupported) });
   const ua=navigator.userAgent||"";
   const appleMobile=/iPad|iPhone|iPod/.test(ua)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
   $("format-title").textContent="Por aqui não vai dar 😕";
@@ -1226,14 +1373,18 @@ function failCaptureFormat(){
 
 /* ---------- iniciar ---------- */
 async function startRecording(){
+  const diagStartAt = performance.now();
+  diag("recording.start.begin", { active: state.active, saving: state.saving, generation: state.captureGeneration, hasStream: !!state.stream });
   updateDurLabels();
   const picked = pickMime();
-  if (!picked){ showFormatUnsupported(); return; }
+  if (!picked){ diag("recording.start.mimeRejected"); showFormatUnsupported(); return; }
   const [mime, ext] = picked;
   state.mime = mime; state.ext = ext;
   try{
     await openStream(state.cams[state.camIndex] || undefined);   // retoma na mesma câmera
+    diag("recording.start.streamReady", { elapsedMs: Math.round(performance.now() - diagStartAt), generation: state.captureGeneration });
   }catch(err){
+    diag("recording.start.error", { elapsedMs: Math.round(performance.now() - diagStartAt), error: err });
     if (err && err.name === "NotAllowedError") show("s-denied");
     else if (err && err.name === "NotSupportedError"){ releaseCamera(); showFormatUnsupported(); }
     else show("s-nocam");
@@ -1249,6 +1400,7 @@ async function startRecording(){
   watchCamera();
   sentinelStart();
   try{ startRemote(); }catch(_){}                    // controle remoto: falha silenciosa
+  diag("recording.start.ready", { elapsedMs: Math.round(performance.now() - diagStartAt), generation: state.captureGeneration });
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -1292,17 +1444,20 @@ document.addEventListener("pointerdown", () => {
    térmica). Ouvimos os eventos da trilha e conferimos, a cada 2s, se
    quadros novos continuam chegando; parou → religa e renasce o buffer.  */
 let camRecovering = false;
-async function onCamStall(){
-  if (camRecovering || !state.active) return;
+async function onCamStall(source = "unknown"){
+  if (camRecovering || !state.active){ diag("camera.stall.ignored", { source, camRecovering, active: state.active, saving: state.saving }); return; }
+  diag("camera.stall.begin", { source, saving: state.saving, generation: state.captureGeneration, fragments: state.fragments.length });
   camRecovering = true;
   state.stallCount = (state.stallCount || 0) + 1;
   try{ updateDurLabels(); }catch(_){}
   try{
     toast("Religando a câmera…", "info", 0);
     await openStream(state.cams[state.camIndex] || undefined);
+    diag("camera.stall.recovered", { source, generation: state.captureGeneration });
     sentinelStart();
     toast("Câmera religada — o replay recomeça a contar", "ok", 2600);
-  }catch(_){
+  }catch(err){
+    diag("camera.stall.error", { source, error: err });
     hideToast();
     try{ askCamRetry(); }catch(__){ toast("Câmera indisponível", "err"); }
   }
@@ -1317,7 +1472,7 @@ function sentinelStart(){
   sentinelStop();
   try{
     const track = state.stream && state.stream.getVideoTracks()[0];
-    if (track){ track.onmute = onCamStall; track.onended = onCamStall; }
+    if (track){ track.onmute = () => onCamStall("track.mute"); track.onended = () => onCamStall("track.ended"); }
   }catch(_){}
   const v = $("cam");
   state.lastFrameT = performance.now();
@@ -1339,9 +1494,9 @@ function sentinelStart(){
       const tr = state.stream && state.stream.getVideoTracks()[0];
       trackMuted = !!(tr && (tr.muted || tr.readyState === "ended"));
     }catch(_){}
-    if (trackMuted){ onCamStall(); return; }
+    if (trackMuted){ onCamStall("sentinel.track"); return; }
     state.stallStrikes = clockMoved ? 0 : state.stallStrikes + 1;
-    if (state.stallStrikes >= 2) onCamStall();        // ~4s parado confirma
+    if (state.stallStrikes >= 2) onCamStall("sentinel.clock");        // ~4s parado confirma
   }, 2000);
 }
 
@@ -1353,7 +1508,7 @@ function onRotate(){
   clearTimeout(rotateTimer);
   rotateTimer = setTimeout(() => {
     if (!state.active || !state.stream || state.saving) return;
-    restartCaptureRecorder();
+    restartCaptureRecorder("orientation");
     toast("Tela girada — o replay recomeça a contar", "info", 2200);
   }, 700);                                           // espera a rotação estabilizar
 }
@@ -1361,6 +1516,7 @@ try{ screen.orientation.addEventListener("change", onRotate); }catch(_){}
 window.addEventListener("orientationchange", onRotate);
 
 function releaseCamera(){
+ diag("camera.release", { hasStream: !!state.stream, recorderState: state.captureRec ? state.captureRec.state : "none", generation: state.captureGeneration, saving: state.saving });
  stopCaptureRecorder(true);
  if(state.stream){state.stream.getTracks().forEach(t=>t.stop());state.stream=null;}
 }
@@ -1416,6 +1572,9 @@ async function applyWidestZoom(stream){
 /* Abre uma câmera. Sem argumento: usa facingMode (1ª abertura).
    Com um item de state.cams: abre aquele dispositivo específico. */
 async function openStream(cam){
+  const diagOpenId = state.diagOpenSeq = (state.diagOpenSeq || 0) + 1;
+  const diagOpenAt = performance.now();
+  diag("camera.open.begin", { openId: diagOpenId, side: cam ? cam.side : state.facing, active: state.active, saving: state.saving, generation: state.captureGeneration });
   releaseCamera();
   await sleep(300);                                  // Android: espera a câmera ser liberada
 
@@ -1434,11 +1593,13 @@ async function openStream(cam){
   for (const videoBase of attempts){
     for (let tryN = 0; tryN < 2 && !stream; tryN++){
       try{
+        diag("camera.getUserMedia.begin", { openId: diagOpenId, tryN, explicitDevice: !!(cam && cam.deviceId) });
         stream = await navigator.mediaDevices.getUserMedia({
           video: Object.assign({ width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, videoBase),
           audio: true
         });
       }catch(err){
+        diag("camera.getUserMedia.error", { openId: diagOpenId, tryN, error: err });
         lastErr = err;
         if (err && err.name === "NotAllowedError") throw err;   // negado: não adianta repetir
         await sleep(500);                            // câmera ainda ocupada: tenta de novo
@@ -1446,10 +1607,11 @@ async function openStream(cam){
     }
     if (stream) break;
   }
-  if (!stream) throw lastErr || new Error("camera");
+  if (!stream){ diag("camera.open.error", { openId: diagOpenId, elapsedMs: Math.round(performance.now() - diagOpenAt), error: lastErr || new Error("camera") }); throw lastErr || new Error("camera"); }
 
   await applyWidestZoom(stream);                     // menor zoom = maior ângulo (com re-tentativas verificadas)
   state.stream = stream;
+  try{ const s = stream.getVideoTracks()[0].getSettings(); diag("camera.stream.acquired", { openId: diagOpenId, elapsedMs: Math.round(performance.now() - diagOpenAt), width: s.width, height: s.height, frameRate: s.frameRate, facingMode: s.facingMode }); }catch(_){}
 
   // agora que temos permissão, os rótulos ficam visíveis: (re)monta a lista
   if (!state.cams.length || !state.cams.some(c => c.label && !/^Câmera \d+$/.test(c.label))){
@@ -1466,6 +1628,7 @@ async function openStream(cam){
   v.classList.toggle("mirror", mirror);              // espelha só a frontal
   updateFlipVisibility();
   startCaptureRecorder();                           // unico gravador do buffer
+  diag("camera.open.ready", { openId: diagOpenId, elapsedMs: Math.round(performance.now() - diagOpenAt), generation: state.captureGeneration });
 }
 
 function updateFlipVisibility(){
@@ -1495,15 +1658,32 @@ function settleFlush(force=false){const keep=[];for(const x of state.flushWaiter
 function updateBuffer(){const a=state.fragments[0],b=state.fragments[state.fragments.length-1];state.bufferSeconds=a&&b?Math.max(0,(b.endAt-a.startAt)/1000):0}
 function pruneBuffer(){const cutoff=performance.now()-(state.duration+3)*1000;while(state.fragments.length>2&&state.fragments[1].endAt<cutoff)state.fragments.shift();updateBuffer()}
 async function ingestChunk(blob,generation){
-  if(generation!==state.captureGeneration||!blob||!blob.size)return;
-  const a=new Uint8Array(await blob.arrayBuffer());if(generation!==state.captureGeneration)return;
+  if(generation!==state.captureGeneration||!blob||!blob.size){
+    diag("fragment.skip", { generation, currentGeneration: state.captureGeneration, blobSize: blob ? blob.size : 0 });
+    return;
+  }
+  const a=new Uint8Array(await blob.arrayBuffer());
+  if(generation!==state.captureGeneration){
+    diag("fragment.staleAfterRead", { generation, currentGeneration: state.captureGeneration, byteLength: a.byteLength });
+    return;
+  }
   const top=boxes(a),moofs=top.filter(x=>x.type==='moof');
   if(!state.initSegment){
     const m=moofs[0];
-    if(!m){if(++state.formatProbeFailures>=3)failCaptureFormat();return}
+    if(!m){
+      const failures=++state.formatProbeFailures;
+      diag("fragment.noMoof", { generation, byteLength: a.byteLength, failures, topTypes: top.map(x=>x.type) });
+      if(failures>=3)failCaptureFormat();
+      return;
+    }
     const init=a.slice(0,m.start),types=boxes(init).map(x=>x.type);
-    if(!types.includes('ftyp')||!types.includes('moov')){failCaptureFormat();return}
+    if(!types.includes('ftyp')||!types.includes('moov')){
+      diag("fragment.invalidInit", { generation, initBytes: init.byteLength, types });
+      failCaptureFormat();
+      return;
+    }
     state.initSegment=init;state.formatProbeFailures=0;
+    diag("fragment.init", { generation, initBytes: init.byteLength, types });
   }
   let previous=state.fragments[state.fragments.length-1];
   for(let i=0;i<moofs.length;i++){
@@ -1512,6 +1692,7 @@ async function ingestChunk(blob,generation){
     previous={bytes,startAt,endAt};state.fragments.push(previous)
   }
   if(moofs.length){state.lastChunkAt=Date.now();pruneBuffer()}
+  diag("fragment.ingested", { generation, chunkBytes: a.byteLength, moofs: moofs.length, fragments: state.fragments.length, bufferSeconds: Number(state.bufferSeconds.toFixed(2)) });
 }
 function makeRecorder(stream){
   const options={videoBitsPerSecond:2500000,mimeType:state.mime};
@@ -1521,12 +1702,84 @@ function makeRecorder(stream){
     }
   }
 }
-function startCaptureRecorder(){if(!state.stream||state.captureRec)return;const gen=++state.captureGeneration;state.initSegment=null;state.dataEventSerial=0;state.processedEventSerial=0;state.formatProbeFailures=0;state.formatRejected=false;state.fragments=[];state.bufferSeconds=0;state.fragmentQueue=Promise.resolve();state.flushWaiters=[];const rec=makeRecorder(state.stream);state.captureRec=rec;rec.ondataavailable=e=>{const serial=++state.dataEventSerial;state.fragmentQueue=state.fragmentQueue.then(()=>ingestChunk(e.data,gen)).catch(err=>{console.error('gravei fragment',err);toast('Falha ao preparar o buffer','err',2400)}).finally(()=>{state.processedEventSerial=Math.max(state.processedEventSerial,serial);settleFlush()})};rec.onerror=e=>{console.error('gravei recorder',e);if(state.active)restartCaptureRecorder()};rec.onstop=()=>{if(state.captureRec===rec)state.captureRec=null};rec.start(1000);state.lastChunkAt=Date.now()}
-function stopCaptureRecorder(reset){const rec=state.captureRec;state.captureRec=null;state.captureGeneration++;if(rec)try{rec.ondataavailable=null;rec.onerror=null;rec.onstop=null;if(rec.state!=='inactive')rec.stop()}catch(_){}settleFlush(true);if(reset){state.initSegment=null;state.fragments=[];state.bufferSeconds=0;state.fragmentQueue=Promise.resolve()}}
-async function restartCaptureRecorder(){if(state.captureRecovering||!state.active||!state.stream)return;state.captureRecovering=true;try{stopCaptureRecorder(true);await sleep(180);if(state.active&&state.stream)startCaptureRecorder()}finally{state.captureRecovering=false}}
-async function flushCurrentChunk(){const rec=state.captureRec;if(!rec||rec.state!=='recording')throw Error('Gravador inativo');const wait=new Promise(resolve=>{const x={resolve,timer:null,target:state.dataEventSerial+1};x.timer=setTimeout(()=>{const i=state.flushWaiters.indexOf(x);if(i>=0)state.flushWaiters.splice(i,1);resolve()},1600);state.flushWaiters.push(x)});try{rec.requestData()}catch(_){}await wait;await state.fragmentQueue}
+function startCaptureRecorder(){
+  if(!state.stream||state.captureRec){
+    diag("recorder.start.ignored", { hasStream: !!state.stream, existingState: state.captureRec ? state.captureRec.state : "none" });
+    return;
+  }
+  const gen=++state.captureGeneration;
+  state.initSegment=null;state.dataEventSerial=0;state.processedEventSerial=0;state.formatProbeFailures=0;state.formatRejected=false;
+  state.fragments=[];state.bufferSeconds=0;state.fragmentQueue=Promise.resolve();state.flushWaiters=[];
+  let rec;
+  try{ rec=makeRecorder(state.stream); }
+  catch(err){ diag("recorder.construct.error", { generation: gen, mime: state.mime, error: err }); throw err; }
+  state.captureRec=rec;
+  rec.ondataavailable=e=>{
+    const serial=++state.dataEventSerial;
+    diag("recorder.data", { generation: gen, serial, bytes: e.data ? e.data.size : 0, recorderState: rec.state });
+    state.fragmentQueue=state.fragmentQueue.then(()=>ingestChunk(e.data,gen)).catch(err=>{
+      diag("recorder.fragment.error", { generation: gen, serial, error: err });
+      console.error('gravei fragment',err);toast('Falha ao preparar o buffer','err',2400)
+    }).finally(()=>{state.processedEventSerial=Math.max(state.processedEventSerial,serial);settleFlush()})
+  };
+  rec.onerror=e=>{
+    diag("recorder.error", { generation: gen, error: e && (e.error || e) });
+    console.error('gravei recorder',e);if(state.active)restartCaptureRecorder("recorder.error")
+  };
+  rec.onstop=()=>{
+    diag("recorder.stop.event", { generation: gen, isCurrent: state.captureRec===rec });
+    if(state.captureRec===rec)state.captureRec=null
+  };
+  try{
+    rec.start(1000);state.lastChunkAt=Date.now();
+    diag("recorder.started", { generation: gen, mime: rec.mimeType || state.mime });
+  }catch(err){
+    diag("recorder.start.error", { generation: gen, error: err });
+    throw err;
+  }
+}
+function stopCaptureRecorder(reset){
+  const rec=state.captureRec;
+  diag("recorder.stop.begin", { reset: !!reset, recorderState: rec ? rec.state : "none", generation: state.captureGeneration, fragments: state.fragments.length, saving: state.saving });
+  state.captureRec=null;state.captureGeneration++;
+  if(rec)try{rec.ondataavailable=null;rec.onerror=null;rec.onstop=null;if(rec.state!=='inactive')rec.stop()}catch(err){diag("recorder.stop.error", { error: err })}
+  settleFlush(true);
+  if(reset){state.initSegment=null;state.fragments=[];state.bufferSeconds=0;state.fragmentQueue=Promise.resolve()}
+  diag("recorder.stop.done", { generation: state.captureGeneration, reset: !!reset });
+}
+async function restartCaptureRecorder(source="unknown"){
+  if(state.captureRecovering||!state.active||!state.stream){
+    diag("recorder.restart.ignored", { source, captureRecovering: state.captureRecovering, active: state.active, hasStream: !!state.stream, saving: state.saving });
+    return;
+  }
+  diag("recorder.restart.begin", { source, generation: state.captureGeneration, fragments: state.fragments.length, saving: state.saving });
+  state.captureRecovering=true;
+  try{stopCaptureRecorder(true);await sleep(180);if(state.active&&state.stream)startCaptureRecorder()}
+  finally{state.captureRecovering=false;diag("recorder.restart.done", { source, generation: state.captureGeneration, active: state.active })}
+}
+async function flushCurrentChunk(){
+  const rec=state.captureRec;
+  if(!rec||rec.state!=='recording'){diag("flush.inactive", { recorderState: rec ? rec.state : "none" });throw Error('Gravador inativo')}
+  const startedAt=performance.now(),target=state.dataEventSerial+1;
+  let timedOut=false;
+  diag("flush.begin", { target, generation: state.captureGeneration, fragments: state.fragments.length });
+  const wait=new Promise(resolve=>{
+    const x={resolve,timer:null,target};
+    x.timer=setTimeout(()=>{
+      timedOut=true;
+      const i=state.flushWaiters.indexOf(x);if(i>=0)state.flushWaiters.splice(i,1);
+      diag("flush.timeout", { target, processed: state.processedEventSerial, elapsedMs: Math.round(performance.now()-startedAt) });
+      resolve()
+    },1600);
+    state.flushWaiters.push(x)
+  });
+  try{rec.requestData();diag("flush.requestData", { target })}
+  catch(err){diag("flush.requestData.error", { target, error: err })}
+  await wait;await state.fragmentQueue;
+  diag("flush.done", { target, timedOut, processed: state.processedEventSerial, elapsedMs: Math.round(performance.now()-startedAt), fragments: state.fragments.length })
+}
 /* ---------- anel de buffer ---------- */
-function startRing(){clearInterval(state.timerId);state.timerId=setInterval(()=>{const avail=Math.min(state.bufferSeconds,state.duration);$('btn-save').style.setProperty('--buf',(avail/state.duration)*100);if(state.active&&document.visibilityState==='visible'&&state.captureRec&&state.captureRec.state==='recording'&&Date.now()-state.lastChunkAt>6500){restartCaptureRecorder();toast('Gravacao retomada - o replay recomeca a contar','info',2400)}},250)}
+function startRing(){clearInterval(state.timerId);state.timerId=setInterval(()=>{const avail=Math.min(state.bufferSeconds,state.duration);$('btn-save').style.setProperty('--buf',(avail/state.duration)*100);if(state.active&&document.visibilityState==='visible'&&state.captureRec&&state.captureRec.state==='recording'&&Date.now()-state.lastChunkAt>6500){restartCaptureRecorder("ring.stale");toast('Gravacao retomada - o replay recomeca a contar','info',2400)}},250)}
 
 function flashOK(){
   const f = $("flash");
@@ -1539,7 +1792,7 @@ function flashOK(){
 async function requestWakeLock(){
   try{ if ("wakeLock" in navigator) state.wakeLock = await navigator.wakeLock.request("screen"); }catch(_){}
 }
-document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&$("rec-screen").classList.contains("active")){requestWakeLock();try{if(cam2.peer&&cam2.peer.disconnected&&!cam2.peer.destroyed)cam2.peer.reconnect()}catch(_){}try{if(state.active&&(!state.captureRec||state.captureRec.state!=="recording")){state.saving=false;clearTimeout(state.saveGuard);restartCaptureRecorder();toast("Gravacao retomada - o replay recomeca a contar","info",2400)}}catch(_){}watchCamera()}});
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&$("rec-screen").classList.contains("active")){requestWakeLock();try{if(cam2.peer&&cam2.peer.disconnected&&!cam2.peer.destroyed)cam2.peer.reconnect()}catch(_){}try{if(state.active&&(!state.captureRec||state.captureRec.state!=="recording")){diag("visibility.recorderRecovery",{saving:state.saving,generation:state.captureGeneration,recorderState:state.captureRec?state.captureRec.state:"none"});state.saving=false;clearTimeout(state.saveGuard);restartCaptureRecorder("visibility");toast("Gravacao retomada - o replay recomeca a contar","info",2400)}}catch(_){}watchCamera()}});
 
 function camName(cam){
   if (!cam) return "Câmera";
@@ -1628,20 +1881,51 @@ function readMp4MovieDuration(bytes){
     return timescale>0&&Number.isFinite(seconds)&&seconds>0&&seconds<86400?seconds:null;
   }catch(_){return null}
 }
-async function flattenMp4(bytes){const M=window.Mediabunny;if(!M)throw Error('Mediabunny indisponivel');const input=new M.Input({source:new M.BufferSource(bytes),formats:M.ALL_FORMATS}),target=new M.BufferTarget(),output=new M.Output({format:new M.Mp4OutputFormat({fastStart:'in-memory'}),target});const conv=await M.Conversion.init({input,output});if(!conv.isValid||conv.discardedTracks.length)throw Error('Trilhas MP4 incompativeis');await conv.execute();const a=new Uint8Array(target.buffer||new ArrayBuffer(0)),types=boxes(a).map(x=>x.type);if(!a.byteLength||!types.includes('ftyp')||!types.includes('moov')||!types.includes('mdat')||types.includes('moof'))throw Error('MP4 final invalido');return new Blob([a],{type:'video/mp4'})}
+async function flattenMp4(bytes){
+  const startedAt=performance.now();
+  let phase="create";
+  diag("flatten.begin", { inputBytes: bytes ? bytes.byteLength : 0 });
+  try{
+    const M=window.Mediabunny;
+    if(!M)throw Error('Mediabunny indisponivel');
+    const input=new M.Input({source:new M.BufferSource(bytes),formats:M.ALL_FORMATS}),
+      target=new M.BufferTarget(),
+      output=new M.Output({format:new M.Mp4OutputFormat({fastStart:'in-memory'}),target});
+    phase="init";
+    const conv=await M.Conversion.init({input,output});
+    diag("flatten.initialized", { elapsedMs: Math.round(performance.now()-startedAt), valid: conv.isValid, discarded: conv.discardedTracks.map(x=>({reason:x.reason,type:x.track&&x.track.type})) });
+    if(!conv.isValid||conv.discardedTracks.length)throw Error('Trilhas MP4 incompativeis');
+    phase="execute";
+    await conv.execute();
+    phase="validate";
+    const a=new Uint8Array(target.buffer||new ArrayBuffer(0)),types=boxes(a).map(x=>x.type);
+    if(!a.byteLength||!types.includes('ftyp')||!types.includes('moov')||!types.includes('mdat')||types.includes('moof'))throw Error('MP4 final invalido');
+    diag("flatten.done", { elapsedMs: Math.round(performance.now()-startedAt), outputBytes: a.byteLength, types });
+    return new Blob([a],{type:'video/mp4'})
+  }catch(err){
+    diag("flatten.error", { phase, elapsedMs: Math.round(performance.now()-startedAt), error: err });
+    throw err;
+  }
+}
 async function persistReplayBlob(blob, requestedDuration){
+  const startedAt=performance.now();
   if(!blob||!blob.size)throw Error('Video vazio');
+  diag("persist.begin", { blobBytes: blob.size, requestedDuration });
   state.replayCount++;
   const d=new Date(),name='gravei-replay-'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+String(d.getSeconds()).padStart(2,'0')+'-'+state.replayCount+'.mp4';
   const bytes=await blob.arrayBuffer();
   const actualDuration=readMp4MovieDuration(bytes);
+  diag("persist.bytesReady", { elapsedMs: Math.round(performance.now()-startedAt), byteLength: bytes.byteLength, actualDuration });
   const item={name,type:'video/mp4',bytes,t:Date.now()};
   let replayId;
   try{
     replayId=await vault.add(item);
+    diag("persist.vault.added", { replayId, elapsedMs: Math.round(performance.now()-startedAt) });
     if(Array.isArray(state.pendingShareKeys)&&!state.pendingShareKeys.includes(replayId))state.pendingShareKeys.push(replayId);
-  }catch(_){
+  }catch(err){
+    diag("persist.vault.error", { elapsedMs: Math.round(performance.now()-startedAt), error: err });
     await deliver(blob,name);
+    diag("persist.fallback.delivered", { elapsedMs: Math.round(performance.now()-startedAt) });
     return;
   }
   try{
@@ -1649,35 +1933,52 @@ async function persistReplayBlob(blob, requestedDuration){
     if(actualDuration!==null)meta.actualDuration=actualDuration;
     await metadataWithTimeout(replayMeta.put(meta),1200);
   }catch(err){
+    diag("persist.metadata.error", { replayId, error: err });
     console.warn('gravei metadata save',err);
   }
   const n=await vault.count();
   updateCountChip(n);
   flashOK();
   toast('Replay '+n+' guardado','ok',1800);
+  diag("persist.done", { replayId, count: n, elapsedMs: Math.round(performance.now()-startedAt) });
 }
 async function saveReplay(){
-  if(state.saving)return;
+  if(state.saving){diag("save.tap.ignored", { reason: "saving", generation: state.captureGeneration });return}
   if(!state.captureRec||state.captureRec.state!=='recording'){
-    restartCaptureRecorder();toast('Gravacao retomada - aguarde o buffer encher','err',2600);return;
+    diag("save.tap.ignored", { reason: "recorder-inactive", recorderState: state.captureRec ? state.captureRec.state : "none", generation: state.captureGeneration });
+    restartCaptureRecorder("save.inactive");toast('Gravacao retomada - aguarde o buffer encher','err',2600);return;
   }
+  const saveId=state.diagSaveSeq=(state.diagSaveSeq||0)+1;
+  const saveStartedAt=performance.now();
   const replayDuration=state.duration;
   state.saving=true;
+  diag("save.begin", { saveId, replayDuration, generation: state.captureGeneration, fragments: state.fragments.length, bufferSeconds: Number(state.bufferSeconds.toFixed(2)) });
   closeDurationPicker();
   clearTimeout(state.saveGuard);
-  state.saveGuard=setTimeout(()=>{if(state.saving)toast('O replay ainda esta sendo preparado','info',3000)},30000);
+  state.saveGuard=setTimeout(()=>{if(state.saving){diag("save.guard.30s",{saveId});toast('O replay ainda esta sendo preparado','info',3000)}},30000);
   let snapshot=[];
   try{
-    await flushCurrentChunk();snapshot=state.fragments.slice();
+    await flushCurrentChunk();
+    snapshot=state.fragments.slice();
+    diag("save.snapshot", { saveId, fragments: snapshot.length, generation: state.captureGeneration, elapsedMs: Math.round(performance.now()-saveStartedAt) });
     const selected=chooseReplay(snapshot,replayDuration);
     if(!selected.length)throw Error('Ainda nao ha video para salvar');
     state.fragments=[];state.bufferSeconds=0;
-    const blob=await flattenMp4(makeFmp4(selected));await persistReplayBlob(blob,replayDuration);
+    const fmp4=makeFmp4(selected);
+    diag("save.fmp4", { saveId, selected: selected.length, bytes: fmp4.byteLength, elapsedMs: Math.round(performance.now()-saveStartedAt) });
+    const blob=await flattenMp4(fmp4);
+    diag("save.flattened", { saveId, bytes: blob.size, elapsedMs: Math.round(performance.now()-saveStartedAt) });
+    await persistReplayBlob(blob,replayDuration);
+    diag("save.success", { saveId, elapsedMs: Math.round(performance.now()-saveStartedAt) });
   }catch(err){
+    diag("save.error", { saveId, elapsedMs: Math.round(performance.now()-saveStartedAt), generation: state.captureGeneration, snapshotFragments: snapshot.length, liveFragments: state.fragments.length, error: err });
     console.error('gravei save',err);
     if(snapshot.length){state.fragments=snapshot.concat(state.fragments);pruneBuffer()}
     toast(err&&err.message==='Ainda nao ha video para salvar'?err.message:'Nao foi possivel preparar o replay','err',2800);
-  }finally{state.saving=false;clearTimeout(state.saveGuard)}
+  }finally{
+    state.saving=false;clearTimeout(state.saveGuard);
+    diag("save.finally", { saveId, elapsedMs: Math.round(performance.now()-saveStartedAt), generation: state.captureGeneration, fragments: state.fragments.length });
+  }
 }
 
 /* ---------- salvar ou compartilhar sem remover da biblioteca ---------- */
@@ -3381,6 +3682,7 @@ function watchCamera(){
   clearTimeout(camWatchTimer);
   camWatchTimer = setTimeout(async () => {
     if (!state.active || camAlive()) return;
+    diag("camera.watch.recover", { saving: state.saving, generation: state.captureGeneration, fragments: state.fragments.length });
     // 1ª tentativa: religar sozinho (sem gesto)
     try{
       await openStream(state.cams[state.camIndex] || undefined);
