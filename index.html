@@ -289,6 +289,53 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 #duration-picker .stack{margin:22px auto 0}
 @media (orientation:landscape){#duration-picker{align-items:center}#duration-picker .sheet{border-radius:20px;margin:0 20px}}
 
+
+/* ---- Central de Replays v83a: marca, prévias leves e ações ---- */
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+.central-screen{padding:0;align-items:stretch;justify-content:flex-start;text-align:left;overflow:hidden;background:var(--bg)}
+.central-screen::before,.central-screen::after{display:none}
+.central-scroll{width:100%;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}
+.central-shell{width:100%;max-width:560px;min-height:100%;margin:0 auto;display:flex;flex-direction:column;background:var(--bg)}
+.central-brand{min-height:clamp(240px,38vh,330px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:calc(28px + var(--safe-t)) 24px 28px}
+.central-brand .sym{display:block;width:clamp(68px,20vw,88px);height:auto}
+.central-brand .wm{display:block;width:clamp(190px,58vw,250px);height:auto}
+.central-replay-section{padding:18px 20px 20px;border-top:1px solid rgba(255,255,255,.025);background:#0e0e0e}
+.central-replay-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:44px}
+.central-replay-heading h2{font-family:'Inter',sans-serif;font-size:12px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim)}
+.central-see-all{min-height:44px;border:0;background:transparent;color:var(--accent);font:inherit;font-size:14px;font-weight:800;padding:0 2px;cursor:pointer}
+.central-see-all:active{opacity:.72}
+.central-preview-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:9px}
+.central-preview-card{position:relative;min-width:0;aspect-ratio:1/1;border:1px solid var(--line);border-radius:12px;overflow:hidden;padding:0;background:#181818;color:var(--text);font:inherit;cursor:pointer}
+.central-preview-card:active{transform:scale(.97)}
+.central-preview-visual{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(155deg,#263746 0 40%,#17452d 40% 100%)}
+.central-preview-card:nth-child(2) .central-preview-visual{background:linear-gradient(155deg,#303946 0 40%,#205338 40% 100%)}
+.central-preview-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+.central-preview-mark{display:flex;flex-direction:column;align-items:center;gap:6px;color:rgba(250,250,247,.58);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.central-preview-mark svg{width:34px;height:34px}
+.central-preview-card.has-thumb .central-preview-visual{background:#000}
+.central-preview-card.has-thumb .central-preview-mark{display:none}
+.central-preview-duration{position:absolute;left:7px;bottom:7px;z-index:2;border-radius:6px;padding:4px 6px;background:rgba(0,0,0,.74);color:#fff;font-size:11px;font-weight:800;line-height:1}
+.central-preview-more{display:flex;align-items:center;justify-content:center;border-color:var(--line);background:#171717;color:rgba(250,250,247,.68);font-size:18px;font-weight:800}
+.central-empty{min-height:116px;margin-top:9px;border:1px dashed var(--line);border-radius:12px;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center;color:var(--text-dim);font-size:14px;line-height:1.45}
+.central-empty[hidden]{display:none}
+.central-action-panel{padding:14px 20px calc(22px + var(--safe-b));border-top:1px solid rgba(255,255,255,.035);background:var(--bg)}
+.central-actions{max-width:410px;margin:0 auto;gap:12px}
+.central-actions .btn{min-height:58px}
+.central-actions .central-danger{min-height:44px;padding:10px 20px;background:transparent;color:var(--text-dim);font-family:'Inter',sans-serif;font-size:14px;font-weight:600}
+.central-actions .central-danger:active{background:rgba(255,255,255,.04)}
+@media (max-width:360px){
+  .central-brand{min-height:220px;gap:16px}.central-replay-section{padding-left:14px;padding-right:14px}.central-preview-grid{gap:8px}.central-action-panel{padding-left:14px;padding-right:14px}
+}
+@media (orientation:landscape) and (max-height:600px){
+  .central-shell{max-width:none;min-height:100%;display:grid;grid-template-columns:minmax(190px,35vw) minmax(0,1fr);grid-template-rows:auto 1fr}
+  .central-brand{grid-column:1;grid-row:1/3;min-height:100vh;gap:14px;padding:calc(16px + var(--safe-t)) 20px calc(16px + var(--safe-b))}
+  .central-brand .sym{width:min(68px,17vh)}.central-brand .wm{width:min(190px,29vw)}
+  .central-replay-section{grid-column:2;grid-row:1;padding:calc(10px + var(--safe-t)) calc(16px + env(safe-area-inset-right,0px)) 12px 16px}
+  .central-action-panel{grid-column:2;grid-row:2;padding:10px calc(16px + env(safe-area-inset-right,0px)) calc(10px + var(--safe-b)) 16px}
+  .central-actions{gap:8px}.central-actions .btn{min-height:44px;padding:10px 20px;font-size:15px}.central-actions .central-danger{min-height:36px;padding:6px}
+  .central-preview-grid{max-width:420px}.central-empty{min-height:90px}
+}
+
 /* ---- galeria: uma coluna, miniaturas e favoritos persistentes ---- */
 .gallery-screen,.player-screen{padding:0;text-align:left;align-items:stretch;justify-content:flex-start;overflow:hidden;background:var(--bg)}
 .gallery-screen > *,.player-screen > *{flex-shrink:1}
@@ -386,7 +433,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v82d adaptativo</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v83a central</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -465,16 +512,31 @@ a{color:var(--accent)}
 </section>
 
 <!-- CENTRAL DE REPLAYS -->
-<section class="screen" id="s-ended">
-  <div class="status-icon ok"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg></div>
-  <h2>Central de Replays</h2>
-  <p class="tagline" id="ended-msg">Nenhum replay guardado.</p>
-  <div class="stack" id="central-actions">
-    <button class="btn btn-primary" id="b-again">Continuar gravando</button>
-    <button class="btn btn-ghost" id="b-gallery" style="display:none">Meus Replays</button>
-    <button class="btn btn-ghost" id="b-saveall" style="display:none" aria-hidden="true" tabindex="-1" disabled>Salvar ou compartilhar</button>
-    <button class="btn btn-ghost" id="b-home">Início</button>
-    <button class="btn btn-ghost" id="b-discard" style="display:none;color:var(--text-dim)">Descartar tudo</button>
+<section class="screen central-screen" id="s-ended">
+  <div class="central-scroll">
+    <main class="central-shell">
+      <header class="central-brand" aria-label="Gravei">
+        <svg class="sym" viewBox="0 0 24 24" fill="none"><polyline points="23 5.2 23 10 18.2 10" stroke="#FAFAF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="#FAFAF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.4" fill="#FF3B30"/></svg>
+        <svg class="wm" width="180" viewBox="0 0 648 154"><g transform="translate(0,10.03)" fill="#FAFAF7"><path d="M94.8 47.8C92.5333 44.0667 89.4 41.2 85.4 39.2C81.5333 37.2 76.9333 36.2 71.6 36.2C61.7333 36.2 53.9333 39.4 48.2 45.8C42.6 52.2 39.8 60.8 39.8 71.6C39.8 83.7333 42.8 93 48.8 99.4C54.9333 105.667 63.8 108.8 75.4 108.8C89.1333 108.8 98.9333 102.6 104.8 90.2H65.4V62H138.6V100C135.533 107.467 131 114.467 125 121C119.133 127.533 111.667 132.933 102.6 137.2C93.5333 141.333 83.2 143.4 71.6 143.4C57.4667 143.4 44.9333 140.4 34 134.4C23.2 128.267 14.8 119.8 8.8 109C2.93333 98.0667 0 85.6 0 71.6C0 57.7333 2.93333 45.4 8.8 34.6C14.8 23.6667 23.2 15.2 34 9.2C44.8 3.06667 57.2667 0 71.4 0C89.1333 0 103.8 4.26667 115.4 12.8C127 21.3333 134.2 33 137 47.8H94.8Z"/><path d="M189.367 50C193.767 43.6 199.101 38.5333 205.367 34.8C211.634 31.0667 218.367 29.2 225.567 29.2V71H214.567C206.034 71 199.701 72.6667 195.567 76C191.434 79.3333 189.367 85.1333 189.367 93.4V142.4H150.167V30.2H189.367V50Z"/><path d="M227.22 86.2C227.22 74.6 229.287 64.4667 233.42 55.8C237.687 47.1333 243.42 40.4667 250.62 35.8C257.954 31.1333 266.087 28.8 275.02 28.8C282.754 28.8 289.42 30.3333 295.02 33.4C300.62 36.4667 304.954 40.6 308.02 45.8V30.2H347.22V142.4H308.02V126.8C304.954 132 300.554 136.133 294.82 139.2C289.22 142.267 282.62 143.8 275.02 143.8C266.087 143.8 257.954 141.467 250.62 136.8C243.42 132.133 237.687 125.467 233.42 116.8C229.287 108 227.22 97.8 227.22 86.2ZM308.02 86.2C308.02 79 306.02 73.3333 302.02 69.2C298.154 65.0667 293.354 63 287.62 63C281.754 63 276.887 65.0667 273.02 69.2C269.154 73.2 267.22 78.8667 267.22 86.2C267.22 93.4 269.154 99.1333 273.02 103.4C276.887 107.533 281.754 109.6 287.62 109.6C293.354 109.6 298.154 107.533 302.02 103.4C306.02 99.2667 308.02 93.5333 308.02 86.2Z"/><path d="M417.358 105.4L438.358 30.2H480.158L441.558 142.4H392.758L354.158 30.2H395.958L417.358 105.4Z"/><path d="M594.641 85C594.641 88.0667 594.441 91.1333 594.041 94.2H519.841C520.241 100.333 521.907 104.933 524.841 108C527.907 110.933 531.774 112.4 536.441 112.4C542.974 112.4 547.641 109.467 550.441 103.6H592.241C590.507 111.333 587.107 118.267 582.041 124.4C577.107 130.4 570.841 135.133 563.241 138.6C555.641 142.067 547.241 143.8 538.041 143.8C526.974 143.8 517.107 141.467 508.441 136.8C499.907 132.133 493.174 125.467 488.241 116.8C483.441 108.133 481.041 97.9333 481.041 86.2C481.041 74.4667 483.441 64.3333 488.241 55.8C493.041 47.1333 499.707 40.4667 508.241 35.8C516.907 31.1333 526.841 28.8 538.041 28.8C549.107 28.8 558.907 31.0667 567.441 35.6C575.974 40.1333 582.641 46.6667 587.441 55.2C592.241 63.6 594.641 73.5333 594.641 85ZM554.641 75.2C554.641 70.4 553.041 66.6667 549.841 64C546.641 61.2 542.641 59.8 537.841 59.8C533.041 59.8 529.107 61.1333 526.041 63.8C522.974 66.3333 520.974 70.1333 520.041 75.2H554.641Z"/><path d="M647.883 30.2V142.4H608.483V30.2H647.883Z"/></g><circle cx="628.183" cy="16.35" r="16.348" fill="#FF3B30"/></svg>
+      </header>
+      <section class="central-replay-section" aria-labelledby="central-replay-title">
+        <div class="central-replay-heading">
+          <h2 id="central-replay-title">Meus Replays</h2>
+          <button type="button" class="central-see-all" id="b-gallery" style="display:none">Ver todos ›</button>
+        </div>
+        <p class="sr-only" id="ended-msg" aria-live="polite">Nenhum replay guardado.</p>
+        <div class="central-preview-grid" id="central-preview-list"></div>
+        <p class="central-empty" id="central-empty">Nenhum replay guardado ainda.</p>
+      </section>
+      <footer class="central-action-panel">
+        <div class="stack central-actions" id="central-actions">
+          <button class="btn btn-primary" id="b-again">Continuar gravando</button>
+          <button class="btn btn-ghost" id="b-saveall" style="display:none" aria-hidden="true" tabindex="-1" disabled>Salvar ou compartilhar</button>
+          <button class="btn btn-ghost" id="b-home">Início</button>
+          <button class="btn central-danger" id="b-discard" style="display:none">Apagar todos</button>
+        </div>
+      </footer>
+    </main>
   </div>
 </section>
 
@@ -725,19 +787,19 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v82d - keyframes adaptativos e retomada segura
+   Gravei v83a - Central de Replays com prévias leves
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
    ========================================================= */
 "use strict";
 
-/* ---------- diagnóstico local v82d ----------
+/* ---------- diagnóstico local v83a ----------
    Guarda apenas eventos técnicos; nunca guarda vídeo, áudio ou imagens.
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v82d-adaptive-keyframe";
+  const VERSION = "v83a-central-shell";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -1076,19 +1138,19 @@ async function getReplayStorageSummary(){
     keys = await vault.keys();
   }catch(err){
     console.warn("gravei metadata keys", err);
-    return { count: await vault.count(), bytes: 0, sizeAvailable: false };
+    return { count: await vault.count(), bytes: 0, sizeAvailable: false, keys: [], metas: [] };
   }
   if (!keys.length){
     try{ await metadataWithTimeout(replayMeta.clear(), 1200); }catch(err){ console.warn("gravei metadata clear", err); }
-    return { count: 0, bytes: 0, sizeAvailable: true };
+    return { count: 0, bytes: 0, sizeAvailable: true, keys: [], metas: [] };
   }
   try{
     const result = await metadataWithTimeout(reconcileReplayMetadata(keys), 3000);
     const bytes = result.metas.reduce((sum, meta) => sum + (Number(meta.size) || 0) + (Number(meta.thumbSize) || 0), 0);
-    return { count: keys.length, bytes, sizeAvailable: result.complete };
+    return { count: keys.length, bytes, sizeAvailable: result.complete, keys: keys.slice(), metas: result.metas };
   }catch(err){
     console.warn("gravei metadata sync", err);
-    return { count: keys.length, bytes: 0, sizeAvailable: false };
+    return { count: keys.length, bytes: 0, sizeAvailable: false, keys: keys.slice(), metas: [] };
   }
 }
 
@@ -1254,6 +1316,7 @@ function stopSession(){
 
 /* ---------- fluxo ---------- */
 $("b-start").onclick = async () => {
+  releaseCentralPreviewUrls();
   diag("ui.start.tap");
   if (!pickMime()){ showFormatUnsupported(); return; }
   show("s-perm");
@@ -1265,15 +1328,17 @@ $("b-retry-perm").onclick = requestPermission;
 $("b-retry-cam").onclick = requestPermission;
 $("b-go").onclick = () => { diag("ui.record.start.tap", { source: "duration" }); startRecording(); };
 $("b-again").onclick = () => {
+  releaseCentralPreviewUrls();
   diag("ui.record.start.tap", { source: "central", everRecorded: !!state.everRecorded });
   // volta a gravar: replays ficam intactos; usa a duração já escolhida
   if (state.everRecorded) startRecording();
   else show("s-time");
 };
 $("b-home").onclick = async () => {
+  releaseCentralPreviewUrls();
   try{ stopRemote(); }catch(_){}                     // sessão encerrada de verdade: código morre aqui
-  await refreshVaultUI();
   show("s-home");
+  await refreshVaultUI();
 };
 $("b-gallery").onclick = openGallery;
 $("b-gallery-back").onclick = closeGalleryToCentral;
@@ -1289,18 +1354,18 @@ $("player-prev").onclick = () => openReplayAt(galleryIndex - 1);
 $("player-next").onclick = () => openReplayAt(galleryIndex + 1);
 $("player-share").onclick = shareCurrentReplay;
 $("player-delete").onclick = deleteCurrentReplay;
-$("b-recover").onclick = async () => { await refreshVaultUI(); show("s-ended"); };
+$("b-recover").onclick = openCentral;
 $("b-discard").onclick = async () => {
   const n = await vault.count();
   openConfirm(
-    "Descartar tudo?",
+    "Apagar todos os replays?",
     n + " replay" + (n > 1 ? "s" : "") + " ser" + (n > 1 ? "ão" : "á") + " apagado" + (n > 1 ? "s" : "") + " definitivamente.",
-    "Descartar",
+    "Apagar",
     async () => {
       await vault.clear();
       state.pendingShareKeys = null;
       await refreshVaultUI();
-      toast("Replays descartados", "info");
+      toast("Replays apagados", "info");
     }
   );
 };
@@ -1310,8 +1375,7 @@ $("chip-count").onclick = async () => {
   diag("ui.central.tap", { saving: state.saving, active: state.active, fragments: state.fragments.length });
   vibrate(20);
   stopSession();
-  await refreshVaultUI();
-  show("s-ended");
+  await openCentral();
 };
 
 // ao abrir o app: verifica se há replays de uma sessão anterior
@@ -2337,13 +2401,13 @@ async function refreshVaultUI(){
   const summary = await getReplayStorageSummary();
   const n = summary.count;
   const resumable = !!state.everRecorded;
-  // central de replays
+  updateCentralPreviewCache(summary);
   $("ended-msg").textContent = n > 0
     ? "Você tem " + n + " replay" + (n > 1 ? "s" : "") + " guardado" + (n > 1 ? "s" : "") +
       (summary.sizeAvailable ? " · " + formatReplayBytes(summary.bytes) + " no Gravei." : ".")
     : "Nenhum replay guardado.";
   $("b-gallery").style.display = n > 0 ? "block" : "none";
-  // v81: o compartilhamento múltiplo vive apenas em Meus Replays.
+  $("b-gallery").disabled = n === 0;
   $("b-saveall").style.display = "none";
   $("b-saveall").disabled = true;
   $("b-saveall").setAttribute("aria-hidden", "true");
@@ -2351,21 +2415,167 @@ async function refreshVaultUI(){
   $("b-discard").style.display = n > 0 ? "block" : "none";
   $("b-again").textContent = resumable ? "Continuar gravando" : "Iniciar nova gravação";
   $("b-again").className = "btn " + ((resumable || n === 0) ? "btn-primary" : "btn-ghost");
-  $("b-gallery").className = "btn " + ((!resumable && n > 0) ? "btn-primary" : "btn-ghost");
-  $("b-again").style.order = resumable ? "0" : "2";
-  $("b-gallery").style.order = resumable ? "1" : "0";
-  $("b-saveall").style.order = resumable ? "2" : "1";
-  $("b-home").style.order = "3";
-  $("b-discard").style.order = "4";
-  // tela inicial: entrada explícita para replays guardados
   $("b-recover").style.display = n > 0 ? "block" : "none";
   $("b-recover").textContent = "Meus Replays (" + n + ")";
   $("b-start").textContent = n > 0 ? "Nova gravação" : "Começar agora";
   updateCountChip(n);
+  if ($("s-ended").classList.contains("active")) renderCentralPreviewStrip();
+  else releaseCentralPreviewUrls();
   return n;
 }
 
-/* ---------- galeria: metadados, filtros e um Blob no player ---------- */
+let centralPreviewEntries = [];
+let centralPreviewCount = 0;
+let centralPreviewUrls = new Map();
+
+function centralFallbackMeta(replayId){
+  return {
+    replayId, createdAt: null, requestedDuration: null, actualDuration: null,
+    favorite: false, thumbStatus: "none", thumbType: null, thumbBytes: null
+  };
+}
+
+function updateCentralPreviewCache(summary){
+  const total = Math.max(0, Number(summary && summary.count) || 0);
+  const keys = Array.isArray(summary && summary.keys) ? summary.keys.slice().reverse() : [];
+  const metas = Array.isArray(summary && summary.metas) ? summary.metas : [];
+  const byId = new Map(metas.map(meta => [meta.replayId, meta]));
+  const visibleReplaySlots = total > 3 ? 2 : Math.min(total, 3);
+  centralPreviewEntries = keys.slice(0, visibleReplaySlots).map((key, index) => ({
+    key,
+    previewId: "replay-" + String(key),
+    meta: byId.get(key) || centralFallbackMeta(key),
+    index
+  }));
+  while (centralPreviewEntries.length < visibleReplaySlots){
+    const index = centralPreviewEntries.length;
+    centralPreviewEntries.push({
+      key: null,
+      previewId: "fallback-" + index,
+      meta: centralFallbackMeta(null),
+      index
+    });
+  }
+  centralPreviewCount = total;
+}
+
+function centralPreviewPlan(entries, total){
+  const safeTotal = Math.max(0, Number(total) || 0);
+  if (!safeTotal) return [];
+  const replaySlots = safeTotal > 3 ? 2 : Math.min(safeTotal, 3);
+  const plan = entries.slice(0, replaySlots).map(entry => ({ type: "replay", entry }));
+  if (safeTotal > 3) plan.push({ type: "more", count: safeTotal - replaySlots });
+  return plan;
+}
+
+function releaseCentralPreviewUrls(){
+  const list = $("central-preview-list");
+  if (list && list.querySelectorAll){
+    list.querySelectorAll(".central-preview-thumb").forEach(image => { image.onerror = null; });
+  }
+  for (const url of centralPreviewUrls.values()){
+    try{ URL.revokeObjectURL(url); }catch(_){}
+  }
+  centralPreviewUrls.clear();
+}
+
+function attachCentralThumbnail(card, entry){
+  const meta = entry && entry.meta;
+  const bytes = meta && meta.thumbBytes;
+  const length = bytes
+    ? (typeof Blob !== "undefined" && bytes instanceof Blob ? bytes.size : Number(bytes.byteLength) || 0)
+    : 0;
+  if (!card || !meta || meta.thumbStatus !== "ready" || length <= 0) return false;
+  try{
+    const blob = new Blob([bytes], { type: meta.thumbType || "image/jpeg" });
+    if (!blob.size) return false;
+    const url = URL.createObjectURL(blob);
+    centralPreviewUrls.set(entry.previewId, url);
+    const image = document.createElement("img");
+    image.className = "central-preview-thumb";
+    image.alt = "";
+    image.decoding = "async";
+    image.setAttribute("aria-hidden", "true");
+    image.onerror = () => {
+      if (centralPreviewUrls.get(entry.previewId) === url){
+        URL.revokeObjectURL(url);
+        centralPreviewUrls.delete(entry.previewId);
+      }
+      image.remove();
+      card.classList.remove("has-thumb");
+    };
+    image.src = url;
+    card.querySelector(".central-preview-visual").prepend(image);
+    card.classList.add("has-thumb");
+    return true;
+  }catch(err){
+    console.warn("gravei central thumbnail", err);
+    return false;
+  }
+}
+
+function createCentralReplayCard(entry){
+  const card = document.createElement("button");
+  card.type = "button";
+  card.className = "central-preview-card";
+  const durationText = replayDurationText(entry.meta);
+  card.setAttribute("aria-label", "Abrir Meus Replays. " + durationText + ".");
+  card.onclick = openGallery;
+
+  const visual = document.createElement("span");
+  visual.className = "central-preview-visual";
+  const mark = document.createElement("span");
+  mark.className = "central-preview-mark";
+  mark.innerHTML = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="23 5.2 23 10 18.2 10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.4" fill="#FF3B30"/></svg><span>Replay</span>';
+  visual.appendChild(mark);
+
+  const duration = document.createElement("span");
+  duration.className = "central-preview-duration";
+  duration.textContent = durationText;
+  card.appendChild(visual);
+  card.appendChild(duration);
+  attachCentralThumbnail(card, entry);
+  return card;
+}
+
+function renderCentralPreviewStrip(){
+  releaseCentralPreviewUrls();
+  const list = $("central-preview-list");
+  const empty = $("central-empty");
+  while (list.firstChild) list.removeChild(list.firstChild);
+  const plan = centralPreviewPlan(centralPreviewEntries, centralPreviewCount);
+  list.hidden = plan.length === 0;
+  empty.hidden = plan.length > 0;
+  if (!plan.length){
+    empty.textContent = "Seus melhores lances vão aparecer aqui.";
+    return;
+  }
+  for (const item of plan){
+    if (item.type === "replay"){
+      list.appendChild(createCentralReplayCard(item.entry));
+      continue;
+    }
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "central-preview-card central-preview-more";
+    more.textContent = "+" + item.count;
+    more.setAttribute("aria-label", "Ver mais " + item.count + " replay" + (item.count === 1 ? "" : "s"));
+    more.onclick = openGallery;
+    list.appendChild(more);
+  }
+}
+
+function showCentralFromCache(){
+  show("s-ended");
+  renderCentralPreviewStrip();
+}
+
+async function openCentral(){
+  showCentralFromCache();
+  await refreshVaultUI();
+}
+
+/* ---------- galeria: metadados, filtros e um Blob no player ---------- *//* ---------- galeria: metadados, filtros e um Blob no player ---------- */
 let galleryAllEntries = [];
 let galleryEntries = [];
 let galleryFilter = "all";
@@ -2877,7 +3087,7 @@ function shareSelectedReplays(){
     updateSelectionUI();
     await refreshVaultUI();
     if (!galleryAllEntries.length){
-      show("s-ended");
+      showCentralFromCache();
     }else{
       show("s-gallery");
       renderGalleryCards();
@@ -3354,8 +3564,13 @@ function startThumbnailObservation(){
 }
 
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") stopThumbnailWork();
-  else if ($("s-gallery").classList.contains("active")) startThumbnailObservation();
+  if (document.visibilityState === "hidden"){
+    stopThumbnailWork();
+    releaseCentralPreviewUrls();
+    return;
+  }
+  if ($("s-gallery").classList.contains("active")) startThumbnailObservation();
+  if ($("s-ended").classList.contains("active")) renderCentralPreviewStrip();
 });
 
 function renderGalleryCards(){
@@ -3440,6 +3655,7 @@ function renderGalleryCards(){
   startThumbnailObservation();
 }
 async function openGallery(){
+  releaseCentralPreviewUrls();
   stopThumbnailWork();
   gallerySelecting = false;
   selectionBusy = false;
@@ -3479,8 +3695,8 @@ async function closeGalleryToCentral(){
   galleryLoadToken++;
   stopThumbnailWork();
   releaseGalleryThumbUrls();
+  showCentralFromCache();
   await refreshVaultUI();
-  show("s-ended");
 }
 
 function clearPlayerMedia(){
@@ -3637,7 +3853,7 @@ function deleteCurrentReplay(){
       applyGalleryFilter();
       await refreshVaultUI();
       if (!galleryAllEntries.length){
-        show("s-ended");
+        showCentralFromCache();
       }else{
         show("s-gallery");
         renderGalleryCards();
