@@ -71,7 +71,7 @@ body{
 }
 @keyframes gravei-pulse{0%,100%{opacity:1}50%{opacity:.45}}
 .central-pulse{animation:gravei-pulse 2s ease-in-out infinite}
-@media (prefers-reduced-motion: reduce){.gravei-dot,.central-pulse,.rec-dot,.ripple,#flash.go,.sheet{animation:none}}
+@media (prefers-reduced-motion: reduce){.gravei-dot,.central-pulse,.rec-dot,.ripple,#flash.go,.sheet,.confirm-dialog{animation:none}}
 .eyebrow{font-size:12px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--text-dim);margin-bottom:14px}
 .tagline{color:var(--text);font-size:17px;line-height:1.5;max-width:300px;margin-top:14px}
 .tagline b{color:var(--text);font-weight:600}
@@ -267,29 +267,62 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 #toast.info{border-left:4px solid var(--accent)}
 @media (orientation:landscape){#toast{bottom:calc(24px + var(--safe-b))}}
 
-/* ---- modal ---- */
-#modal{position:fixed;inset:0;z-index:30;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.6)}
-#modal.open{display:flex}
-.sheet{
-  background:var(--surface);border-radius:20px 20px 0 0;padding:26px 22px calc(26px + var(--safe-b));
-  width:100%;max-width:480px;text-align:center;animation:up .22s ease;
-}
-@keyframes up{from{transform:translateY(40px);opacity:0}}
-.sheet p{color:var(--text-dim);margin:10px 0 22px;font-size:15px;line-height:1.5}
-.sheet .stack{margin-left:auto;margin-right:auto}
-@media (orientation:landscape){#modal{align-items:center}.sheet{border-radius:20px;margin:0 20px}}
-
+/* ---- confirmação destrutiva centralizada ---- */
+#modal{
+    position:fixed;inset:0;z-index:32;display:none;align-items:center;justify-content:center;
+    padding:calc(18px + var(--safe-t)) calc(18px + env(safe-area-inset-right,0px))
+      calc(18px + var(--safe-b)) calc(18px + env(safe-area-inset-left,0px));
+    background:rgba(0,0,0,.72)
+  }
+  #modal.open{display:flex}
+  .confirm-dialog{
+    width:min(100%,420px);max-height:calc(100dvh - var(--safe-t) - var(--safe-b) - 36px);overflow-y:auto;
+    background:rgba(26,26,26,.96);border:1px solid rgba(255,255,255,.10);border-radius:20px;
+    padding:24px 20px 20px;text-align:left;
+    box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 18px 54px -14px rgba(0,0,0,.78);
+    animation:confirm-in .18s ease
+  }
+  .confirm-dialog h2{font-size:20px;line-height:1.25}
+  .confirm-dialog p{color:var(--text-dim);margin:10px 0 22px;font-size:15px;line-height:1.55}
+  .confirm-actions{display:flex;flex-direction:column;gap:10px;width:100%}
+  .confirm-actions .btn{width:100%;min-width:0;padding:15px 22px;font-size:16px;white-space:normal}
+  .confirm-actions .btn:disabled{opacity:.55;cursor:default;transform:none}
+  @keyframes confirm-in{from{transform:translateY(12px) scale(.985);opacity:0}}
+  @media (orientation:landscape) and (max-height:520px){.confirm-dialog{padding:18px}.confirm-dialog p{margin-bottom:16px}.confirm-actions .btn{padding:12px 20px}}
+  
 #chip-dur{pointer-events:auto;cursor:pointer;font:inherit;color:var(--accent);appearance:none}
 #chip-dur:active{transform:scale(.95)}
 #chip-dur svg{transition:transform .18s ease}
 #chip-dur[aria-expanded="true"] svg{transform:rotate(180deg)}
-#duration-picker{position:fixed;inset:0;z-index:31;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.6)}
+#duration-picker{
+  position:fixed;inset:0;z-index:31;display:none;align-items:flex-end;justify-content:center;
+  background:rgba(0,0,0,.64)
+}
 #duration-picker.open{display:flex}
-#duration-picker .chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;max-width:320px;margin:24px auto 0}
-#duration-picker .chip{width:100%;padding:12px 8px}
-#duration-picker .stack{margin:22px auto 0}
-@media (orientation:landscape){#duration-picker{align-items:center}#duration-picker .sheet{border-radius:20px;margin:0 20px}}
-
+.duration-sheet{
+  width:100%;max-width:480px;max-height:calc(100dvh - var(--safe-t) - 12px);overflow-y:auto;
+  background:rgba(26,26,26,.94);border:1px solid rgba(255,255,255,.10);border-bottom:0;
+  border-radius:22px 22px 0 0;text-align:center;
+  padding:12px calc(20px + env(safe-area-inset-right,0px)) calc(18px + var(--safe-b)) calc(20px + env(safe-area-inset-left,0px));
+  box-shadow:0 -16px 48px -14px rgba(0,0,0,.68)
+}
+.duration-grab{width:32px;height:4px;border-radius:99px;background:rgba(255,255,255,.16);margin:0 auto 18px}
+.duration-sheet .duration-kicker{
+  margin:0 0 8px;color:var(--text-dim);font-size:11px;font-weight:700;line-height:1.2;
+  letter-spacing:.12em;text-transform:uppercase
+}
+.duration-sheet h2{font-size:20px;line-height:1.25}
+#duration-picker .chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;width:100%;max-width:320px;margin:22px auto 0}
+#duration-picker .chip{width:100%;min-height:48px;padding:10px 8px;border-radius:12px;background:var(--surface-2);border-color:rgba(255,255,255,.10);color:var(--text-dim)}
+#duration-picker .chip.sel{background:var(--rec);border-color:var(--rec);color:#fff;transform:none}
+#duration-picker .duration-actions{margin:14px auto 0;gap:0}
+#duration-picker .duration-cancel{min-width:0;min-height:44px;padding:10px 20px;background:transparent;color:var(--text-dim);font-family:'Inter',sans-serif;font-size:14px;font-weight:600}
+@media (orientation:landscape){
+  #duration-picker{align-items:center;padding:calc(14px + var(--safe-t)) calc(18px + env(safe-area-inset-right,0px)) calc(14px + var(--safe-b)) calc(18px + env(safe-area-inset-left,0px))}
+  #duration-picker .duration-sheet{max-width:480px;max-height:calc(100dvh - var(--safe-t) - var(--safe-b) - 28px);border:1px solid rgba(255,255,255,.10);border-radius:20px;padding-top:14px;padding-bottom:16px}
+  .duration-grab{margin-bottom:12px}
+  #duration-picker .chips{margin-top:16px}
+}
 
 /* ---- Central de Replays: marca, prévias leves e ações ---- */
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
@@ -536,7 +569,7 @@ a{color:var(--accent)}
           <button class="btn btn-primary" id="b-again">Continuar gravando</button>
           <button class="btn btn-ghost" id="b-saveall" style="display:none" aria-hidden="true" tabindex="-1" disabled>Salvar ou compartilhar</button>
           <button class="btn btn-ghost" id="b-home">Início</button>
-          <button class="btn central-danger" id="b-discard" style="display:none">Apagar todos</button>
+          <button class="btn central-danger" id="b-discard" style="display:none">Excluir todos</button>
         </div>
       </footer>
     </main>
@@ -628,26 +661,28 @@ a{color:var(--accent)}
 <div id="flash"></div>
 
 <!-- SELETOR DE DURACAO -->
-<div id="duration-picker" role="dialog" aria-modal="true" aria-labelledby="duration-title">
-  <div class="sheet">
+<div id="duration-picker" role="dialog" aria-modal="true" aria-labelledby="duration-title" aria-hidden="true">
+  <div class="sheet duration-sheet">
+    <div class="duration-grab" aria-hidden="true"></div>
+    <p class="duration-kicker">Duração do replay</p>
     <h2 id="duration-title">Quanto tempo quer salvar?</h2>
     <div class="chips" id="duration-chips"></div>
-    <div class="stack"><button type="button" class="btn btn-ghost" id="duration-cancel">Cancelar</button></div>
+    <div class="stack duration-actions"><button type="button" class="btn btn-ghost duration-cancel" id="duration-cancel">Cancelar</button></div>
   </div>
 </div>
 
 <!-- CONFIRMAÇÃO -->
-<div id="modal">
-  <div class="sheet">
-    <h2 id="modal-title">Tem certeza?</h2>
-    <p id="modal-msg"></p>
-    <div class="stack" style="margin-top:0">
-      <button class="btn btn-danger" id="m-yes">Confirmar</button>
-      <button class="btn btn-ghost" id="m-no">Cancelar</button>
+<div id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-msg" aria-hidden="true">
+    <div class="confirm-dialog" role="document">
+      <h2 id="modal-title">Tem certeza?</h2>
+      <p id="modal-msg"></p>
+      <div class="confirm-actions">
+        <button type="button" class="btn btn-danger" id="m-yes">Confirmar</button>
+        <button type="button" class="btn btn-ghost" id="m-no">Cancelar</button>
+      </div>
     </div>
   </div>
-</div>
-
+  
 <script>
 /*!
  * Copyright (c) 2026-present, Vanilagy and contributors
@@ -802,7 +837,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v83f-visual-polish";
+  const VERSION = "v85";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -1265,48 +1300,135 @@ function renderDurationChips(box, closeAfter){
   });
 }
 let durationPickerOpen = false;
+let durationReturnFocus = null;
+function durationCanRestoreFocus(target){
+  if (!target || !target.isConnected || typeof target.focus !== "function") return false;
+  try{ return target.getClientRects().length > 0; }catch(_){ return false; }
+}
+function durationFocusable(){
+  return [...$("duration-chips").querySelectorAll("button:not(:disabled)"), $("duration-cancel")];
+}
 function openDurationPicker(){
-  if (!state.active || !$("rec-screen").classList.contains("active")) return;
-  if (state.saving){ toast("Aguarde este replay terminar", "info", 2200); return; }
+  if (durationPickerOpen || !state.active || !$("rec-screen").classList.contains("active")) return false;
+  if (state.saving){ toast("Aguarde este replay terminar", "info", 2200); return false; }
+  durationReturnFocus = document.activeElement;
   durationPickerOpen = true;
   syncDurationChips();
   disarmDim();
+  $("duration-picker").setAttribute("aria-hidden", "false");
   $("duration-picker").classList.add("open");
   $("chip-dur").setAttribute("aria-expanded", "true");
-  setTimeout(() => $("duration-chips").querySelector(".chip.sel")?.focus(), 0);
+  setTimeout(() => {
+    if (!durationPickerOpen) return;
+    const selected = $("duration-chips").querySelector(".chip.sel");
+    (selected || $("duration-cancel")).focus();
+  }, 0);
+  return true;
 }
-function closeDurationPicker(rearm = true){
-  if (!durationPickerOpen) return;
+function closeDurationPicker(rearm = true, restoreFocus = true){
+  if (!durationPickerOpen) return false;
   durationPickerOpen = false;
   $("duration-picker").classList.remove("open");
+  $("duration-picker").setAttribute("aria-hidden", "true");
   $("chip-dur").setAttribute("aria-expanded", "false");
+  const target = durationReturnFocus;
+  durationReturnFocus = null;
   if (rearm && state.active && $("rec-screen").classList.contains("active")) armDim();
+  if (restoreFocus && durationCanRestoreFocus(target)) setTimeout(() => target.focus(), 0);
+  return true;
 }
 renderDurationChips(chipsBox, false);
 renderDurationChips(durationChipsBox, true);
 syncDurationChips();
 $("chip-dur").onclick = openDurationPicker;
 $("duration-cancel").onclick = () => closeDurationPicker();
-$("duration-picker").onclick = e => { if (e.target === $("duration-picker")) closeDurationPicker(); };
-document.addEventListener("keydown", e => { if (e.key === "Escape" && durationPickerOpen) closeDurationPicker(); });
+$("duration-picker").onclick = event => { if (event.target === $("duration-picker")) closeDurationPicker(); };
+document.addEventListener("keydown", event => {
+  if (!durationPickerOpen) return;
+  if (event.key === "Escape"){ event.preventDefault(); closeDurationPicker(); return; }
+  if (event.key !== "Tab") return;
+  const focusable = durationFocusable();
+  if (!focusable.length){ event.preventDefault(); return; }
+  const first = focusable[0], last = focusable[focusable.length - 1];
+  if (!$("duration-picker").contains(document.activeElement)){
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+  }
+  else if (event.shiftKey && document.activeElement === first){ event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last){ event.preventDefault(); first.focus(); }
+});
 
 /* ---------- confirmação genérica ---------- */
 let confirmFn = null;
-function openConfirm(title, msg, actionLabel, fn){
-  $("modal-title").textContent = title;
-  $("modal-msg").textContent = msg;
-  $("m-yes").textContent = actionLabel;
-  confirmFn = fn;
-  $("modal").classList.add("open");
-}
-$("m-no").onclick = () => { confirmFn = null; $("modal").classList.remove("open"); };
-$("m-yes").onclick = async () => {
-  $("modal").classList.remove("open");
-  const fn = confirmFn; confirmFn = null;
-  if (fn) await fn();
-};
-
-/* ---------- parar sessão (câmera/energia) ---------- */
+  let confirmReturnFocus = null;
+  let confirmBusy = false;
+  function confirmCanRestoreFocus(target){
+    if (!target || !target.isConnected || typeof target.focus !== "function") return false;
+    try{ return target.getClientRects().length > 0; }catch(_){ return false; }
+  }
+  function finishConfirm(restoreFocus = true, clearAction = true){
+    const modal = $("modal");
+    modal.classList.remove("open");
+    modal.setAttribute("aria-hidden", "true");
+    modal.removeAttribute("aria-busy");
+    if (clearAction) confirmFn = null;
+    confirmBusy = false;
+    $("m-yes").disabled = false;
+    $("m-no").disabled = false;
+    const target = confirmReturnFocus;
+    confirmReturnFocus = null;
+    if (restoreFocus && confirmCanRestoreFocus(target)) setTimeout(() => target.focus(), 0);
+  }
+  function openConfirm(title, msg, actionLabel, fn){
+    if ($("modal").classList.contains("open")) return false;
+    $("modal-title").textContent = title;
+    $("modal-msg").textContent = msg;
+    $("m-yes").textContent = actionLabel;
+    confirmFn = typeof fn === "function" ? fn : null;
+    confirmReturnFocus = document.activeElement;
+    confirmBusy = false;
+    $("m-yes").disabled = false;
+    $("m-no").disabled = false;
+    $("modal").setAttribute("aria-hidden", "false");
+    $("modal").removeAttribute("aria-busy");
+    $("modal").classList.add("open");
+    setTimeout(() => { if ($("modal").classList.contains("open")) $("m-no").focus(); }, 0);
+    return true;
+  }
+  $("m-no").onclick = () => { if (!confirmBusy) finishConfirm(true, true); };
+  $("modal").onclick = event => { if (event.target === $("modal") && !confirmBusy) finishConfirm(true, true); };
+  $("m-yes").onclick = async () => {
+    if (confirmBusy) return;
+    confirmBusy = true;
+    $("m-yes").disabled = true;
+    $("m-no").disabled = true;
+    const fn = confirmFn;
+    confirmFn = null;
+    $("modal").setAttribute("aria-busy", "true");
+    try{ if (fn) await fn(); }
+    finally{ finishConfirm(true, false); }
+  };
+  document.addEventListener("keydown", event => {
+    const modal = $("modal");
+    if (!modal.classList.contains("open")) return;
+    if (event.key === "Escape"){
+      event.preventDefault();
+      if (!confirmBusy) finishConfirm(true, true);
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = [$("m-yes"), $("m-no")].filter(button => !button.disabled);
+    if (!focusable.length){ event.preventDefault(); return; }
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    if (!modal.contains(document.activeElement)){
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    }
+    else if (event.shiftKey && document.activeElement === first){ event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last){ event.preventDefault(); first.focus(); }
+  });
+  
+  /* ---------- parar sessão (câmera/energia) ---------- */
 function stopSession(){
   diag("session.stop", { active: state.active, saving: state.saving, generation: state.captureGeneration, fragments: state.fragments.length });
   state.active = false;
@@ -1364,15 +1486,17 @@ $("b-recover").onclick = openCentral;
 $("b-discard").onclick = async () => {
   const n = await vault.count();
   openConfirm(
-    "Apagar todos os replays?",
-    n + " replay" + (n > 1 ? "s" : "") + " ser" + (n > 1 ? "ão" : "á") + " apagado" + (n > 1 ? "s" : "") + " definitivamente.",
-    "Apagar",
+    n === 1 ? "Excluir 1 replay?" : "Excluir " + n + " replays?",
+    n === 1
+        ? "Ele será excluído definitivamente. Não dá para desfazer."
+        : "Eles serão excluídos definitivamente. Não dá para desfazer.",
+    "Excluir",
     async () => {
       stopThumbnailWork();
       await vault.clear();
       state.pendingShareKeys = null;
       await refreshVaultUI();
-      toast("Replays apagados", "info");
+      toast(n + " replay" + (n === 1 ? " excluído" : "s excluídos"), "info");
     }
   );
 };
@@ -3074,10 +3198,10 @@ function shareSelectedReplays(){
   const keys = selectedEntries.map(entry => entry.key);
   const count = keys.length;
   const favorites = selectedEntries.filter(entry => !!(entry.meta && entry.meta.favorite)).length;
-  const title = favorites ? "Excluir seleção com favoritos?" : "Excluir " + count + " replay" + (count === 1 ? "?" : "s?");
+  const title = "Excluir " + count + " replay" + (count === 1 ? "?" : "s?");
   const message = favorites
-    ? "A seleção inclui " + favorites + " favorito" + (favorites === 1 ? "" : "s") + ". " + (count === 1 ? "O replay será apagado" : "Os " + count + " replays serão apagados") + " definitivamente do Gravei."
-    : (count === 1 ? "Este replay será apagado" : "Estes replays serão apagados") + " definitivamente do Gravei.";
+    ? "A seleção inclui " + favorites + " favorito" + (favorites === 1 ? "" : "s") + ". " + (count === 1 ? "O replay será excluído" : "Os " + count + " replays serão excluídos") + " definitivamente do Gravei."
+    : (count === 1 ? "Este replay será excluído" : "Estes replays serão excluídos") + " definitivamente do Gravei.";
   openConfirm(title, message, favorites ? "Excluir mesmo assim" : "Excluir", async () => {
     clearSelectedPreparedShareBatch();
     selectionBusy = true;
@@ -3992,7 +4116,7 @@ function deleteCurrentReplay(){
   try{ $("gallery-player").pause(); }catch(_){}
   openConfirm(
     "Excluir replay?",
-    "Este replay será apagado definitivamente do Gravei.",
+    "Este replay será excluído definitivamente do Gravei.",
     "Excluir",
     async () => {
       try{
@@ -4267,7 +4391,7 @@ $("b-ctl-disc").onclick = () => {
   vibrate(20);
   openConfirm(
     "Desconectar?",
-    "Este dispositivo vai parar de controlar a câmera.",
+    "Este dispositivo vai parar de controlar a câmera. A gravação continua.",
     "Desconectar",
     () => {
       ctlDisconnect();
