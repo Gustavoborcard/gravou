@@ -282,18 +282,39 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
   #btn-flip{top:auto;bottom:calc(24px + var(--safe-b));left:calc(16px + env(safe-area-inset-left,0px));right:auto}
 }
 
-/* ---- toast ---- */
-#toast{
-  position:fixed;left:50%;transform:translateX(-50%) translateY(20px);bottom:calc(min(300px,78vw,44vh) + 45px + var(--safe-b));
-  z-index:20;background:var(--surface-2);color:var(--text);border-radius:20px;padding:14px 20px;
-  font-size:15px;font-weight:600;max-width:88vw;text-align:center;opacity:0;pointer-events:none;
-  transition:opacity .25s ease, transform .25s ease;border:1px solid rgba(255,255,255,.12);
-}
-#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-#toast.ok{border-left:4px solid var(--ok)}
-#toast.err{border-left:4px solid var(--rec)}
-#toast.info{border-left:4px solid var(--accent)}
-@media (orientation:landscape){#toast{bottom:calc(24px + var(--safe-b))}}
+/* ---- toast v87 ---- */
+ #toast{
+   position:fixed;left:50%;bottom:calc(min(300px,78vw,44vh) + 45px + var(--safe-b));
+   z-index:20;width:min(calc(100vw - 28px),420px);min-height:48px;
+   display:flex;align-items:center;gap:12px;padding:12px 14px;
+   transform:translateX(-50%) translateY(16px);opacity:0;pointer-events:none;
+   background:rgba(20,20,20,.92);color:var(--text);
+   border:1px solid rgba(255,255,255,.14);border-radius:14px;
+   box-shadow:0 8px 28px -6px rgba(0,0,0,.72);
+   text-align:left;transition:opacity .22s ease,transform .22s ease
+ }
+ #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+ .toast-icon{
+   width:22px;height:22px;border-radius:50%;flex:0 0 22px;
+   display:flex;align-items:center;justify-content:center
+ }
+ .toast-icon svg,.toast-icon-info,.toast-spinner{display:none}
+ .toast-icon svg{width:12px;height:12px;fill:none;stroke-width:2.8;stroke-linecap:round;stroke-linejoin:round}
+ #toast.ok .toast-icon{background:rgba(47,191,113,.18)}
+ #toast.ok .toast-icon-ok{display:block;stroke:var(--ok)}
+ #toast.err .toast-icon{background:rgba(255,59,48,.18)}
+ #toast.err .toast-icon-err{display:block;stroke:var(--rec)}
+ #toast.info .toast-icon{background:rgba(255,255,255,.10)}
+ #toast.info .toast-icon-info{display:block;width:7px;height:7px;border-radius:50%;background:var(--rec)}
+ #toast.load .toast-icon{background:rgba(255,255,255,.10)}
+ #toast.load .toast-spinner{
+   display:block;width:12px;height:12px;border:2px solid rgba(250,250,247,.30);
+   border-top-color:var(--text);border-radius:50%;animation:toast-spin .8s linear infinite
+ }
+ .toast-message{min-width:0;flex:1;color:var(--text);font-size:14px;font-weight:600;line-height:1.4;overflow-wrap:anywhere}
+ @keyframes toast-spin{to{transform:rotate(360deg)}}
+ @media (orientation:landscape){#toast{bottom:calc(24px + var(--safe-b))}}
+ @media (prefers-reduced-motion:reduce){#toast{transition:none}.toast-spinner{animation:none}}
 
 /* ---- confirmação destrutiva centralizada ---- */
 #modal{
@@ -693,7 +714,15 @@ a{color:var(--accent)}
    </div>
  </div>
 
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite" aria-atomic="true">
+   <span class="toast-icon" aria-hidden="true">
+     <svg class="toast-icon-ok" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+     <svg class="toast-icon-err" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+     <span class="toast-icon-info"></span>
+     <span class="toast-spinner"></span>
+   </span>
+   <span class="toast-message" id="toast-message"></span>
+ </div>
 <div id="flash"></div>
 
 <!-- SELETOR DE DURACAO -->
@@ -873,7 +902,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v86";
+  const VERSION = "v87";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -1286,16 +1315,27 @@ function show(id){
 
 /* ---------- toast ---------- */
 let toastId = null;
-function toast(msg, kind = "info", ms = 2600){
-  diag("ui.toast", { kind, msg, ms });
-  const t = $("toast");
-  const icon = kind === "ok" ? "✓ " : kind === "err" ? "✕ " : "";
-  t.textContent = icon + msg;
-  t.className = "show " + kind;
-  clearTimeout(toastId);
-  if (ms > 0) toastId = setTimeout(() => t.classList.remove("show"), ms);
-}
-function hideToast(){ clearTimeout(toastId); $("toast").classList.remove("show"); }
+ function toast(msg, kind = "info", ms = 2600){
+   diag("ui.toast", { kind, msg, ms });
+   const t = $("toast");
+   const safeKind = kind === "ok" || kind === "err" ? kind : "info";
+   const visualKind = safeKind === "info" && ms <= 0 ? "load" : safeKind;
+   t.setAttribute("role", safeKind === "err" ? "alert" : "status");
+   t.setAttribute("aria-live", safeKind === "err" ? "assertive" : "polite");
+   $("toast-message").textContent = msg;
+   t.className = "show " + visualKind;
+   clearTimeout(toastId);
+   toastId = null;
+   if (ms > 0) toastId = setTimeout(() => {
+     t.classList.remove("show");
+     toastId = null;
+   }, ms);
+ }
+ function hideToast(){
+   clearTimeout(toastId);
+   toastId = null;
+   $("toast").classList.remove("show");
+ }
 
 /* ---------- chips de duração ---------- */
 const chipsBox = $("chips");
