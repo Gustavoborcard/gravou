@@ -297,7 +297,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .central-scroll{width:100%;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}
 .central-shell{width:100%;max-width:520px;min-height:100%;margin:0 auto;display:flex;flex-direction:column;background:var(--bg)}
 .central-brand{min-height:clamp(238px,36vh,310px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(34px + var(--safe-t)) 24px 18px}
-.central-brand .sym{display:block;width:clamp(52px,15vw,64px);height:auto;transform:translateY(6px)}
+.central-brand .sym{display:block;width:clamp(52px,15vw,64px);height:auto;transform:translateY(6px) scaleY(-1);transform-origin:center;transform-box:fill-box}
 .central-brand .wm{display:block;width:clamp(180px,53vw,228px);height:auto}
 .central-replay-section{padding:10px 20px 18px;border-top:0;background:var(--bg)}
 .central-replay-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:40px}
@@ -311,7 +311,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .central-preview-card:nth-child(2) .central-preview-visual{background:linear-gradient(155deg,#303946 0 40%,#205338 40% 100%)}
 .central-preview-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
 .central-preview-mark{display:flex;flex-direction:column;align-items:center;gap:6px;color:rgba(250,250,247,.58);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
-.central-preview-mark svg{width:34px;height:34px}
+.central-preview-mark svg{width:34px;height:34px;transform:scaleY(-1);transform-origin:center;transform-box:fill-box}
 .central-preview-card.has-thumb .central-preview-visual{background:#000}
 .central-preview-card.has-thumb .central-preview-mark{display:none}
 .central-preview-duration{position:absolute;left:7px;bottom:7px;z-index:2;border-radius:6px;padding:4px 6px;background:rgba(0,0,0,.74);color:#fff;font-size:11px;font-weight:800;line-height:1}
@@ -329,7 +329,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 @media (orientation:landscape) and (max-height:600px){
   .central-shell{max-width:none;min-height:100%;display:grid;grid-template-columns:minmax(190px,35vw) minmax(0,1fr);grid-template-rows:auto 1fr}
   .central-brand{grid-column:1;grid-row:1/3;min-height:100vh;gap:8px;padding:calc(16px + var(--safe-t)) 20px calc(16px + var(--safe-b))}
-  .central-brand .sym{width:min(52px,14vh);transform:translateY(4px)}.central-brand .wm{width:min(172px,27vw)}
+  .central-brand .sym{width:min(52px,14vh);transform:translateY(4px) scaleY(-1)}.central-brand .wm{width:min(172px,27vw)}
   .central-replay-section{grid-column:2;grid-row:1;padding:calc(10px + var(--safe-t)) calc(16px + env(safe-area-inset-right,0px)) 12px 16px}
   .central-action-panel{grid-column:2;grid-row:2;padding:10px calc(16px + env(safe-area-inset-right,0px)) calc(10px + var(--safe-b)) 16px}
   .central-actions{gap:8px}.central-actions .btn{min-height:44px;padding:10px 20px;font-size:15px}.central-actions .central-danger{min-height:36px;padding:6px}
@@ -433,7 +433,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v83a.1 central</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v83b miniaturas</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -787,19 +787,19 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v83a.1 - polimento visual da Central de Replays
+   Gravei v83b - miniaturas ausentes seguras na Central
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
    ========================================================= */
 "use strict";
 
-/* ---------- diagnóstico local v83a.1 ----------
+/* ---------- diagnóstico local v83b ----------
    Guarda apenas eventos técnicos; nunca guarda vídeo, áudio ou imagens.
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v83a1-central-polish";
+  const VERSION = "v83b-central-thumbnails";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -1328,6 +1328,7 @@ $("b-retry-perm").onclick = requestPermission;
 $("b-retry-cam").onclick = requestPermission;
 $("b-go").onclick = () => { diag("ui.record.start.tap", { source: "duration" }); startRecording(); };
 $("b-again").onclick = () => {
+  stopThumbnailWork();
   releaseCentralPreviewUrls();
   diag("ui.record.start.tap", { source: "central", everRecorded: !!state.everRecorded });
   // volta a gravar: replays ficam intactos; usa a duração já escolhida
@@ -1335,6 +1336,7 @@ $("b-again").onclick = () => {
   else show("s-time");
 };
 $("b-home").onclick = async () => {
+  stopThumbnailWork();
   releaseCentralPreviewUrls();
   try{ stopRemote(); }catch(_){}                     // sessão encerrada de verdade: código morre aqui
   show("s-home");
@@ -1362,6 +1364,7 @@ $("b-discard").onclick = async () => {
     n + " replay" + (n > 1 ? "s" : "") + " ser" + (n > 1 ? "ão" : "á") + " apagado" + (n > 1 ? "s" : "") + " definitivamente.",
     "Apagar",
     async () => {
+      stopThumbnailWork();
       await vault.clear();
       state.pendingShareKeys = null;
       await refreshVaultUI();
@@ -2487,6 +2490,12 @@ function attachCentralThumbnail(card, entry){
     : 0;
   if (!card || !meta || meta.thumbStatus !== "ready" || length <= 0) return false;
   try{
+    const visual = card.querySelector(".central-preview-visual");
+    const oldImage = visual.querySelector(".central-preview-thumb");
+    if (oldImage){ oldImage.onerror = null; oldImage.remove(); }
+    card.classList.remove("has-thumb");
+    const previous = centralPreviewUrls.get(entry.previewId);
+    if (previous){ URL.revokeObjectURL(previous); centralPreviewUrls.delete(entry.previewId); }
     const blob = new Blob([bytes], { type: meta.thumbType || "image/jpeg" });
     if (!blob.size) return false;
     const url = URL.createObjectURL(blob);
@@ -2503,9 +2512,11 @@ function attachCentralThumbnail(card, entry){
       }
       image.remove();
       card.classList.remove("has-thumb");
+      thumbnailFailedThisRun.add(entry.key);
+      void markThumbnailFailure(entry);
     };
     image.src = url;
-    card.querySelector(".central-preview-visual").prepend(image);
+    visual.prepend(image);
     card.classList.add("has-thumb");
     return true;
   }catch(err){
@@ -2514,31 +2525,39 @@ function attachCentralThumbnail(card, entry){
   }
 }
 
+function updateCentralCardLabels(card, entry){
+  if (!card || !entry) return;
+  const durationText = replayDurationText(entry.meta);
+  const duration = card.querySelector(".central-preview-duration");
+  if (duration) duration.textContent = durationText;
+  card.setAttribute("aria-label", "Abrir Meus Replays. " + durationText + ".");
+}
+
 function createCentralReplayCard(entry){
   const card = document.createElement("button");
   card.type = "button";
   card.className = "central-preview-card";
-  const durationText = replayDurationText(entry.meta);
-  card.setAttribute("aria-label", "Abrir Meus Replays. " + durationText + ".");
+  if (entry.key !== null && entry.key !== undefined) card.dataset.replayKey = String(entry.key);
+  updateCentralCardLabels(card, entry);
   card.onclick = openGallery;
 
   const visual = document.createElement("span");
   visual.className = "central-preview-visual";
   const mark = document.createElement("span");
   mark.className = "central-preview-mark";
-  mark.innerHTML = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="23 5.2 23 10 18.2 10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.4" fill="#FF3B30"/></svg><span>Replay</span>';
+  mark.innerHTML = '<svg class="central-preview-loop" viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="23 5.2 23 10 18.2 10" stroke="#FAFAF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="#FAFAF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.4" fill="#FF3B30"/></svg><span>Replay</span>';
   visual.appendChild(mark);
 
   const duration = document.createElement("span");
   duration.className = "central-preview-duration";
-  duration.textContent = durationText;
+  duration.textContent = replayDurationText(entry.meta);
   card.appendChild(visual);
   card.appendChild(duration);
   attachCentralThumbnail(card, entry);
   return card;
 }
 
-function renderCentralPreviewStrip(){
+function renderCentralPreviewStrip(startMissing = true){
   releaseCentralPreviewUrls();
   const list = $("central-preview-list");
   const empty = $("central-empty");
@@ -2563,19 +2582,20 @@ function renderCentralPreviewStrip(){
     more.onclick = openGallery;
     list.appendChild(more);
   }
+  if (startMissing) startCentralThumbnailWork();
 }
 
-function showCentralFromCache(){
+function showCentralFromCache(startMissing = true){
   show("s-ended");
-  renderCentralPreviewStrip();
+  renderCentralPreviewStrip(startMissing);
 }
 
 async function openCentral(){
-  showCentralFromCache();
+  showCentralFromCache(false);
   await refreshVaultUI();
 }
 
-/* ---------- galeria: metadados, filtros e um Blob no player ---------- *//* ---------- galeria: metadados, filtros e um Blob no player ---------- */
+/* ---------- galeria: metadados, filtros e um Blob no player ---------- */
 let galleryAllEntries = [];
 let galleryEntries = [];
 let galleryFilter = "all";
@@ -3112,11 +3132,12 @@ function findReplayEntry(replayKey){
   return galleryAllEntries.find(entry => entry.key === replayKey)
     || playerEntries.find(entry => entry.key === replayKey)
     || galleryEntries.find(entry => entry.key === replayKey)
+    || centralPreviewEntries.find(entry => entry.key === replayKey)
     || null;
 }
 
 function replaceReplayMeta(replayKey, meta){
-  for (const list of [galleryAllEntries, galleryEntries, playerEntries]){
+  for (const list of [galleryAllEntries, galleryEntries, playerEntries, centralPreviewEntries]){
     for (const entry of list){
       if (entry.key === replayKey) entry.meta = meta;
     }
@@ -3485,8 +3506,32 @@ async function markThumbnailFailure(entry){
   catch(err){ console.warn("gravei thumbnail failure metadata", err); }
 }
 
+function thumbnailWorkSurfaceActive(){
+  return $("s-gallery").classList.contains("active") || $("s-ended").classList.contains("active");
+}
+
+function thumbnailEntryForKey(replayKey){
+  if ($("s-ended").classList.contains("active")){
+    const central = centralPreviewEntries.find(entry => entry.key === replayKey);
+    if (central) return central;
+  }
+  return galleryEntries.find(entry => entry.key === replayKey) || findReplayEntry(replayKey);
+}
+
+function findCentralPreviewCard(replayKey){
+  return Array.from($("central-preview-list").children)
+    .find(card => card.dataset && card.dataset.replayKey === String(replayKey)) || null;
+}
+
+function startCentralThumbnailWork(){
+  if (state.active || document.visibilityState === "hidden" || !$("s-ended").classList.contains("active")) return;
+  for (const entry of centralPreviewEntries){
+    if (entry.key !== null && entry.key !== undefined) queueThumbnail(entry);
+  }
+}
+
 function queueThumbnail(entry){
-  if (!entry || !entry.meta) return;
+  if (!entry || !entry.meta || entry.key === null || entry.key === undefined) return;
   if (entry.meta.thumbStatus === "ready" && thumbnailBytesLength(entry.meta.thumbBytes) > 0) return;
   if ((Number(entry.meta.thumbAttempts) || 0) >= 2) return;
   if (thumbnailFailedThisRun.has(entry.key) || thumbnailQueuedKeys.has(entry.key) || thumbnailActiveKey === entry.key) return;
@@ -3500,13 +3545,15 @@ async function runThumbnailQueue(){
   thumbnailRunning = true;
   try{
     while (thumbnailQueue.length){
-      if (state.active || document.visibilityState === "hidden" || !$("s-gallery").classList.contains("active")) break;
+      if (state.active || document.visibilityState === "hidden" || !thumbnailWorkSurfaceActive()) break;
       const queued = thumbnailQueue.shift();
       thumbnailQueuedKeys.delete(queued.key);
-      const entry = galleryEntries.find(item => item.key === queued.key);
+      const entry = thumbnailEntryForKey(queued.key);
       if (!entry || (entry.meta.thumbStatus === "ready" && thumbnailBytesLength(entry.meta.thumbBytes) > 0)) continue;
       const generation = thumbnailGeneration;
       thumbnailActiveKey = entry.key;
+      const initialCentralCard = $("s-ended").classList.contains("active") ? findCentralPreviewCard(entry.key) : null;
+      if (initialCentralCard) initialCentralCard.setAttribute("aria-busy", "true");
       try{
         let updated = await generateThumbnailForEntry(entry, generation);
         if (generation !== thumbnailGeneration) continue;
@@ -3515,14 +3562,26 @@ async function runThumbnailQueue(){
         replaceReplayMeta(entry.key, updated);
         try{ await metadataWithTimeout(replayMeta.put(updated), 1200); }
         catch(err){ console.warn("gravei thumbnail metadata", err); }
-        const card = findGalleryCard(entry.key);
-        if (card){
-          const freshEntry = findReplayEntry(entry.key) || { key: entry.key, meta: updated };
-          attachThumbnailToCard(card, freshEntry);
-          updateGalleryCardLabels(card, freshEntry);
-          syncFavoriteControls(freshEntry);
+
+        if ($("s-gallery").classList.contains("active")){
+          const card = findGalleryCard(entry.key);
+          if (card){
+            const freshEntry = findReplayEntry(entry.key) || { key: entry.key, meta: updated };
+            attachThumbnailToCard(card, freshEntry);
+            updateGalleryCardLabels(card, freshEntry);
+            syncFavoriteControls(freshEntry);
+          }
+          updateGallerySummary();
         }
-        updateGallerySummary();
+
+        if ($("s-ended").classList.contains("active")){
+          const centralEntry = centralPreviewEntries.find(item => item.key === entry.key);
+          const centralCard = findCentralPreviewCard(entry.key);
+          if (centralEntry && centralCard){
+            attachCentralThumbnail(centralCard, centralEntry);
+            updateCentralCardLabels(centralCard, centralEntry);
+          }
+        }
       }catch(err){
         if (!(err && err.name === "ThumbnailCancelled") && generation === thumbnailGeneration){
           console.warn("gravei thumbnail", err);
@@ -3530,12 +3589,14 @@ async function runThumbnailQueue(){
           await markThumbnailFailure(entry);
         }
       }finally{
+        const currentCentralCard = findCentralPreviewCard(entry.key);
+        if (currentCentralCard) currentCentralCard.removeAttribute("aria-busy");
         thumbnailActiveKey = null;
       }
     }
   }finally{
     thumbnailRunning = false;
-    if (thumbnailQueue.length && !state.active && document.visibilityState !== "hidden" && $("s-gallery").classList.contains("active")){
+    if (thumbnailQueue.length && !state.active && document.visibilityState !== "hidden" && thumbnailWorkSurfaceActive()){
       setTimeout(runThumbnailQueue, 0);
     }
   }
