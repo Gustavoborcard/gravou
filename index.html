@@ -290,7 +290,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 @media (orientation:landscape){#duration-picker{align-items:center}#duration-picker .sheet{border-radius:20px;margin:0 20px}}
 
 
-/* ---- Central de Replays v83a: marca, prévias leves e ações ---- */
+/* ---- Central de Replays: marca, prévias leves e ações ---- */
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 .central-screen{padding:0;align-items:stretch;justify-content:flex-start;text-align:left;overflow:hidden;background:var(--bg)}
 .central-screen::before,.central-screen::after{display:none}
@@ -433,7 +433,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v83b miniaturas</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">Versão do aplicativo</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -787,19 +787,19 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v83b - miniaturas ausentes seguras na Central
+   Gravei - captura adaptativa, Central e galeria de replays
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
    ========================================================= */
 "use strict";
 
-/* ---------- diagnóstico local v83b ----------
+/* ---------- diagnóstico local ----------
    Guarda apenas eventos técnicos; nunca guarda vídeo, áudio ou imagens.
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v83d-player-hardening";
+  const VERSION = "v83e-final";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -1194,6 +1194,7 @@ function updateCountChip(n){
 }
 
 const $ = id => document.getElementById(id);
+$("ver-label").textContent = GRAVEI_DIAG.version;
 const DURATIONS = [10,15,20,30,45,60];
 
 const state = {
