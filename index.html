@@ -391,8 +391,8 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .central-preview-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:6px}
 .central-preview-card{position:relative;min-width:0;aspect-ratio:1/1;border:1px solid var(--line);border-radius:10px;overflow:hidden;padding:0;background:#181818;color:var(--text);font:inherit;cursor:pointer}
 .central-preview-card:active{transform:scale(.97)}
-.central-preview-visual{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;isolation:isolate;background:linear-gradient(155deg,#263746 0 40%,#17452d 40% 100%)}
-.central-preview-card:nth-child(2) .central-preview-visual{background:linear-gradient(155deg,#303946 0 40%,#205338 40% 100%)}
+.central-preview-visual{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;isolation:isolate;background:radial-gradient(circle at 50% 46%,rgba(255,59,48,.11) 0,rgba(255,59,48,.045) 24%,transparent 48%),linear-gradient(145deg,#262626 0%,#191919 52%,#111 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.045)}
+
 .central-preview-card.has-thumb .central-preview-visual::before{content:"";position:absolute;z-index:0;inset:-12px;background-image:var(--thumb-backdrop,none);background-size:cover;background-position:center;filter:blur(9px) brightness(.48) saturate(.9);transform:scale(1.04);pointer-events:none}
 .central-preview-thumb{position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:contain;background:transparent}
 .central-preview-mark{display:flex;flex-direction:column;align-items:center;gap:6px;color:rgba(250,250,247,.58);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
@@ -451,7 +451,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .selection-mode .replay-card-favorite{display:none}
 .replay-card.is-selected .replay-card-select{background:var(--rec);border-color:var(--rec)}
 .replay-card.is-selected .replay-card-select svg{opacity:1}
-.replay-card-visual{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;isolation:isolate;background:radial-gradient(circle at 50% 35%,#333 0,#202020 42%,#151515 100%)}
+.replay-card-visual{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;isolation:isolate;background:radial-gradient(circle at 50% 46%,rgba(255,59,48,.11) 0,rgba(255,59,48,.045) 24%,transparent 48%),linear-gradient(145deg,#262626 0%,#191919 52%,#111 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.045)}
 .replay-card-mark{font-family:'Poppins',sans-serif;font-size:clamp(24px,8vw,42px);font-weight:800;letter-spacing:-.04em;color:rgba(250,250,247,.16)}
 .replay-card.has-thumb .replay-card-visual::before{content:"";position:absolute;z-index:0;inset:-16px;background-image:var(--thumb-backdrop,none);background-size:cover;background-position:center;filter:blur(12px) brightness(.46) saturate(.88);transform:scale(1.04);pointer-events:none}
 .replay-card-thumb{position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:contain;background:transparent}
@@ -904,7 +904,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v89";
+  const VERSION = "v90";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -1588,7 +1588,6 @@ $("b-go").onclick = () => {
 };
 $("b-again").onclick = () => {
   stopThumbnailWork();
-  releaseCentralPreviewUrls();
   diag("ui.record.start.tap", { source: "central", everRecorded: !!state.everRecorded, phase: state.capturePhase });
   // volta a gravar: replays ficam intactos; usa a duração já escolhida
   if (state.everRecorded) requestRecordingStart("central");
@@ -2006,6 +2005,7 @@ async function startRecording(source = "duration", options = {}){
       startRing();
       requestWakeLock();
       show("rec-screen");
+      if (intent.source === "central") releaseCentralPreviewUrls();
       armDim();
       watchCamera();
       sentinelStart();
