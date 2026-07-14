@@ -546,10 +546,11 @@ a{color:var(--accent)}
 <!-- CÂMERA INDISPONÍVEL -->
 <section class="screen" id="s-nocam">
   <div class="status-icon err"><svg viewBox="0 0 24 24"><path d="M20 8h-3l-2-3H9L7 8H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1z"/><line x1="4" y1="4" x2="20" y2="20"/></svg></div>
-  <h2>Câmera indisponível</h2>
-  <p class="tagline">Não foi possível acessar a câmera. Feche outros apps que estejam usando a câmera e tente de novo.</p>
+  <h2 id="camera-error-title">Câmera indisponível</h2>
+  <p class="tagline" id="camera-error-msg">Não foi possível acessar a câmera. Feche outros apps que estejam usando a câmera e tente de novo.</p>
   <div class="stack">
     <button class="btn btn-primary" id="b-retry-cam">Tentar de novo</button>
+    <button class="btn btn-ghost" id="b-camera-back">Voltar aos replays</button>
   </div>
 </section>
 
@@ -903,7 +904,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v88";
+  const VERSION = "v89";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -1007,8 +1008,13 @@ const GRAVEI_DIAG = (() => {
 
   window.addEventListener("error", e => log("global.error", { message: e.message, file: String(e.filename || "").split("/").pop(), line: e.lineno, column: e.colno, error: e.error }));
   window.addEventListener("unhandledrejection", e => log("global.unhandledrejection", { reason: e.reason }));
-  window.addEventListener("pagehide", () => { log("page.hide"); persist(); });
-  document.addEventListener("visibilitychange", () => log("page.visibility", { state: document.visibilityState }));
+  window.addEventListener("pagehide", event => { log("page.hide", { persisted: !!event.persisted, focus: document.hasFocus() }); persist(); });
+  window.addEventListener("pageshow", event => log("page.show", {
+    persisted: !!event.persisted,
+    focus: document.hasFocus(),
+    navigationType: performance.getEntriesByType("navigation")[0]?.type || "unknown"
+  }));
+  document.addEventListener("visibilitychange", () => log("page.visibility", { state: document.visibilityState, focus: document.hasFocus() }));
 
   setTimeout(() => {
     if (!new URLSearchParams(location.search).has("diag")) return;
@@ -1021,7 +1027,12 @@ const GRAVEI_DIAG = (() => {
     document.body.appendChild(button);
   }, 0);
 
-  log("app.boot", { version: VERSION });
+  log("app.boot", {
+    version: VERSION,
+    focus: document.hasFocus(),
+    navigationType: performance.getEntriesByType("navigation")[0]?.type || "unknown",
+    activeScreen: document.querySelector(".screen.active")?.id || "none"
+  });
   return { log, persist, share, json, session, version: VERSION };
 })();
 const diag = (event, details) => GRAVEI_DIAG.log(event, details);
@@ -1304,14 +1315,24 @@ const DURATIONS = [10,15,20,30,45,60];
 const state = {
  duration:20,facing:"user",cams:[],camIndex:-1,stream:null,mime:"",ext:"mp4",pendingShareKeys:null,
  captureRec:null,captureGeneration:0,initSegment:null,videoTrackId:null,defaultSampleFlags:{},lastReplaySelectionReason:"empty",keyframeOptionRead:false,keyframeRequestMode:"none",lastVideoKeyAt:0,videoKeyframesSeen:0,maxObservedKeyIntervalMs:0,dataEventSerial:0,processedEventSerial:0,fragments:[],fragmentQueue:Promise.resolve(),flushWaiters:[],
- lastChunkAt:0,bufferSeconds:0,bufferBytes:0,bufferLimitRecoveryPending:false,captureRecovering:false,formatProbeFailures:0,formatRejected:false,timerId:null,wakeLock:null,saving:false,replayCount:0,active:false
+ lastChunkAt:0,bufferSeconds:0,bufferBytes:0,bufferLimitRecoveryPending:false,captureRecovering:false,formatProbeFailures:0,formatRejected:false,timerId:null,wakeLock:null,saving:false,replayCount:0,active:false,
+ capturePhase:"idle",captureIntent:null,lastCaptureIntent:null,captureStartPromise:null,cameraAttemptSerial:0,cameraAttemptId:0,pendingCameraCancel:null,cameraPreviouslyWorked:false
 };
 
 /* ---------- navegação entre telas ---------- */
 function show(id){
-  diag("ui.screen", { id });
+  const from = document.querySelector(".screen.active")?.id || "none";
+  diag("ui.screen", { id, from, capturePhase: state.capturePhase });
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
   $(id).classList.add("active");
+}
+function setCapturePhase(phase, details = {}){
+  const previous = state.capturePhase;
+  state.capturePhase = phase;
+  diag("capture.phase", { previous, phase, ...details });
+}
+function captureStartInProgress(){
+  return ["opening", "checking", "recovering"].includes(state.capturePhase);
 }
 
 /* ---------- toast ---------- */
@@ -1352,7 +1373,9 @@ function setDuration(d, announce = false){
   if (!DURATIONS.includes(d)) return false;
   if (state.saving){ if (announce) toast("Aguarde este replay terminar", "info", 2200); return false; }
 
+  const previousDuration = state.duration;
   state.duration = d;
+  diag("duration.selected", { previous: previousDuration, duration: d, announce: !!announce, capturePhase: state.capturePhase });
   pruneBuffer();
   updateDurLabels();
   syncDurationChips();
@@ -1513,12 +1536,15 @@ let confirmFn = null;
   
   /* ---------- parar sessão (câmera/energia) ---------- */
 function stopSession(){
-  diag("session.stop", { active: state.active, saving: state.saving, generation: state.captureGeneration, fragments: state.fragments.length });
+  diag("session.stop", { active: state.active, saving: state.saving, generation: state.captureGeneration, fragments: state.fragments.length, capturePhase: state.capturePhase });
+  if (captureStartInProgress()) cancelCaptureStart("session.stop");
   state.active = false;
   sentinelStop();
+  clearCamRetryPointer();
   clearInterval(state.timerId);
   disarmDim();
-  releaseCamera();
+  releaseCamera("session.stop");
+  setCapturePhase("idle", { reason: "session.stop" });
   if (state.wakeLock){ try{ state.wakeLock.release(); }catch(_){} state.wakeLock = null; }
   hideToast();
 }
@@ -1534,14 +1560,38 @@ $("b-perm-back").onclick = () => show("s-home");
 $("b-format-back").onclick = () => show("s-home");
 $("b-perm").onclick = requestPermission;
 $("b-retry-perm").onclick = requestPermission;
-$("b-retry-cam").onclick = requestPermission;
-$("b-go").onclick = () => { diag("ui.record.start.tap", { source: "duration" }); startRecording(); };
+$("b-retry-cam").onclick = async () => {
+  const last = state.lastCaptureIntent;
+  diag("ui.camera.retry.tap", { last, phase: state.capturePhase });
+  if (last && last.source === "permission"){
+    toast("Religando a câmera…", "info", 0);
+    try{ GRAVEI_DIAG.persist(); }catch(_){}
+    setTimeout(() => location.reload(), 350);
+    return;
+  }
+  if (!last){ await requestPermission(); return; }
+  if (last.source === "central") await openCentral();
+  else show("s-time");
+  requestRecordingStart(last.source, { recoveryCount: 1 });
+};
+$("b-camera-back").onclick = async () => {
+  diag("ui.camera.back.tap", { last: state.lastCaptureIntent });
+  clearCameraRecovery();
+  setCapturePhase("idle", { reason: "camera.back" });
+  const n = await vault.count();
+  if (n > 0) await openCentral();
+  else { show("s-home"); await refreshVaultUI(); }
+};
+$("b-go").onclick = () => {
+  diag("ui.record.start.tap", { source: "duration", phase: state.capturePhase });
+  requestRecordingStart("duration");
+};
 $("b-again").onclick = () => {
   stopThumbnailWork();
   releaseCentralPreviewUrls();
-  diag("ui.record.start.tap", { source: "central", everRecorded: !!state.everRecorded });
+  diag("ui.record.start.tap", { source: "central", everRecorded: !!state.everRecorded, phase: state.capturePhase });
   // volta a gravar: replays ficam intactos; usa a duração já escolhida
-  if (state.everRecorded) startRecording();
+  if (state.everRecorded) requestRecordingStart("central");
   else show("s-time");
 };
 $("b-home").onclick = async () => {
@@ -1595,19 +1645,36 @@ $("chip-count").onclick = async () => {
 // ao abrir o app: verifica se há replays de uma sessão anterior
 refreshVaultUI();
 
+let permissionOpening = false;
 async function requestPermission(){
+  if (permissionOpening){ diag("permission.ignored", { reason: "already-opening" }); return; }
   diag("permission.begin");
   if (!pickMime()){ showFormatUnsupported(); return; }
+  permissionOpening = true;
+  [$("b-perm"), $("b-retry-perm")].forEach(button => { if (button) button.disabled = true; });
+  const openId = ++state.cameraAttemptSerial;
+  state.cameraAttemptId = openId;
   try{
-    const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    diag("permission.granted", { videoTracks: s.getVideoTracks().length, audioTracks: s.getAudioTracks().length });
-    s.getTracks().forEach(t => t.stop());       // só validamos a permissão
+    const s = await getUserMediaWithDeadline({ video: true, audio: true }, {
+      openId, tryN: 0, timeoutMs: CAMERA_OPEN_TIMEOUT_MS, purpose: "permission"
+    });
+    diag("permission.granted", { openId, videoTracks: s.getVideoTracks().length, audioTracks: s.getAudioTracks().length });
+    stopStreamTracks(s, "permission.probe.done");
+    state.cameraPreviouslyWorked = true;
+    state.cameraAttemptId = 0;
     updateDurLabels();
     show("s-time");
   }catch(err){
-    diag("permission.error", { error: err });
+    diag("permission.error", { openId, error: err });
     if (err && (err.name === "NotAllowedError" || err.name === "SecurityError")) show("s-denied");
-    else show("s-nocam");
+    else {
+      state.lastCaptureIntent = isCameraTimeout(err) ? { source: "permission", recoveryCount: 1 } : null;
+      showCameraStartError(err, "duration");
+    }
+  }finally{
+    if (state.cameraAttemptId === openId) state.cameraAttemptId = 0;
+    permissionOpening = false;
+    [$("b-perm"), $("b-retry-perm")].forEach(button => { if (button) button.disabled = false; });
   }
 }
 
@@ -1647,36 +1714,351 @@ function failCaptureFormat(){
   setTimeout(()=>{stopSession();showFormatUnsupported()},0);
 }
 
-/* ---------- iniciar ---------- */
-async function startRecording(){
-  const diagStartAt = performance.now();
-  diag("recording.start.begin", { active: state.active, saving: state.saving, generation: state.captureGeneration, hasStream: !!state.stream });
-  updateDurLabels();
-  const picked = pickMime();
-  if (!picked){ diag("recording.start.mimeRejected"); showFormatUnsupported(); return; }
-  const [mime, ext] = picked;
-  state.mime = mime; state.ext = ext;
+/* ---------- inicio seguro da captura v89 ---------- */
+function normalizeTransientCaptureUi(reason = "capture-start"){
+  const durationWasOpen = !!(durationPickerOpen || $("duration-picker").classList.contains("open"));
+  const pairWasOpen = !!(pairOpen || $("pair").classList.contains("open"));
+  const confirmWasOpen = $("modal").classList.contains("open");
+  if (confirmWasOpen && confirmBusy){
+    diag("capture.ui.normalize.blocked", { reason, confirmBusy: true });
+    return false;
+  }
   try{
-    await openStream(state.cams[state.camIndex] || undefined);   // retoma na mesma câmera
-    diag("recording.start.streamReady", { elapsedMs: Math.round(performance.now() - diagStartAt), generation: state.captureGeneration });
-  }catch(err){
-    diag("recording.start.error", { elapsedMs: Math.round(performance.now() - diagStartAt), error: err });
-    if (err && err.name === "NotAllowedError") show("s-denied");
-    else if (err && err.name === "NotSupportedError"){ releaseCamera(); showFormatUnsupported(); }
-    else show("s-nocam");
+    durationPickerOpen = false;
+    durationReturnFocus = null;
+    $("duration-picker").classList.remove("open");
+    $("duration-picker").setAttribute("aria-hidden", "true");
+    $("chip-dur").setAttribute("aria-expanded", "false");
+  }catch(_){}
+  try{
+    pairOpen = false;
+    pairReturnFocus = null;
+    $("pair").classList.remove("open");
+    $("pair").setAttribute("aria-hidden", "true");
+    $("chip-remote").setAttribute("aria-expanded", "false");
+  }catch(_){}
+  if (confirmWasOpen){
+    try{ finishConfirm(false, true); }catch(_){}
+  }
+  diag("capture.ui.normalized", { reason, durationWasOpen, pairWasOpen, confirmWasOpen });
+  return true;
+}
+const CAMERA_OPEN_TIMEOUT_MS = 15000;
+const CAPTURE_HEALTH_TIMEOUT_MS = 7000;
+const CAMERA_RECOVERY_KEY = "gravei-camera-recovery-v1";
+const CAMERA_RECOVERY_TTL_MS = 120000;
+
+class CameraOpenTimeoutError extends Error{
+  constructor(message = "A camera nao respondeu a tempo"){
+    super(message); this.name = "CameraOpenTimeoutError";
+  }
+}
+class CameraAttemptCancelledError extends Error{
+  constructor(message = "Abertura da camera cancelada"){
+    super(message); this.name = "CameraAttemptCancelledError";
+  }
+}
+class CameraHealthError extends Error{
+  constructor(message = "A camera nao ficou pronta"){
+    super(message); this.name = "CameraHealthError";
+  }
+}
+function isCameraTimeout(err){ return !!(err && err.name === "CameraOpenTimeoutError"); }
+function isCameraCancelled(err){ return !!(err && err.name === "CameraAttemptCancelledError"); }
+function captureIntentCurrent(intent){
+  return !!(intent && !intent.cancelled && state.captureIntent === intent);
+}
+function waitForNextPaint(){
+  return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+function setCaptureStartUi(busy, source){
+  const main = source === "central" ? $("b-again") : $("b-go");
+  if (main){
+    if (busy){
+      if (!main.dataset.captureOriginalLabel) main.dataset.captureOriginalLabel = main.textContent;
+      main.textContent = "Cancelar";
+      main.setAttribute("aria-busy", "true");
+    }else{
+      if (main.dataset.captureOriginalLabel) main.textContent = main.dataset.captureOriginalLabel;
+      delete main.dataset.captureOriginalLabel;
+      main.removeAttribute("aria-busy");
+    }
+  }
+  const guarded = source === "central"
+    ? [$("b-gallery"), $("b-home"), $("b-discard")]
+    : Array.from($("chips").querySelectorAll("button"));
+  guarded.forEach(el => {
+    if (!el) return;
+    if (busy){
+      if (el.dataset.captureWasDisabled === undefined) el.dataset.captureWasDisabled = el.disabled ? "1" : "0";
+      el.disabled = true;
+    }else if (el.dataset.captureWasDisabled !== undefined){
+      el.disabled = el.dataset.captureWasDisabled === "1";
+      delete el.dataset.captureWasDisabled;
+    }
+  });
+}
+function cancelCaptureStart(reason = "user"){
+  const intent = state.captureIntent;
+  if (!intent || !captureStartInProgress()) return false;
+  intent.cancelled = true;
+  clearCameraRecovery();
+  diag("capture.start.cancel", { intentId: intent.id, source: intent.source, reason, phase: state.capturePhase });
+  if (typeof state.pendingCameraCancel === "function"){
+    try{ state.pendingCameraCancel(reason); }catch(_){}
+  }
+  releaseCamera("capture.cancel");
+  setCapturePhase("idle", { intentId: intent.id, reason });
+  setCaptureStartUi(false, intent.source);
+  state.captureIntent = null;
+  hideToast();
+  return true;
+}
+function requestRecordingStart(source, options = {}){
+  if (state.active){
+    diag("capture.start.ignored", { source, reason: "already-recording" });
     return;
   }
-  state.active = true;
-  state.everRecorded = true;
-  updateCountChip(await vault.count());
-  startRing();
-  requestWakeLock();
-  show("rec-screen");
-  armDim();
-  watchCamera();
-  sentinelStart();
-  try{ startRemote(); }catch(_){}                    // controle remoto: falha silenciosa
-  diag("recording.start.ready", { elapsedMs: Math.round(performance.now() - diagStartAt), generation: state.captureGeneration });
+  if (captureStartInProgress()){
+    cancelCaptureStart("button");
+    return;
+  }
+  const promise = startRecording(source, options);
+  state.captureStartPromise = promise;
+  promise.catch(err => diag("capture.start.unhandled", { source, error: err })).finally(() => {
+    if (state.captureStartPromise === promise) state.captureStartPromise = null;
+  });
+}
+function clearCameraRecovery(){
+  try{ sessionStorage.removeItem(CAMERA_RECOVERY_KEY); }catch(_){}
+}
+function readCameraRecovery(){
+  try{
+    const raw = sessionStorage.getItem(CAMERA_RECOVERY_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || Date.now() - Number(data.createdAt || 0) > CAMERA_RECOVERY_TTL_MS){
+      clearCameraRecovery(); return null;
+    }
+    return data;
+  }catch(_){ clearCameraRecovery(); return null; }
+}
+async function schedulePageCameraRecovery(intent, err){
+  const eligible = !!(intent && intent.recoveryCount < 1 && state.cameraPreviouslyWorked &&
+    document.visibilityState === "visible" && !state.active && !state.saving);
+  diag("camera.recovery.page.evaluate", {
+    eligible, intentId: intent && intent.id, source: intent && intent.source,
+    recoveryCount: intent && intent.recoveryCount, previouslyWorked: state.cameraPreviouslyWorked,
+    visibility: document.visibilityState, error: err
+  });
+  if (!eligible) return false;
+  try{
+    sessionStorage.setItem(CAMERA_RECOVERY_KEY, JSON.stringify({
+      schema: 1, createdAt: Date.now(), source: intent.source,
+      duration: state.duration, facing: state.facing, recoveryCount: 1
+    }));
+  }catch(storageErr){
+    diag("camera.recovery.page.storageError", { error: storageErr });
+    return false;
+  }
+  setCapturePhase("recovering", { intentId: intent.id, mode: "page-reload" });
+  toast("Religando a c\u00e2mera\u2026", "info", 0);
+  diag("camera.recovery.page.reload", { intentId: intent.id, source: intent.source });
+  try{ GRAVEI_DIAG.persist(); }catch(_){}
+  setTimeout(() => location.reload(), 500);
+  return true;
+}
+async function scheduleRuntimeCameraRecovery(source, err){
+  diag("camera.recovery.runtime.begin", { source, error: err, fragments: state.fragments.length });
+  state.active = false;
+  sentinelStop();
+  clearInterval(state.timerId);
+  disarmDim();
+  releaseCamera("runtime.recovery");
+  const intent = {
+    id: ++state.cameraAttemptSerial, source: "central", recoveryCount: 0,
+    fromReload: false, cancelled: false, duration: state.duration, facing: state.facing
+  };
+  state.lastCaptureIntent = { source: "central", recoveryCount: 0 };
+  const scheduled = await schedulePageCameraRecovery(intent, err);
+  if (!scheduled) showCameraStartError(err, "central");
+  return scheduled;
+}
+function showCameraStartError(err, source){
+  clearCameraRecovery();
+  const timedOut = isCameraTimeout(err);
+  $("camera-error-title").textContent = timedOut ? "A c\u00e2mera n\u00e3o respondeu" : "C\u00e2mera indispon\u00edvel";
+  $("camera-error-msg").textContent = timedOut
+    ? "O Gravei tentou religar a c\u00e2mera com seguran\u00e7a. Toque em tentar de novo."
+    : "N\u00e3o foi poss\u00edvel acessar a c\u00e2mera. Feche outros apps que estejam usando a c\u00e2mera e tente de novo.";
+  $("b-camera-back").textContent = source === "central" ? "Voltar aos replays" : "Voltar ao in\u00edcio";
+  setCapturePhase("error", { source, error: err });
+  show("s-nocam");
+}
+async function resumePendingCameraRecovery(){
+  const pending = readCameraRecovery();
+  if (!pending) return;
+  clearCameraRecovery();                            // consome antes da tentativa: impossibilita loop de reload
+  diag("camera.recovery.page.resume", { pending });
+  state.duration = DURATIONS.includes(Number(pending.duration)) ? Number(pending.duration) : state.duration;
+  state.facing = pending.facing === "environment" ? "environment" : "user";
+  state.cameraPreviouslyWorked = true;
+  state.everRecorded = pending.source === "central" || state.everRecorded;
+  updateDurLabels();
+  syncDurationChips();
+  await refreshVaultUI();
+  if (pending.source === "central") await openCentral();
+  else show("s-time");
+  toast("Religando a c\u00e2mera\u2026", "info", 0);
+  requestRecordingStart(pending.source === "central" ? "central" : "duration", {
+    recoveryCount: 1, fromReload: true
+  });
+}
+async function waitForCaptureHealth(generation, intent, timeoutMs = CAPTURE_HEALTH_TIMEOUT_MS){
+  const startedAt = performance.now();
+  let last = null;
+  while (performance.now() - startedAt < timeoutMs){
+    if (!captureIntentCurrent(intent)) throw new CameraAttemptCancelledError();
+    const stream = state.stream;
+    const videoTrack = stream && stream.getVideoTracks()[0];
+    const audioTrack = stream && stream.getAudioTracks()[0];
+    const rec = state.captureRec;
+    last = {
+      hasStream: !!stream,
+      videoLive: !!(videoTrack && videoTrack.readyState === "live"),
+      audioLive: !!(audioTrack && audioTrack.readyState === "live"),
+      previewReady: camAlive(),
+      recorderState: rec ? rec.state : "none",
+      generationMatches: state.captureGeneration === generation,
+      fragments: state.fragments.length,
+      initReady: !!state.initSegment
+    };
+    if (last.videoLive && last.audioLive && last.previewReady &&
+        last.recorderState === "recording" && last.generationMatches &&
+        last.fragments > 0 && last.initReady){
+      diag("capture.health.ready", { intentId: intent.id, elapsedMs: Math.round(performance.now() - startedAt), ...last });
+      return last;
+    }
+    await sleep(120);
+  }
+  diag("capture.health.timeout", { intentId: intent.id, elapsedMs: Math.round(performance.now() - startedAt), last });
+  throw new CameraHealthError();
+}
+async function startRecording(source = "duration", options = {}){
+  const diagStartAt = performance.now();
+  if (!normalizeTransientCaptureUi("recording.start")){
+    toast("Aguarde a ação atual terminar", "info", 2200);
+    return;
+  }
+  const intent = {
+    id: ++state.cameraAttemptSerial,
+    source: source === "central" ? "central" : "duration",
+    recoveryCount: Number(options.recoveryCount || 0),
+    fromReload: !!options.fromReload,
+    cancelled: false,
+    duration: state.duration,
+    facing: state.facing
+  };
+  state.captureIntent = intent;
+  state.lastCaptureIntent = { source: intent.source, recoveryCount: intent.recoveryCount };
+  state.active = false;
+  setCaptureStartUi(true, intent.source);
+  setCapturePhase("opening", { intentId: intent.id, source: intent.source, fromReload: intent.fromReload });
+  toast(intent.fromReload ? "Religando a c\u00e2mera\u2026" : "Abrindo a c\u00e2mera\u2026", "info", 0);
+  diag("recording.start.begin", {
+    intentId: intent.id, source: intent.source, recoveryCount: intent.recoveryCount,
+    active: state.active, saving: state.saving, generation: state.captureGeneration, hasStream: !!state.stream
+  });
+  updateDurLabels();
+  const picked = pickMime();
+  if (!picked){
+    diag("recording.start.mimeRejected", { intentId: intent.id });
+    setCaptureStartUi(false, intent.source);
+    state.captureIntent = null;
+    setCapturePhase("idle", { intentId: intent.id, reason: "mime" });
+    showFormatUnsupported();
+    return;
+  }
+  const [mime, ext] = picked;
+  state.mime = mime; state.ext = ext;
+  await Promise.race([waitForNextPaint(), sleep(180)]);
+
+  let lastErr = null;
+  for (let localAttempt = 0; localAttempt < 2; localAttempt++){
+    if (!captureIntentCurrent(intent)) break;
+    try{
+      const opened = await openStream(state.cams[state.camIndex] || undefined, {
+        purpose: "recording-start", maxAttempts: 1, timeoutMs: CAMERA_OPEN_TIMEOUT_MS, intentId: intent.id
+      });
+      if (!captureIntentCurrent(intent)) throw new CameraAttemptCancelledError();
+      setCapturePhase("checking", { intentId: intent.id, localAttempt, generation: opened.generation });
+      await waitForCaptureHealth(opened.generation, intent);
+      if (!captureIntentCurrent(intent)) throw new CameraAttemptCancelledError();
+
+      state.active = true;
+      state.everRecorded = true;
+      state.cameraPreviouslyWorked = true;
+      clearCameraRecovery();
+      setCapturePhase("recording", { intentId: intent.id, generation: opened.generation });
+      setCaptureStartUi(false, intent.source);
+      hideToast();
+      updateCountChip(await vault.count());
+      startRing();
+      requestWakeLock();
+      show("rec-screen");
+      armDim();
+      watchCamera();
+      sentinelStart();
+      try{ startRemote(); }catch(_){}
+      diag("recording.start.ready", {
+        intentId: intent.id, elapsedMs: Math.round(performance.now() - diagStartAt),
+        generation: state.captureGeneration, localAttempt
+      });
+      state.captureIntent = null;
+      return;
+    }catch(err){
+      lastErr = err;
+      diag("recording.start.attemptError", {
+        intentId: intent.id, localAttempt, elapsedMs: Math.round(performance.now() - diagStartAt), error: err
+      });
+      releaseCamera("recording.start.error");
+      if (isCameraCancelled(err) || !captureIntentCurrent(intent)) break;
+      if (isCameraTimeout(err)){
+        if (await schedulePageCameraRecovery(intent, err)) return;
+        break;
+      }
+      if (err && (err.name === "NotAllowedError" || err.name === "SecurityError")) break;
+      if (err && err.name === "NotSupportedError") break;
+      if (localAttempt === 0){
+        setCapturePhase("recovering", { intentId: intent.id, mode: "same-page", error: err });
+        toast("Religando a c\u00e2mera\u2026", "info", 0);
+        await sleep(700);
+        setCapturePhase("opening", { intentId: intent.id, source: intent.source, retry: 1 });
+      }
+    }
+  }
+
+  const cancelled = intent.cancelled || isCameraCancelled(lastErr);
+  setCaptureStartUi(false, intent.source);
+  if (state.captureIntent === intent) state.captureIntent = null;
+  if (cancelled){
+    setCapturePhase("idle", { intentId: intent.id, reason: "cancelled" });
+    hideToast();
+    return;
+  }
+  diag("recording.start.error", {
+    intentId: intent.id, elapsedMs: Math.round(performance.now() - diagStartAt), error: lastErr
+  });
+  hideToast();
+  if (lastErr && (lastErr.name === "NotAllowedError" || lastErr.name === "SecurityError")){
+    setCapturePhase("error", { intentId: intent.id, reason: "permission" });
+    show("s-denied");
+  }else if (lastErr && lastErr.name === "NotSupportedError"){
+    setCapturePhase("error", { intentId: intent.id, reason: "format" });
+    showFormatUnsupported();
+  }else{
+    showCameraStartError(lastErr || new Error("camera"), intent.source);
+  }
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -1728,16 +2110,18 @@ async function onCamStall(source = "unknown"){
   try{ updateDurLabels(); }catch(_){}
   try{
     toast("Religando a câmera…", "info", 0);
-    await openStream(state.cams[state.camIndex] || undefined);
+    await openStream(state.cams[state.camIndex] || undefined, { purpose: "stall-recovery", maxAttempts: 2 });
     diag("camera.stall.recovered", { source, generation: state.captureGeneration });
     sentinelStart();
     toast("Câmera recuperada", "ok", 2600);
   }catch(err){
     diag("camera.stall.error", { source, error: err });
     hideToast();
-    try{ askCamRetry(); }catch(__){ toast("Câmera indisponível", "err"); }
+    if (isCameraTimeout(err)) await scheduleRuntimeCameraRecovery("stall." + source, err);
+    else try{ askCamRetry(); }catch(__){ toast("Câmera indisponível", "err"); }
+  }finally{
+    camRecovering = false;
   }
-  camRecovering = false;
 }
 function sentinelStop(){
   clearInterval(state.sentinelId); state.sentinelId = null;
@@ -1791,10 +2175,97 @@ function onRotate(){
 try{ screen.orientation.addEventListener("change", onRotate); }catch(_){}
 window.addEventListener("orientationchange", onRotate);
 
-function releaseCamera(){
- diag("camera.release", { hasStream: !!state.stream, recorderState: state.captureRec ? state.captureRec.state : "none", generation: state.captureGeneration, saving: state.saving });
- stopCaptureRecorder(true);
- if(state.stream){state.stream.getTracks().forEach(t=>t.stop());state.stream=null;}
+function stopStreamTracks(stream, reason = "unknown"){
+  if (!stream) return;
+  let stopped = 0;
+  try{
+    stream.getTracks().forEach(track => {
+      try{ track.onended = null; track.onmute = null; track.onunmute = null; track.stop(); stopped++; }catch(_){}
+    });
+  }catch(_){}
+  diag("camera.stream.stopped", { reason, tracks: stopped });
+}
+function getUserMediaWithDeadline(constraints, meta = {}){
+  const openId = Number(meta.openId || 0);
+  const timeoutMs = Number(meta.timeoutMs || CAMERA_OPEN_TIMEOUT_MS);
+  const purpose = meta.purpose || "camera";
+  const tryN = Number(meta.tryN || 0);
+  diag("camera.getUserMedia.begin", { openId, tryN, purpose, timeoutMs, explicitDevice: !!(constraints.video && constraints.video.deviceId) });
+  let settled = false;
+  let timer = null;
+  let cancel = null;
+  let rawPromise;
+  try{ rawPromise = navigator.mediaDevices.getUserMedia(constraints); }
+  catch(err){
+    diag("camera.getUserMedia.error", { openId, tryN, purpose, error: err, synchronous: true });
+    return Promise.reject(err);
+  }
+  return new Promise((resolve, reject) => {
+    const detach = () => {
+      if (timer) clearTimeout(timer);
+      if (state.pendingCameraCancel === cancel) state.pendingCameraCancel = null;
+    };
+    cancel = reason => {
+      if (settled) return;
+      settled = true;
+      detach();
+      diag("camera.getUserMedia.cancel", { openId, tryN, purpose, reason });
+      reject(new CameraAttemptCancelledError(String(reason || "cancelled")));
+    };
+    state.pendingCameraCancel = cancel;
+    timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      detach();
+      const error = new CameraOpenTimeoutError();
+      diag("camera.getUserMedia.timeout", { openId, tryN, purpose, timeoutMs });
+      reject(error);
+    }, timeoutMs);
+    rawPromise.then(stream => {
+      if (settled || state.cameraAttemptId !== openId){
+        diag("camera.getUserMedia.lateStream", { openId, tryN, purpose, currentOpenId: state.cameraAttemptId, settled });
+        stopStreamTracks(stream, "getUserMedia.late");
+        return;
+      }
+      settled = true;
+      detach();
+      diag("camera.getUserMedia.resolved", {
+        openId, tryN, purpose, videoTracks: stream.getVideoTracks().length, audioTracks: stream.getAudioTracks().length
+      });
+      resolve(stream);
+    }, err => {
+      if (settled){
+        diag("camera.getUserMedia.lateError", { openId, tryN, purpose, error: err });
+        return;
+      }
+      settled = true;
+      detach();
+      diag("camera.getUserMedia.error", { openId, tryN, purpose, error: err });
+      reject(err);
+    });
+  });
+}
+function releaseCamera(reason = "unknown"){
+  const stream = state.stream;
+  diag("camera.release", {
+    reason, hasStream: !!stream, pendingOpen: !!state.pendingCameraCancel,
+    recorderState: state.captureRec ? state.captureRec.state : "none",
+    generation: state.captureGeneration, saving: state.saving
+  });
+  state.cameraAttemptId = 0;
+  if (typeof state.pendingCameraCancel === "function"){
+    const cancel = state.pendingCameraCancel;
+    state.pendingCameraCancel = null;
+    try{ cancel(reason); }catch(_){}
+  }
+  stopCaptureRecorder(true);
+  const video = $("cam");
+  if (video){
+    try{ video.pause(); }catch(_){}
+    try{ video.srcObject = null; }catch(_){}
+  }
+  if (stream) stopStreamTracks(stream, reason);
+  state.stream = null;
 }
 
 /* Monta a lista de câmeras do aparelho (inclui webcams USB).
@@ -1847,66 +2318,117 @@ async function applyWidestZoom(stream){
 
 /* Abre uma câmera. Sem argumento: usa facingMode (1ª abertura).
    Com um item de state.cams: abre aquele dispositivo específico. */
-async function openStream(cam){
-  const diagOpenId = state.diagOpenSeq = (state.diagOpenSeq || 0) + 1;
+async function openStream(cam, options = {}){
+  const purpose = options.purpose || "runtime";
+  const maxAttempts = Math.max(1, Number(options.maxAttempts || 2));
+  const timeoutMs = Number(options.timeoutMs || CAMERA_OPEN_TIMEOUT_MS);
   const diagOpenAt = performance.now();
-  diag("camera.open.begin", { openId: diagOpenId, side: cam ? cam.side : state.facing, active: state.active, saving: state.saving, generation: state.captureGeneration });
-  releaseCamera();
-  await sleep(300);                                  // Android: espera a câmera ser liberada
+  releaseCamera("open.replace");
+  await sleep(300);                                  // Android: espera a camera ser liberada
 
-  const attempts = [];
+  const openId = ++state.cameraAttemptSerial;
+  state.cameraAttemptId = openId;
+  diag("camera.open.begin", {
+    openId, intentId: options.intentId || null, purpose, side: cam ? cam.side : state.facing,
+    active: state.active, saving: state.saving, generation: state.captureGeneration, maxAttempts
+  });
+
   let mirror = false;
+  let videoBase;
   if (cam && cam.deviceId){
-    attempts.push({ deviceId: { exact: cam.deviceId } });
+    videoBase = { deviceId: { exact: cam.deviceId } };
     mirror = cam.side === "front";
   }else{
-    // primeira abertura: pede a frontal padrão
-    attempts.push({ facingMode: state.facing });
+    videoBase = { facingMode: state.facing };
     mirror = state.facing === "user";
   }
 
-  let stream = null, lastErr = null;
-  for (const videoBase of attempts){
-    for (let tryN = 0; tryN < 2 && !stream; tryN++){
+  let stream = null;
+  let lastErr = null;
+  try{
+    for (let tryN = 0; tryN < maxAttempts && !stream; tryN++){
       try{
-        diag("camera.getUserMedia.begin", { openId: diagOpenId, tryN, explicitDevice: !!(cam && cam.deviceId) });
-        stream = await navigator.mediaDevices.getUserMedia({
+        stream = await getUserMediaWithDeadline({
           video: Object.assign({ width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, videoBase),
           audio: true
-        });
+        }, { openId, tryN, purpose, timeoutMs });
       }catch(err){
-        diag("camera.getUserMedia.error", { openId: diagOpenId, tryN, error: err });
         lastErr = err;
-        if (err && err.name === "NotAllowedError") throw err;   // negado: não adianta repetir
-        await sleep(500);                            // câmera ainda ocupada: tenta de novo
+        if (isCameraTimeout(err) || isCameraCancelled(err) ||
+            (err && (err.name === "NotAllowedError" || err.name === "SecurityError" || err.name === "NotSupportedError"))){
+          throw err;
+        }
+        if (tryN + 1 < maxAttempts) await sleep(500);
       }
     }
-    if (stream) break;
+    if (!stream) throw lastErr || new Error("camera");
+    if (state.cameraAttemptId !== openId){
+      stopStreamTracks(stream, "open.superseded");
+      throw new CameraAttemptCancelledError();
+    }
+    state.stream = stream;                           // permite cancelamento imediato nas etapas seguintes
+
+    try{
+      await Promise.race([applyWidestZoom(stream), sleep(2500)]);
+    }catch(zoomErr){ diag("camera.zoom.error", { openId, error: zoomErr }); }
+    if (state.cameraAttemptId !== openId){
+      stopStreamTracks(stream, "open.superseded.afterZoom");
+      throw new CameraAttemptCancelledError();
+    }
+
+    try{
+      const settings = stream.getVideoTracks()[0].getSettings();
+      diag("camera.stream.acquired", {
+        openId, elapsedMs: Math.round(performance.now() - diagOpenAt),
+        width: settings.width, height: settings.height, frameRate: settings.frameRate, facingMode: settings.facingMode
+      });
+    }catch(_){}
+
+    const syncCameraList = async () => {
+      try{
+        if (!state.cams.length || !state.cams.some(c => c.label && !/^C.mera \d+$/.test(c.label))) await buildCameraList();
+        if (state.stream !== stream) return;
+        const videoTrack = stream.getVideoTracks()[0];
+        const activeId = videoTrack && videoTrack.getSettings().deviceId;
+        const idx = state.cams.findIndex(c => c.deviceId === activeId);
+        if (idx >= 0) state.camIndex = idx;
+        updateFlipVisibility();
+      }catch(err){ diag("camera.list.error", { openId, error: err }); }
+    };
+    syncCameraList();                                // nao bloqueia a saude da captura
+
+    const video = $("cam");
+    video.srcObject = stream;
+    video.classList.toggle("mirror", mirror);
+    try{
+      await Promise.race([video.play(), sleep(2500)]);
+    }catch(playErr){ diag("camera.preview.play.error", { openId, error: playErr }); }
+    if (state.cameraAttemptId !== openId || state.stream !== stream){
+      stopStreamTracks(stream, "open.superseded.afterPreview");
+      throw new CameraAttemptCancelledError();
+    }
+
+    const generation = startCaptureRecorder();       // unico gravador do buffer
+    if (!generation) throw new CameraHealthError("O gravador nao iniciou");
+    state.cameraAttemptId = 0;
+    diag("camera.open.ready", {
+      openId, elapsedMs: Math.round(performance.now() - diagOpenAt), generation
+    });
+    return { openId, generation, stream };
+  }catch(err){
+    if (state.stream === stream){
+      const video = $("cam");
+      try{ video.pause(); video.srcObject = null; }catch(_){}
+      state.stream = null;
+    }
+    if (stream) stopStreamTracks(stream, "open.error");
+    if (state.cameraAttemptId === openId) state.cameraAttemptId = 0;
+    diag("camera.open.error", {
+      openId, purpose, elapsedMs: Math.round(performance.now() - diagOpenAt), error: err
+    });
+    throw err;
   }
-  if (!stream){ diag("camera.open.error", { openId: diagOpenId, elapsedMs: Math.round(performance.now() - diagOpenAt), error: lastErr || new Error("camera") }); throw lastErr || new Error("camera"); }
-
-  await applyWidestZoom(stream);                     // menor zoom = maior ângulo (com re-tentativas verificadas)
-  state.stream = stream;
-  try{ const s = stream.getVideoTracks()[0].getSettings(); diag("camera.stream.acquired", { openId: diagOpenId, elapsedMs: Math.round(performance.now() - diagOpenAt), width: s.width, height: s.height, frameRate: s.frameRate, facingMode: s.facingMode }); }catch(_){}
-
-  // agora que temos permissão, os rótulos ficam visíveis: (re)monta a lista
-  if (!state.cams.length || !state.cams.some(c => c.label && !/^Câmera \d+$/.test(c.label))){
-    await buildCameraList();
-  }
-  // sincroniza o índice atual com o dispositivo realmente aberto
-  const activeId = stream.getVideoTracks()[0].getSettings().deviceId;
-  const idx = state.cams.findIndex(c => c.deviceId === activeId);
-  if (idx >= 0) state.camIndex = idx;
-
-  const v = $("cam");
-  v.srcObject = stream;
-  try{ await v.play(); }catch(_){}
-  v.classList.toggle("mirror", mirror);              // espelha só a frontal
-  updateFlipVisibility();
-  startCaptureRecorder();                           // unico gravador do buffer
-  diag("camera.open.ready", { openId: diagOpenId, elapsedMs: Math.round(performance.now() - diagOpenAt), generation: state.captureGeneration });
 }
-
 function updateFlipVisibility(){
   // esconde o botão de trocar se só houver uma câmera
   $("btn-flip").style.display = state.cams.length > 1 ? "flex" : "none";
@@ -2144,7 +2666,7 @@ function makeRecorder(stream){
 function startCaptureRecorder(){
   if(!state.stream||state.captureRec){
     diag("recorder.start.ignored", { hasStream: !!state.stream, existingState: state.captureRec ? state.captureRec.state : "none" });
-    return;
+    return null;
   }
   const gen=++state.captureGeneration;
   state.initSegment=null;state.videoTrackId=null;state.defaultSampleFlags={};state.lastReplaySelectionReason="empty";state.keyframeOptionRead=false;state.keyframeRequestMode="none";state.lastVideoKeyAt=0;state.videoKeyframesSeen=0;state.maxObservedKeyIntervalMs=0;state.dataEventSerial=0;state.processedEventSerial=0;state.formatProbeFailures=0;state.formatRejected=false;
@@ -2176,6 +2698,7 @@ function startCaptureRecorder(){
     diag("recorder.start.error", { generation: gen, error: err });
     throw err;
   }
+  return gen;
 }
 function stopCaptureRecorder(reset){
   const rec=state.captureRec;
@@ -2253,20 +2776,26 @@ $("btn-flip").onclick = async () => {
   toast("Abrindo " + camName(cam).toLowerCase() + "…", "info", 0);
 
   try{
-    await openStream(cam);
+    await openStream(cam, { purpose: "camera-flip", maxAttempts: 2 });
     toast(camName(cam) + " ativa", "info", 2200);
     watchCamera();
     sentinelStart();
-  }catch(_){
-    // falhou: volta para a câmera anterior sem deixar tela preta
-    try{
-      await openStream(state.cams[prevIndex] || undefined);
-      toast("Não foi possível abrir essa câmera", "err");
-    }catch(__){
-      show("s-nocam");
+  }catch(err){
+    if (isCameraTimeout(err)){
+      await scheduleRuntimeCameraRecovery("camera-flip", err);
+    }else{
+      // falha concluida: volta para a camera anterior
+      try{
+        await openStream(state.cams[prevIndex] || undefined, { purpose: "camera-flip-rollback", maxAttempts: 1 });
+        toast("Não foi possível abrir essa câmera", "err");
+      }catch(rollbackErr){
+        if (isCameraTimeout(rollbackErr)) await scheduleRuntimeCameraRecovery("camera-flip-rollback", rollbackErr);
+        else showCameraStartError(rollbackErr, "central");
+      }
     }
+  }finally{
+    flipping = false;
   }
-  flipping = false;
 };
 
 /* ---------- salvar replay ---------- */
@@ -2612,6 +3141,7 @@ async function saveAll(){
 async function refreshVaultUI(){
   const summary = await getReplayStorageSummary();
   const n = summary.count;
+  if (n > 0) state.cameraPreviouslyWorked = true;
   const resumable = !!state.everRecorded;
   updateCentralPreviewCache(summary);
   $("ended-msg").textContent = n > 0
@@ -4584,38 +5114,52 @@ function watchCamera(){
   camWatchTimer = setTimeout(async () => {
     if (!state.active || camAlive()) return;
     diag("camera.watch.recover", { saving: state.saving, generation: state.captureGeneration, fragments: state.fragments.length });
-    // 1ª tentativa: religar sozinho (sem gesto)
+    let recoveryError = null;
     try{
-      await openStream(state.cams[state.camIndex] || undefined);
-    }catch(_){}
+      await openStream(state.cams[state.camIndex] || undefined, { purpose: "camera-watch", maxAttempts: 2 });
+    }catch(err){ recoveryError = err; }
+    if (isCameraTimeout(recoveryError)){
+      await scheduleRuntimeCameraRecovery("camera-watch", recoveryError);
+      return;
+    }
     setTimeout(() => {
       if (!state.active) return;
-      if (camAlive()){ toast("Câmera recuperada", "ok", 1600); return; }
-      askCamRetry();                                  // persiste: pede um toque
+      if (camAlive()){ toast("Câmera recuperada", "ok", 1600); sentinelStart(); return; }
+      askCamRetry();                                  // falha concluida: pede um toque
     }, 2500);
   }, 2500);
 }
+let camRetryPointerHandler = null;
+function clearCamRetryPointer(){
+  if (!camRetryPointerHandler) return;
+  document.removeEventListener("pointerdown", camRetryPointerHandler, true);
+  camRetryPointerHandler = null;
+}
 function askCamRetry(){
+  clearCamRetryPointer();
   toast("Câmera não iniciou — toque na tela para tentar de novo", "err", 0);
-  const once = async () => {
-    document.removeEventListener("pointerdown", once, true);
+  camRetryPointerHandler = async () => {
+    clearCamRetryPointer();
     if (!state.active) return;
     hideToast();
+    let retryError = null;
     try{
-      await openStream(state.cams[state.camIndex] || undefined);
-    }catch(_){}
+      await openStream(state.cams[state.camIndex] || undefined, { purpose: "camera-pointer-retry", maxAttempts: 1 });
+    }catch(err){ retryError = err; }
+    if (isCameraTimeout(retryError)){
+      await scheduleRuntimeCameraRecovery("camera-pointer-retry", retryError);
+      return;
+    }
     setTimeout(() => {
       if (!state.active) return;
-      if (camAlive()){ toast("Câmera recuperada", "ok", 1600); return; }
-      // item 5: honestidade quando o modo app não coopera
+      if (camAlive()){ toast("Câmera recuperada", "ok", 1600); sentinelStart(); return; }
       toast(isStandalone
         ? "No modo app a câmera pode falhar neste iOS. Abra pelo Safari — o controle remoto funciona aqui."
         : "Câmera indisponível. Feche outros apps que usam a câmera e tente de novo.", "err", 6000);
     }, 2500);
   };
-  document.addEventListener("pointerdown", once, true);
+  document.addEventListener("pointerdown", camRetryPointerHandler, true);
 }
-
 /* ---- item 2: repintura ao girar (bug de layout do standalone) ---- */
 let vpTimer = null;
 function onViewportChange(){
@@ -4643,6 +5187,15 @@ if (isStandalone){
     }
   }catch(_){}
 }
+
+/* retoma uma unica recuperacao controlada depois que todo o app esta pronto */
+setTimeout(() => {
+  resumePendingCameraRecovery().catch(err => {
+    diag("camera.recovery.page.resumeError", { error: err });
+    clearCameraRecovery();
+    showCameraStartError(err, "central");
+  });
+}, 0);
 
 /* ---------- PWA: manifest inline ---------- */
 (function(){
