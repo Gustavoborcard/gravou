@@ -386,7 +386,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v82c keyframe</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v82d adaptativo</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -725,19 +725,19 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v82c - replay iniciado em keyframe de video
+   Gravei v82d - keyframes adaptativos e retomada segura
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
    ========================================================= */
 "use strict";
 
-/* ---------- diagnóstico local v82a ----------
+/* ---------- diagnóstico local v82d ----------
    Guarda apenas eventos técnicos; nunca guarda vídeo, áudio ou imagens.
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v82c-keyframe";
+  const VERSION = "v82d-adaptive-keyframe";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -1136,8 +1136,8 @@ const DURATIONS = [10,15,20,30,45,60];
 
 const state = {
  duration:20,facing:"user",cams:[],camIndex:-1,stream:null,mime:"",ext:"mp4",pendingShareKeys:null,
- captureRec:null,captureGeneration:0,initSegment:null,videoTrackId:null,defaultSampleFlags:{},lastReplaySelectionReason:"empty",dataEventSerial:0,processedEventSerial:0,fragments:[],fragmentQueue:Promise.resolve(),flushWaiters:[],
- lastChunkAt:0,bufferSeconds:0,captureRecovering:false,formatProbeFailures:0,formatRejected:false,timerId:null,wakeLock:null,saving:false,replayCount:0,active:false
+ captureRec:null,captureGeneration:0,initSegment:null,videoTrackId:null,defaultSampleFlags:{},lastReplaySelectionReason:"empty",keyframeOptionRead:false,keyframeRequestMode:"none",lastVideoKeyAt:0,videoKeyframesSeen:0,maxObservedKeyIntervalMs:0,dataEventSerial:0,processedEventSerial:0,fragments:[],fragmentQueue:Promise.resolve(),flushWaiters:[],
+ lastChunkAt:0,bufferSeconds:0,bufferBytes:0,bufferLimitRecoveryPending:false,captureRecovering:false,formatProbeFailures:0,formatRejected:false,timerId:null,wakeLock:null,saving:false,replayCount:0,active:false
 };
 
 /* ---------- navegação entre telas ---------- */
@@ -1729,9 +1729,66 @@ function fragmentVideoStartKey(a){
   return null
 }
 function settleFlush(force=false){const keep=[];for(const x of state.flushWaiters){if(force||state.processedEventSerial>=x.target){clearTimeout(x.timer);x.resolve()}else keep.push(x)}state.flushWaiters=keep}
-function updateBuffer(){const a=state.fragments[0],b=state.fragments[state.fragments.length-1];state.bufferSeconds=a&&b?Math.max(0,(b.endAt-a.startAt)/1000):0}
-const KEYFRAME_MARGIN_SECONDS=6;
-function pruneBuffer(){const cutoff=performance.now()-(state.duration+KEYFRAME_MARGIN_SECONDS)*1000;while(state.fragments.length>2&&state.fragments[1].endAt<cutoff)state.fragments.shift();updateBuffer()}
+const MAX_KEYFRAME_LOOKBACK_SECONDS=90,MAX_CAPTURE_BUFFER_BYTES=40*1024*1024;
+function updateBuffer(){
+  const a=state.fragments[0],b=state.fragments[state.fragments.length-1];
+  state.bufferSeconds=a&&b?Math.max(0,(b.endAt-a.startAt)/1000):0;
+  state.bufferBytes=state.fragments.reduce((sum,fragment)=>sum+(fragment.bytes?fragment.bytes.byteLength:0),0)
+}
+function bufferLimitReason(){
+  if(state.bufferBytes>MAX_CAPTURE_BUFFER_BYTES)return"bytes";
+  if(state.bufferSeconds>state.duration+MAX_KEYFRAME_LOOKBACK_SECONDS)return"time";
+  return""
+}
+function scheduleBufferLimitRecovery(reason,delayMs=0){
+  if(state.bufferLimitRecoveryPending)return;
+  state.bufferLimitRecoveryPending=true;
+  diag("buffer.limit.scheduled",{reason,delayMs,fragments:state.fragments.length,bufferSeconds:Number(state.bufferSeconds.toFixed(2)),bufferBytes:state.bufferBytes,maxSeconds:state.duration+MAX_KEYFRAME_LOOKBACK_SECONDS,maxBytes:MAX_CAPTURE_BUFFER_BYTES});
+  const attempt=()=>{
+    if(state.saving){setTimeout(attempt,500);return}
+    state.bufferLimitRecoveryPending=false;
+    updateBuffer();
+    const currentReason=bufferLimitReason();
+    if(!currentReason||!state.active||!state.stream){
+      diag("buffer.limit.skipped",{reason:currentReason||"resolved",active:state.active,hasStream:!!state.stream,fragments:state.fragments.length,bufferBytes:state.bufferBytes});
+      return
+    }
+    const generationBefore=state.captureGeneration;
+    restartCaptureRecorder("buffer.limit."+currentReason).then(()=>{
+      const restarted=state.captureGeneration>generationBefore&&!!state.captureRec&&state.captureRec.state==="recording";
+      diag("buffer.limit.recovery",{reason:currentReason,restarted,generation:state.captureGeneration});
+      if(restarted)toast("Gravacao retomada - o replay recomeca a contar","info",2600);
+      else scheduleBufferLimitRecovery("retry",650)
+    }).catch(err=>{
+      diag("buffer.limit.recoveryError",{reason:currentReason,error:err});
+      scheduleBufferLimitRecovery("retry",650)
+    })
+  };
+  setTimeout(attempt,delayMs)
+}
+function enforceBufferLimits(){
+  const reason=bufferLimitReason();
+  if(reason)scheduleBufferLimitRecovery(reason)
+}
+function pruneBuffer(){
+  if(state.fragments.length<2){updateBuffer();enforceBufferLimits();return}
+  const last=state.fragments[state.fragments.length-1],target=last.endAt-state.duration*1000;
+  let keepFrom=-1;
+  for(let i=0;i<state.fragments.length;i++){
+    const fragment=state.fragments[i];
+    if(fragment.startAt<=target&&fragment.videoStartKey===true)keepFrom=i
+  }
+  if(keepFrom<0&&last.endAt-state.fragments[0].startAt<state.duration*1000){
+    keepFrom=state.fragments.findIndex(fragment=>fragment.videoStartKey===true)
+  }
+  if(keepFrom>0){
+    const removed=keepFrom,removedBytes=state.fragments.slice(0,removed).reduce((sum,fragment)=>sum+(fragment.bytes?fragment.bytes.byteLength:0),0);
+    state.fragments.splice(0,removed);
+    diag("buffer.pruned",{removed,removedBytes,kept:state.fragments.length,strategy:"keyframe-anchor"})
+  }
+  updateBuffer();
+  enforceBufferLimits()
+}
 async function ingestChunk(blob,generation){
   if(generation!==state.captureGeneration||!blob||!blob.size){
     diag("fragment.skip", { generation, currentGeneration: state.captureGeneration, blobSize: blob ? blob.size : 0 });
@@ -1769,16 +1826,42 @@ async function ingestChunk(blob,generation){
     const start=moofs[i].start,end=i+1<moofs.length?moofs[i+1].start:a.byteLength,bytes=a.slice(start,end);
     fragmentTfdt(bytes);
     const videoStartKey=fragmentVideoStartKey(bytes),endAt=performance.now(),startAt=previous?previous.endAt:endAt-1000;
+    if(videoStartKey===true){
+      const intervalMs=state.lastVideoKeyAt?Math.round(endAt-state.lastVideoKeyAt):null;
+      if(Number.isFinite(intervalMs))state.maxObservedKeyIntervalMs=Math.max(state.maxObservedKeyIntervalMs,intervalMs);
+      state.lastVideoKeyAt=endAt;state.videoKeyframesSeen++;
+      diag("fragment.keyframe",{generation,index:state.videoKeyframesSeen,intervalMs,maxIntervalMs:state.maxObservedKeyIntervalMs})
+    }
     previous={bytes,startAt,endAt,videoStartKey};state.fragments.push(previous)
   }
   if(moofs.length){state.lastChunkAt=Date.now();pruneBuffer()}
-  diag("fragment.ingested", { generation, chunkBytes: a.byteLength, moofs: moofs.length, keyStarts: moofs.length?state.fragments.slice(-moofs.length).map(x=>x.videoStartKey):[], fragments: state.fragments.length, bufferSeconds: Number(state.bufferSeconds.toFixed(2)) });
+  diag("fragment.ingested", { generation, chunkBytes: a.byteLength, moofs: moofs.length, keyStarts: moofs.length?state.fragments.slice(-moofs.length).map(x=>x.videoStartKey):[], fragments: state.fragments.length, bufferSeconds: Number(state.bufferSeconds.toFixed(2)), bufferBytes: state.bufferBytes });
 }
+const RECORDER_TIMESLICE_MS=1000;
 function makeRecorder(stream){
-  const options={videoBitsPerSecond:2500000,mimeType:state.mime};
-  try{return new MediaRecorder(stream,options)}catch(firstError){
-    try{return new MediaRecorder(stream,{mimeType:state.mime})}catch(_){
-      const error=new Error("MP4 MediaRecorder indisponivel");error.name="NotSupportedError";error.cause=firstError;throw error
+  const baseOptions={videoBitsPerSecond:2500000,mimeType:state.mime},requestedOptions={...baseOptions};
+  let optionRead=false;
+  Object.defineProperty(requestedOptions,"videoKeyFrameIntervalDuration",{enumerable:true,get(){optionRead=true;return RECORDER_TIMESLICE_MS}});
+  try{
+    const recorder=new MediaRecorder(stream,requestedOptions);
+    state.keyframeOptionRead=optionRead;state.keyframeRequestMode="requested";
+    diag("recorder.keyframeOption",{mode:"requested",optionRead,intervalMs:RECORDER_TIMESLICE_MS});
+    return recorder
+  }catch(optionError){
+    state.keyframeOptionRead=optionRead;
+    diag("recorder.keyframeOption.rejected",{optionRead,error:optionError});
+    try{
+      const recorder=new MediaRecorder(stream,baseOptions);
+      state.keyframeRequestMode="fallback-bitrate";
+      return recorder
+    }catch(secondError){
+      try{
+        const recorder=new MediaRecorder(stream,{mimeType:state.mime});
+        state.keyframeRequestMode="fallback-mime";
+        return recorder
+      }catch(_){
+        const error=new Error("MP4 MediaRecorder indisponivel");error.name="NotSupportedError";error.cause=secondError;throw error
+      }
     }
   }
 }
@@ -1788,8 +1871,8 @@ function startCaptureRecorder(){
     return;
   }
   const gen=++state.captureGeneration;
-  state.initSegment=null;state.videoTrackId=null;state.defaultSampleFlags={};state.lastReplaySelectionReason="empty";state.dataEventSerial=0;state.processedEventSerial=0;state.formatProbeFailures=0;state.formatRejected=false;
-  state.fragments=[];state.bufferSeconds=0;state.fragmentQueue=Promise.resolve();state.flushWaiters=[];
+  state.initSegment=null;state.videoTrackId=null;state.defaultSampleFlags={};state.lastReplaySelectionReason="empty";state.keyframeOptionRead=false;state.keyframeRequestMode="none";state.lastVideoKeyAt=0;state.videoKeyframesSeen=0;state.maxObservedKeyIntervalMs=0;state.dataEventSerial=0;state.processedEventSerial=0;state.formatProbeFailures=0;state.formatRejected=false;
+  state.fragments=[];state.bufferSeconds=0;state.bufferBytes=0;state.fragmentQueue=Promise.resolve();state.flushWaiters=[];
   let rec;
   try{ rec=makeRecorder(state.stream); }
   catch(err){ diag("recorder.construct.error", { generation: gen, mime: state.mime, error: err }); throw err; }
@@ -1811,8 +1894,8 @@ function startCaptureRecorder(){
     if(state.captureRec===rec)state.captureRec=null
   };
   try{
-    rec.start(1000);state.lastChunkAt=Date.now();
-    diag("recorder.started", { generation: gen, mime: rec.mimeType || state.mime });
+    rec.start(RECORDER_TIMESLICE_MS);state.lastChunkAt=Date.now();
+    diag("recorder.started", { generation: gen, mime: rec.mimeType || state.mime, keyframeRequestMode: state.keyframeRequestMode, keyframeOptionRead: state.keyframeOptionRead });
   }catch(err){
     diag("recorder.start.error", { generation: gen, error: err });
     throw err;
@@ -1824,7 +1907,7 @@ function stopCaptureRecorder(reset){
   state.captureRec=null;state.captureGeneration++;
   if(rec)try{rec.ondataavailable=null;rec.onerror=null;rec.onstop=null;if(rec.state!=='inactive')rec.stop()}catch(err){diag("recorder.stop.error", { error: err })}
   settleFlush(true);
-  if(reset){state.initSegment=null;state.videoTrackId=null;state.defaultSampleFlags={};state.lastReplaySelectionReason="empty";state.fragments=[];state.bufferSeconds=0;state.fragmentQueue=Promise.resolve()}
+  if(reset){state.initSegment=null;state.videoTrackId=null;state.defaultSampleFlags={};state.lastReplaySelectionReason="empty";state.keyframeOptionRead=false;state.keyframeRequestMode="none";state.lastVideoKeyAt=0;state.videoKeyframesSeen=0;state.maxObservedKeyIntervalMs=0;state.fragments=[];state.bufferSeconds=0;state.bufferBytes=0;state.fragmentQueue=Promise.resolve()}
   diag("recorder.stop.done", { generation: state.captureGeneration, reset: !!reset });
 }
 async function restartCaptureRecorder(source="unknown"){
@@ -1941,15 +2024,13 @@ function chooseReplay(snapshot,duration){
     diag("replay.selection",{strategy:"metadata-unavailable",requestedPick,selectedFrom:requestedPick,total:snapshot.length});
     return snapshot.slice(requestedPick)
   }
-  let keyPick=-1,strategy="previous";
-  for(let i=requestedPick;i>=0;i--)if(snapshot[i].videoStartKey===true){keyPick=i;break}
-  if(keyPick<0){
-    strategy="following";
-    for(let i=requestedPick+1;i<snapshot.length;i++)if(snapshot[i].videoStartKey===true){keyPick=i;break}
-  }
+  let keyPick=-1,strategy=target<snapshot[0].startAt?"initial-partial":"previous";
+  if(strategy==="previous"){
+    for(let i=requestedPick;i>=0;i--)if(snapshot[i].videoStartKey===true){keyPick=i;break}
+  }else keyPick=snapshot.findIndex(x=>x.videoStartKey===true);
   if(keyPick<0){
     state.lastReplaySelectionReason="no-keyframe";
-    diag("replay.selection",{strategy:"no-keyframe",requestedPick,total:snapshot.length});
+    diag("replay.selection",{strategy:"no-keyframe",requestedPick,total:snapshot.length,bufferFull:target>=snapshot[0].startAt});
     return[]
   }
   state.lastReplaySelectionReason="keyframe";
@@ -2051,6 +2132,34 @@ async function persistReplayBlob(blob, requestedDuration){
   toast('Replay '+n+' guardado','ok',1800);
   diag("persist.done", { replayId, count: n, elapsedMs: Math.round(performance.now()-startedAt) });
 }
+function schedulePostSaveRecorderRecovery(saveId,attempt=1){
+  const delayMs=attempt===1?650:900;
+  diag("save.recorderReset.retryScheduled",{saveId,attempt,delayMs});
+  setTimeout(async()=>{
+    if(!state.active||!state.stream){
+      diag("save.recorderReset.retrySkipped",{saveId,attempt,reason:"session-inactive",active:state.active,hasStream:!!state.stream});
+      return
+    }
+    if(state.captureRec&&state.captureRec.state==="recording"){
+      diag("save.recorderReset.retrySkipped",{saveId,attempt,reason:"already-recording",generation:state.captureGeneration});
+      return
+    }
+    const generationBefore=state.captureGeneration;
+    try{
+      await restartCaptureRecorder("save.postCommit.retry."+attempt);
+      const restarted=state.captureGeneration>generationBefore&&!!state.captureRec&&state.captureRec.state==="recording";
+      diag("save.recorderReset.retryDone",{saveId,attempt,restarted,generation:state.captureGeneration,recorderState:state.captureRec?state.captureRec.state:"none"});
+      if(!restarted){
+        if(attempt<3)schedulePostSaveRecorderRecovery(saveId,attempt+1);
+        else toast("Replay salvo - toque em continuar gravando","err",3200)
+      }
+    }catch(err){
+      diag("save.recorderReset.retryError",{saveId,attempt,error:err});
+      if(attempt<3)schedulePostSaveRecorderRecovery(saveId,attempt+1);
+      else toast("Replay salvo - toque em continuar gravando","err",3200)
+    }
+  },delayMs)
+}
 async function saveReplay(){
   if(state.saving){diag("save.tap.ignored", { reason: "saving", generation: state.captureGeneration });return}
   if(!state.captureRec||state.captureRec.state!=='recording'){
@@ -2065,31 +2174,54 @@ async function saveReplay(){
   closeDurationPicker();
   clearTimeout(state.saveGuard);
   state.saveGuard=setTimeout(()=>{if(state.saving){diag("save.guard.30s",{saveId});toast('O replay ainda esta sendo preparado','info',3000)}},30000);
-  let snapshot=[],bufferDetached=false;
+  let snapshot=[],bufferDetached=false,committed=false,recorderReset=false;
   try{
     await flushCurrentChunk();
     snapshot=state.fragments.slice();
     diag("save.snapshot", { saveId, fragments: snapshot.length, generation: state.captureGeneration, elapsedMs: Math.round(performance.now()-saveStartedAt) });
     const selected=chooseReplay(snapshot,replayDuration);
     if(!selected.length)throw Error(state.lastReplaySelectionReason==='no-keyframe'?'Aguarde mais um instante para salvar':'Ainda nao ha video para salvar');
-    state.fragments=[];state.bufferSeconds=0;bufferDetached=true;
+    state.fragments=[];state.bufferSeconds=0;state.bufferBytes=0;bufferDetached=true;
     const fmp4=makeFmp4(selected);
     diag("save.fmp4", { saveId, selected: selected.length, bytes: fmp4.byteLength, elapsedMs: Math.round(performance.now()-saveStartedAt) });
     const blob=await flattenMp4(fmp4);
     diag("save.flattened", { saveId, bytes: blob.size, elapsedMs: Math.round(performance.now()-saveStartedAt) });
     await persistReplayBlob(blob,replayDuration);
-    diag("save.success", { saveId, elapsedMs: Math.round(performance.now()-saveStartedAt) });
+    committed=true;
+    diag("save.committed",{saveId,elapsedMs:Math.round(performance.now()-saveStartedAt)});
+    const generationBeforeReset=state.captureGeneration;
+    try{
+      diag("save.recorderReset.begin",{saveId,generation:generationBeforeReset});
+      await restartCaptureRecorder("save.committed");
+      recorderReset=state.captureGeneration>generationBeforeReset&&!!state.captureRec&&state.captureRec.state==="recording";
+      if(!recorderReset)throw Error("MediaRecorder nao reiniciado");
+      diag("save.recorderReset.done",{saveId,generation:state.captureGeneration})
+    }catch(restartError){
+      diag("save.recorderReset.error",{saveId,generation:state.captureGeneration,error:restartError});
+      toast("Replay salvo - retomando gravacao","info",2600);
+      schedulePostSaveRecorderRecovery(saveId)
+    }
+    diag("save.success", { saveId, committed, recorderReset, elapsedMs: Math.round(performance.now()-saveStartedAt) });
   }catch(err){
-    diag("save.error", { saveId, elapsedMs: Math.round(performance.now()-saveStartedAt), generation: state.captureGeneration, snapshotFragments: snapshot.length, liveFragments: state.fragments.length, error: err });
+    diag("save.error", { saveId, committed, elapsedMs: Math.round(performance.now()-saveStartedAt), generation: state.captureGeneration, snapshotFragments: snapshot.length, liveFragments: state.fragments.length, error: err });
     console.error('gravei save',err);
-    if(bufferDetached&&snapshot.length){state.fragments=snapshot.concat(state.fragments);pruneBuffer()}
-    toast(err&&(err.message==='Ainda nao ha video para salvar'||err.message==='Aguarde mais um instante para salvar')?err.message:'Nao foi possivel preparar o replay','err',2800);
+    if(!committed&&bufferDetached&&snapshot.length){state.fragments=snapshot.concat(state.fragments);pruneBuffer()}
+    const noKeyFailure=!committed&&state.lastReplaySelectionReason==="no-keyframe";
+    if(noKeyFailure){
+      const generationBeforeRecovery=state.captureGeneration;
+      let recovered=false;
+      try{
+        await restartCaptureRecorder("save.no-keyframe");
+        recovered=state.captureGeneration>generationBeforeRecovery&&!!state.captureRec&&state.captureRec.state==="recording"
+      }catch(recoveryError){diag("save.noKeyframe.recoveryError",{saveId,error:recoveryError})}
+      diag("save.noKeyframe.recovery",{saveId,recovered,generation:state.captureGeneration});
+      toast(recovered?"Gravacao retomada - aguarde o buffer encher":"Nao foi possivel retomar a gravacao","err",3000)
+    }else toast(err&&err.message==='Ainda nao ha video para salvar'?err.message:'Nao foi possivel preparar o replay','err',2800);
   }finally{
     state.saving=false;clearTimeout(state.saveGuard);
-    diag("save.finally", { saveId, elapsedMs: Math.round(performance.now()-saveStartedAt), generation: state.captureGeneration, fragments: state.fragments.length });
+    diag("save.finally", { saveId, committed, recorderReset, elapsedMs: Math.round(performance.now()-saveStartedAt), generation: state.captureGeneration, fragments: state.fragments.length });
   }
 }
-
 /* ---------- salvar ou compartilhar sem remover da biblioteca ---------- */
 let savingAll = false;
 const SHARE_MSG = "O lance foi tão bom que virou replay no Gravei 🔥";
