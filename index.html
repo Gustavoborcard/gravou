@@ -799,7 +799,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v83b-central-thumbnails";
+  const VERSION = "v83c-direct-player";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -1350,7 +1350,7 @@ $("gallery-select").onclick = toggleSelectionMode;
 $("gallery-select-all").onclick = toggleSelectAllVisible;
 $("gallery-share-selected").onclick = shareSelectedReplays;
 $("gallery-delete-selected").onclick = deleteSelectedReplays;
-$("b-player-back").onclick = closePlayerToGallery;
+$("b-player-back").onclick = closePlayerToOrigin;
 $("player-favorite").onclick = toggleCurrentFavorite;
 $("player-prev").onclick = () => openReplayAt(galleryIndex - 1);
 $("player-next").onclick = () => openReplayAt(galleryIndex + 1);
@@ -2530,7 +2530,7 @@ function updateCentralCardLabels(card, entry){
   const durationText = replayDurationText(entry.meta);
   const duration = card.querySelector(".central-preview-duration");
   if (duration) duration.textContent = durationText;
-  card.setAttribute("aria-label", "Abrir Meus Replays. " + durationText + ".");
+  card.setAttribute("aria-label", "Abrir replay. " + durationText + ".");
 }
 
 function createCentralReplayCard(entry){
@@ -2539,7 +2539,7 @@ function createCentralReplayCard(entry){
   card.className = "central-preview-card";
   if (entry.key !== null && entry.key !== undefined) card.dataset.replayKey = String(entry.key);
   updateCentralCardLabels(card, entry);
-  card.onclick = openGallery;
+  card.onclick = () => openCentralReplay(entry.key);
 
   const visual = document.createElement("span");
   visual.className = "central-preview-visual";
@@ -2602,6 +2602,7 @@ let galleryFilter = "all";
 let playerEntries = [];
 let galleryIndex = -1;
 let galleryScrollTop = 0;
+let playerOrigin = "gallery";
 let favoriteBusyKeys = new Set();
 let gallerySelecting = false;
 let selectedReplayKeys = new Set();
@@ -3690,7 +3691,7 @@ function renderGalleryCards(){
 
     const openCard = () => {
       galleryScrollTop = $("gallery-scroll").scrollTop;
-      openReplayAt(index, true);
+      openReplayAt(index, true, "gallery");
     };
     card.onclick = event => {
       if (event.target.closest && event.target.closest(".favorite-btn")) return;
@@ -3715,6 +3716,41 @@ function renderGalleryCards(){
   updateSelectionUI();
   startThumbnailObservation();
 }
+async function openCentralReplay(replayKey){
+  if (replayKey === null || replayKey === undefined){ openGallery(); return; }
+  releaseCentralPreviewUrls();
+  stopThumbnailWork();
+  const token = ++galleryLoadToken;
+  setPlayerOrigin("central");
+  playerEntries = [];
+  galleryIndex = -1;
+  clearPlayerMedia();
+  $("player-position").textContent = "Replay";
+  $("player-prev").disabled = true;
+  $("player-next").disabled = true;
+  $("player-loading").hidden = false;
+  $("player-loading").textContent = "Preparando replay…";
+  show("s-player");
+  try{
+    const entries = await listGalleryEntries();
+    if (token !== galleryLoadToken || playerOrigin !== "central") return;
+    const index = entries.findIndex(entry => String(entry.key) === String(replayKey));
+    if (index < 0) throw Error("Replay não encontrado");
+    galleryAllEntries = entries;
+    playerEntries = entries;
+    await openReplayAt(index, false, "central");
+  }catch(err){
+    if (token !== galleryLoadToken || playerOrigin !== "central") return;
+    console.error("gravei central player", err);
+    playerEntries = [];
+    galleryIndex = -1;
+    clearPlayerMedia();
+    $("player-position").textContent = "Replay";
+    $("player-loading").hidden = false;
+    $("player-loading").textContent = "Não foi possível abrir este replay.";
+  }
+}
+
 async function openGallery(){
   releaseCentralPreviewUrls();
   stopThumbnailWork();
@@ -3778,6 +3814,11 @@ function clearPlayerMedia(){
   updateFavoriteButton($("player-favorite"), null);
 }
 
+function setPlayerOrigin(origin){
+  playerOrigin = origin === "central" ? "central" : "gallery";
+  $("b-player-back").textContent = playerOrigin === "central" ? "‹ Central" : "‹ Replays";
+}
+
 function updatePlayerNavigation(){
   $("player-position").textContent = (galleryIndex + 1) + " de " + playerEntries.length;
   $("player-prev").disabled = galleryIndex <= 0;
@@ -3808,7 +3849,8 @@ async function enrichReplayFromPlayer(entry, video, token){
   catch(err){ console.warn("gravei player metadata", err); }
 }
 
-async function openReplayAt(index, resetSnapshot = false){
+async function openReplayAt(index, resetSnapshot = false, origin = null){
+  if (origin) setPlayerOrigin(origin);
   if (resetSnapshot || !playerEntries.length) playerEntries = galleryEntries.slice();
   if (index < 0 || index >= playerEntries.length) return;
   stopThumbnailWork();
@@ -3858,11 +3900,20 @@ async function openReplayAt(index, resetSnapshot = false){
     $("player-share").disabled = true;
   }
 }
-function closePlayerToGallery(){
+async function closePlayerToOrigin(){
+  const origin = playerOrigin;
+  galleryLoadToken++;
   playerLoadToken++;
+  stopThumbnailWork();
+  releaseGalleryThumbUrls();
   clearPlayerMedia();
   playerEntries = [];
   galleryIndex = -1;
+  if (origin === "central"){
+    showCentralFromCache(false);
+    await refreshVaultUI();
+    return;
+  }
   applyGalleryFilter();
   show("s-gallery");
   renderGalleryCards();
@@ -3884,6 +3935,7 @@ async function shareCurrentReplay(){
 function deleteCurrentReplay(){
   const entry = currentPlayerEntry();
   if (!entry) return;
+  const returnOrigin = playerOrigin;
   try{ $("gallery-player").pause(); }catch(_){}
   openConfirm(
     "Excluir replay?",
@@ -3913,7 +3965,7 @@ function deleteCurrentReplay(){
       catch(_){ galleryAllEntries = galleryAllEntries.filter(item => item.key !== entry.key); }
       applyGalleryFilter();
       await refreshVaultUI();
-      if (!galleryAllEntries.length){
+      if (!galleryAllEntries.length || returnOrigin === "central"){
         showCentralFromCache();
       }else{
         show("s-gallery");
