@@ -285,7 +285,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 /* ---- toast v87 ---- */
  #toast{
    position:fixed;left:50%;bottom:calc(min(300px,78vw,44vh) + 45px + var(--safe-b));
-   z-index:20;width:min(calc(100vw - 28px),420px);min-height:48px;
+   z-index:20;width:max-content;max-width:min(calc(100vw - 28px),420px);min-height:48px;
    display:flex;align-items:center;gap:12px;padding:12px 14px;
    transform:translateX(-50%) translateY(16px);opacity:0;pointer-events:none;
    background:rgba(20,20,20,.92);color:var(--text);
@@ -311,7 +311,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
    display:block;width:12px;height:12px;border:2px solid rgba(250,250,247,.30);
    border-top-color:var(--text);border-radius:50%;animation:toast-spin .8s linear infinite
  }
- .toast-message{min-width:0;flex:1;color:var(--text);font-size:14px;font-weight:600;line-height:1.4;overflow-wrap:anywhere}
+ .toast-message{min-width:0;flex:0 1 auto;color:var(--text);font-size:14px;font-weight:600;line-height:1.4;overflow-wrap:anywhere}
  @keyframes toast-spin{to{transform:rotate(360deg)}}
  @media (orientation:landscape){#toast{bottom:calc(24px + var(--safe-b))}}
  @media (prefers-reduced-motion:reduce){#toast{transition:none}.toast-spinner{animation:none}}
@@ -333,6 +333,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
   }
   .confirm-dialog h2{font-size:20px;line-height:1.25}
   .confirm-dialog p{color:var(--text-dim);margin:10px 0 22px;font-size:15px;line-height:1.55}
+.confirm-dialog p strong{color:var(--text);font-weight:800}
   .confirm-actions{display:flex;flex-direction:column;gap:10px;width:100%}
   .confirm-actions .btn{width:100%;min-width:0;padding:15px 22px;font-size:16px;white-space:normal}
   .confirm-actions .btn:disabled{opacity:.55;cursor:default;transform:none}
@@ -555,8 +556,8 @@ a{color:var(--accent)}
 <!-- FORMATO INCOMPATIVEL -->
 <section class="screen" id="s-format">
   <div class="status-icon err"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="8" y1="8" x2="16" y2="16"/><line x1="16" y1="8" x2="8" y2="16"/></svg></div>
-  <h2 id="format-title">Por aqui não vai dar 😕</h2>
-  <p class="tagline" id="format-msg">Abra o Gravei pelo Chrome atualizado.</p>
+  <h2 id="format-title">Formato incompatível</h2>
+  <p class="tagline" id="format-msg">Tente abrir o Gravei em outro navegador.</p>
   <div class="stack"><button class="btn btn-ghost" id="b-format-back">Voltar</button></div>
 </section>
 
@@ -611,7 +612,7 @@ a{color:var(--accent)}
         </div>
         <p class="sr-only" id="ended-msg" aria-live="polite">Nenhum replay guardado.</p>
         <div class="central-preview-grid" id="central-preview-list"></div>
-        <p class="central-empty" id="central-empty">Nenhum replay guardado ainda.</p>
+        <p class="central-empty" id="central-empty">Seus melhores momentos vão aparecer aqui.</p>
       </section>
       <footer class="central-action-panel">
         <div class="stack central-actions" id="central-actions">
@@ -902,7 +903,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v87";
+  const VERSION = "v88";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -1350,7 +1351,7 @@ function syncDurationChips(){
 function setDuration(d, announce = false){
   if (!DURATIONS.includes(d)) return false;
   if (state.saving){ if (announce) toast("Aguarde este replay terminar", "info", 2200); return false; }
-  const previous = state.duration;
+
   state.duration = d;
   pruneBuffer();
   updateDurLabels();
@@ -1358,9 +1359,7 @@ function setDuration(d, announce = false){
   const available = Math.min(state.bufferSeconds, state.duration);
   $("btn-save").style.setProperty("--buf", (available / state.duration) * 100);
   if (announce){
-    toast(d > previous && state.bufferSeconds < d
-      ? d + "s selecionado — aguarde o anel completar"
-      : d + "s selecionado", "info", 2400);
+    toast(d + "s selecionado", "info", 2400);
   }
   return true;
 }
@@ -1458,7 +1457,15 @@ let confirmFn = null;
   function openConfirm(title, msg, actionLabel, fn){
     if ($("modal").classList.contains("open")) return false;
     $("modal-title").textContent = title;
-    $("modal-msg").textContent = msg;
+    const modalMsg = $("modal-msg");
+    modalMsg.textContent = "";
+    if (msg && typeof msg === "object" && typeof msg.emphasis === "string"){
+      const strong = document.createElement("strong");
+      strong.textContent = msg.emphasis;
+      modalMsg.append(document.createTextNode(msg.before || ""), strong, document.createTextNode(msg.after || ""));
+    }else{
+      modalMsg.textContent = String(msg || "");
+    }
     $("m-yes").textContent = actionLabel;
     confirmFn = typeof fn === "function" ? fn : null;
     confirmReturnFocus = document.activeElement;
@@ -1606,7 +1613,7 @@ async function requestPermission(){
 
 function updateDurLabels(){
   $("save-secs").textContent = state.duration + "s";
-  $("chip-dur-value").textContent = state.duration + "s" + (state.stallCount ? " \u26A1" + state.stallCount : "");
+  $("chip-dur-value").textContent = state.duration + "s";
   $("chip-dur").setAttribute("aria-label", "Alterar dura\u00e7\u00e3o do replay, atual " + state.duration + " segundos");
 }
 
@@ -1630,10 +1637,8 @@ function pickMime(){
 }
 function showFormatUnsupported(){
   diag("format.unsupported", { hasMediaRecorder: !!window.MediaRecorder, hasProbe: !!(window.MediaRecorder && MediaRecorder.isTypeSupported) });
-  const ua=navigator.userAgent||"";
-  const appleMobile=/iPad|iPhone|iPod/.test(ua)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
-  $("format-title").textContent="Por aqui não vai dar 😕";
-  $("format-msg").textContent=appleMobile?"Atualize o iPhone e tente de novo.":"Abra o Gravei pelo Chrome atualizado.";
+  $("format-title").textContent="Formato incompatível";
+  $("format-msg").textContent="Tente abrir o Gravei em outro navegador.";
   show("s-format");
 }
 function failCaptureFormat(){
@@ -1726,7 +1731,7 @@ async function onCamStall(source = "unknown"){
     await openStream(state.cams[state.camIndex] || undefined);
     diag("camera.stall.recovered", { source, generation: state.captureGeneration });
     sentinelStart();
-    toast("Câmera religada — o replay recomeça a contar", "ok", 2600);
+    toast("Câmera recuperada", "ok", 2600);
   }catch(err){
     diag("camera.stall.error", { source, error: err });
     hideToast();
@@ -1780,7 +1785,7 @@ function onRotate(){
   rotateTimer = setTimeout(() => {
     if (!state.active || !state.stream || state.saving) return;
     restartCaptureRecorder("orientation");
-    toast("Tela girada — o replay recomeça a contar", "info", 2200);
+    toast("Tela girada", "info", 2200);
   }, 700);                                           // espera a rotação estabilizar
 }
 try{ screen.orientation.addEventListener("change", onRotate); }catch(_){}
@@ -2028,7 +2033,7 @@ function scheduleBufferLimitRecovery(reason,delayMs=0){
     restartCaptureRecorder("buffer.limit."+currentReason).then(()=>{
       const restarted=state.captureGeneration>generationBefore&&!!state.captureRec&&state.captureRec.state==="recording";
       diag("buffer.limit.recovery",{reason:currentReason,restarted,generation:state.captureGeneration});
-      if(restarted)toast("Gravacao retomada - o replay recomeca a contar","info",2600);
+      if(restarted)toast("Gravação retomada","info",2600);
       else scheduleBufferLimitRecovery("retry",650)
     }).catch(err=>{
       diag("buffer.limit.recoveryError",{reason:currentReason,error:err});
@@ -2153,7 +2158,7 @@ function startCaptureRecorder(){
     diag("recorder.data", { generation: gen, serial, bytes: e.data ? e.data.size : 0, recorderState: rec.state });
     state.fragmentQueue=state.fragmentQueue.then(()=>ingestChunk(e.data,gen)).catch(err=>{
       diag("recorder.fragment.error", { generation: gen, serial, error: err });
-      console.error('gravei fragment',err);toast('Falha ao preparar o buffer','err',2400)
+      console.error('gravei fragment',err);toast('Não foi possível preparar a gravação','err',2400)
     }).finally(()=>{state.processedEventSerial=Math.max(state.processedEventSerial,serial);settleFlush()})
   };
   rec.onerror=e=>{
@@ -2213,7 +2218,7 @@ async function flushCurrentChunk(){
   diag("flush.done", { target, timedOut, processed: state.processedEventSerial, elapsedMs: Math.round(performance.now()-startedAt), fragments: state.fragments.length })
 }
 /* ---------- anel de buffer ---------- */
-function startRing(){clearInterval(state.timerId);state.timerId=setInterval(()=>{const avail=Math.min(state.bufferSeconds,state.duration);$('btn-save').style.setProperty('--buf',(avail/state.duration)*100);if(state.active&&document.visibilityState==='visible'&&state.captureRec&&state.captureRec.state==='recording'&&Date.now()-state.lastChunkAt>6500){restartCaptureRecorder("ring.stale");toast('Gravacao retomada - o replay recomeca a contar','info',2400)}},250)}
+function startRing(){clearInterval(state.timerId);state.timerId=setInterval(()=>{const avail=Math.min(state.bufferSeconds,state.duration);$('btn-save').style.setProperty('--buf',(avail/state.duration)*100);if(state.active&&document.visibilityState==='visible'&&state.captureRec&&state.captureRec.state==='recording'&&Date.now()-state.lastChunkAt>6500){restartCaptureRecorder("ring.stale");toast('Gravação retomada','info',2400)}},250)}
 
 function flashOK(){
   const f = $("flash");
@@ -2226,7 +2231,7 @@ function flashOK(){
 async function requestWakeLock(){
   try{ if ("wakeLock" in navigator) state.wakeLock = await navigator.wakeLock.request("screen"); }catch(_){}
 }
-document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&$("rec-screen").classList.contains("active")){requestWakeLock();try{if(cam2.peer&&cam2.peer.disconnected&&!cam2.peer.destroyed)cam2.peer.reconnect()}catch(_){}try{if(state.active&&(!state.captureRec||state.captureRec.state!=="recording")){diag("visibility.recorderRecovery",{saving:state.saving,generation:state.captureGeneration,recorderState:state.captureRec?state.captureRec.state:"none"});state.saving=false;clearTimeout(state.saveGuard);restartCaptureRecorder("visibility");toast("Gravacao retomada - o replay recomeca a contar","info",2400)}}catch(_){}watchCamera()}});
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&$("rec-screen").classList.contains("active")){requestWakeLock();try{if(cam2.peer&&cam2.peer.disconnected&&!cam2.peer.destroyed)cam2.peer.reconnect()}catch(_){}try{if(state.active&&(!state.captureRec||state.captureRec.state!=="recording")){diag("visibility.recorderRecovery",{saving:state.saving,generation:state.captureGeneration,recorderState:state.captureRec?state.captureRec.state:"none"});state.saving=false;clearTimeout(state.saveGuard);restartCaptureRecorder("visibility");toast("Gravação retomada","info",2400)}}catch(_){}watchCamera()}});
 
 function camName(cam){
   if (!cam) return "Câmera";
@@ -2249,7 +2254,7 @@ $("btn-flip").onclick = async () => {
 
   try{
     await openStream(cam);
-    toast(camName(cam) + " — o replay recomeça a contar", "info", 2200);
+    toast(camName(cam) + " ativa", "info", 2200);
     watchCamera();
     sentinelStart();
   }catch(_){
@@ -2422,12 +2427,12 @@ function schedulePostSaveRecorderRecovery(saveId,attempt=1){
       diag("save.recorderReset.retryDone",{saveId,attempt,restarted,generation:state.captureGeneration,recorderState:state.captureRec?state.captureRec.state:"none"});
       if(!restarted){
         if(attempt<3)schedulePostSaveRecorderRecovery(saveId,attempt+1);
-        else toast("Replay salvo - toque em continuar gravando","err",3200)
+        else toast("Replay salvo. Toque em continuar","err",3200)
       }
     }catch(err){
       diag("save.recorderReset.retryError",{saveId,attempt,error:err});
       if(attempt<3)schedulePostSaveRecorderRecovery(saveId,attempt+1);
-      else toast("Replay salvo - toque em continuar gravando","err",3200)
+      else toast("Replay salvo. Toque em continuar","err",3200)
     }
   },delayMs)
 }
@@ -2435,7 +2440,7 @@ async function saveReplay(){
   if(state.saving){diag("save.tap.ignored", { reason: "saving", generation: state.captureGeneration });return}
   if(!state.captureRec||state.captureRec.state!=='recording'){
     diag("save.tap.ignored", { reason: "recorder-inactive", recorderState: state.captureRec ? state.captureRec.state : "none", generation: state.captureGeneration });
-    restartCaptureRecorder("save.inactive");toast('Gravacao retomada - aguarde o buffer encher','err',2600);return;
+    restartCaptureRecorder("save.inactive");toast('Gravação retomada','err',2600);return;
   }
   const saveId=state.diagSaveSeq=(state.diagSaveSeq||0)+1;
   const saveStartedAt=performance.now();
@@ -2444,14 +2449,14 @@ async function saveReplay(){
   diag("save.begin", { saveId, replayDuration, generation: state.captureGeneration, fragments: state.fragments.length, bufferSeconds: Number(state.bufferSeconds.toFixed(2)) });
   closeDurationPicker();
   clearTimeout(state.saveGuard);
-  state.saveGuard=setTimeout(()=>{if(state.saving){diag("save.guard.30s",{saveId});toast('O replay ainda esta sendo preparado','info',3000)}},30000);
+  state.saveGuard=setTimeout(()=>{if(state.saving){diag("save.guard.30s",{saveId});toast('Ainda preparando o replay…','info',3000)}},30000);
   let snapshot=[],bufferDetached=false,committed=false,recorderReset=false;
   try{
     await flushCurrentChunk();
     snapshot=state.fragments.slice();
     diag("save.snapshot", { saveId, fragments: snapshot.length, generation: state.captureGeneration, elapsedMs: Math.round(performance.now()-saveStartedAt) });
     const selected=chooseReplay(snapshot,replayDuration);
-    if(!selected.length)throw Error(state.lastReplaySelectionReason==='no-keyframe'?'Aguarde mais um instante para salvar':'Ainda nao ha video para salvar');
+    if(!selected.length)throw Error(state.lastReplaySelectionReason==='no-keyframe'?'Aguarde mais um instante para salvar':'Ainda não há vídeo para salvar');
     state.fragments=[];state.bufferSeconds=0;state.bufferBytes=0;bufferDetached=true;
     const fmp4=makeFmp4(selected);
     diag("save.fmp4", { saveId, selected: selected.length, bytes: fmp4.byteLength, elapsedMs: Math.round(performance.now()-saveStartedAt) });
@@ -2469,7 +2474,7 @@ async function saveReplay(){
       diag("save.recorderReset.done",{saveId,generation:state.captureGeneration})
     }catch(restartError){
       diag("save.recorderReset.error",{saveId,generation:state.captureGeneration,error:restartError});
-      toast("Replay salvo - retomando gravacao","info",2600);
+      toast("Replay salvo","info",2600);
       schedulePostSaveRecorderRecovery(saveId)
     }
     diag("save.success", { saveId, committed, recorderReset, elapsedMs: Math.round(performance.now()-saveStartedAt) });
@@ -2486,8 +2491,8 @@ async function saveReplay(){
         recovered=state.captureGeneration>generationBeforeRecovery&&!!state.captureRec&&state.captureRec.state==="recording"
       }catch(recoveryError){diag("save.noKeyframe.recoveryError",{saveId,error:recoveryError})}
       diag("save.noKeyframe.recovery",{saveId,recovered,generation:state.captureGeneration});
-      toast(recovered?"Gravacao retomada - aguarde o buffer encher":"Nao foi possivel retomar a gravacao","err",3000)
-    }else toast(err&&err.message==='Ainda nao ha video para salvar'?err.message:'Nao foi possivel preparar o replay','err',2800);
+      toast(recovered?"Gravação retomada":"Não foi possível retomar a gravação","err",3000)
+    }else toast(err&&err.message==='Ainda não há vídeo para salvar'?err.message:'Não foi possível preparar o replay','err',2800);
   }finally{
     state.saving=false;clearTimeout(state.saveGuard);
     diag("save.finally", { saveId, committed, recorderReset, elapsedMs: Math.round(performance.now()-saveStartedAt), generation: state.captureGeneration, fragments: state.fragments.length });
@@ -2567,15 +2572,15 @@ async function saveAll(){
       await refreshVaultUI();
       if (result.status === "done"){
         flashOK();
-        toast(total + " replay" + (total > 1 ? "s compartilhados" : " compartilhado") + " · continuam no Gravei", "ok", 4000);
+        toast(total + (total === 1 ? " replay compartilhado" : " replays compartilhados"), "ok", 4000);
       }else if (result.status === "blocked"){
-        toast((delivered ? delivered + " compartilhados · " : "") + "toque de novo para enviar " + remaining + ". Todos continuam no Gravei.", "info", 4500);
+        toast(delivered ? "Compartilhamento parcial" : "Não foi possível compartilhar", "info", 4500);
       }else if (result.status === "cancelled"){
-        if(delivered)toast(delivered + " compartilhados · " + remaining + " aguardam. Todos continuam no Gravei.", "info", 4000);
+        if(delivered)toast(delivered + (delivered === 1 ? " replay compartilhado" : " replays compartilhados"), "info", 4000);
         else hideToast();
       }else{
         if(result.error)console.error("gravei share group",result.error);
-        toast((delivered ? delivered + " compartilhados · " + remaining + " aguardam. " : "") + "Não foi possível compartilhar", "err", 4000);
+        toast(delivered ? "Não foi possível compartilhar tudo" : "Não foi possível compartilhar", "err", 4000);
       }
       return;
     }
@@ -2595,7 +2600,7 @@ async function saveAll(){
     state.pendingShareKeys = null;
     await refreshVaultUI();
     flashOK();
-    toast(total + " download" + (total > 1 ? "s iniciados" : " iniciado") + " · os replays continuam no Gravei", "ok", 5000);
+    toast(total + (total === 1 ? " download iniciado" : " downloads iniciados"), "ok", 5000);
   }catch(err){
     console.error("gravei save all",err);
     await refreshVaultUI();
@@ -2753,7 +2758,7 @@ function createCentralReplayCard(entry){
   visual.className = "central-preview-visual";
   const mark = document.createElement("span");
   mark.className = "central-preview-mark";
-  mark.innerHTML = '<svg class="central-preview-loop" viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="23 5.2 23 10 18.2 10" stroke="#FAFAF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="#FAFAF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.4" fill="#FF3B30"/></svg><span>Replay</span>';
+  mark.innerHTML = '<svg class="central-preview-loop" viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="23 5.2 23 10 18.2 10" stroke="#FAFAF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="#FAFAF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.4" fill="#FF3B30"/></svg>';
   visual.appendChild(mark);
 
   const duration = document.createElement("span");
@@ -2774,7 +2779,7 @@ function renderCentralPreviewStrip(startMissing = true){
   list.hidden = plan.length === 0;
   empty.hidden = plan.length > 0;
   if (!plan.length){
-    empty.textContent = "Seus melhores lances vão aparecer aqui.";
+    empty.textContent = "Seus melhores momentos vão aparecer aqui.";
     return;
   }
   for (const item of plan){
@@ -3197,8 +3202,8 @@ function finishSelectedShareSuccess(batch, nativeShare){
   startThumbnailObservation();
   flashOK();
   toast(nativeShare
-    ? delivered + " replay" + (delivered === 1 ? " entregue" : "s entregues") + " · continua" + (delivered === 1 ? "" : "m") + " no Gravei"
-    : delivered + " download" + (delivered === 1 ? " iniciado" : "s iniciados") + " · os replays continuam no Gravei", "ok", 4500);
+    ? delivered + (delivered === 1 ? " replay compartilhado" : " replays compartilhados")
+    : delivered + (delivered === 1 ? " download iniciado" : " downloads iniciados"), "ok", 4500);
 }
 
 function restoreSelectedShareAfterError(error){
@@ -3211,7 +3216,7 @@ function restoreSelectedShareAfterError(error){
     return;
   }
   console.error("gravei selected share", error);
-  toast("Não foi possível compartilhar. Sua seleção continua pronta.", "err", 3800);
+  toast("Não foi possível compartilhar", "err", 3800);
 }
 
 function finishSelectedDownloadResult(result, batch){
@@ -3230,7 +3235,7 @@ function finishSelectedDownloadResult(result, batch){
   startThumbnailObservation();
   if (result && result.error) console.error("gravei selected download", result.error);
   toast(deliveredKeys.length
-    ? deliveredKeys.length + " download" + (deliveredKeys.length === 1 ? " iniciado" : "s iniciados") + " · os demais continuam selecionados"
+    ? deliveredKeys.length + (deliveredKeys.length === 1 ? " download iniciado" : " downloads iniciados")
     : "Não foi possível baixar a seleção", "err", 4200);
 }
 
@@ -3276,7 +3281,13 @@ function shareSelectedReplays(){
   const favorites = selectedEntries.filter(entry => !!(entry.meta && entry.meta.favorite)).length;
   const title = "Excluir " + count + " replay" + (count === 1 ? "?" : "s?");
   const message = favorites
-    ? "A seleção inclui " + favorites + " favorito" + (favorites === 1 ? "" : "s") + ". " + (count === 1 ? "O replay será excluído" : "Os " + count + " replays serão excluídos") + " definitivamente do Gravei."
+    ? {
+        before: "A seleção inclui ",
+        emphasis: favorites + " favorito" + (favorites === 1 ? "" : "s"),
+        after: ". " + (count === 1
+          ? "O replay será excluído definitivamente do Gravei."
+          : "Os " + count + " replays serão excluídos definitivamente do Gravei.")
+      }
     : (count === 1 ? "Este replay será excluído" : "Estes replays serão excluídos") + " definitivamente do Gravei.";
   openConfirm(title, message, favorites ? "Excluir mesmo assim" : "Excluir", async () => {
     clearSelectedPreparedShareBatch();
@@ -4238,7 +4249,7 @@ async function deliver(blob, name){
       hideToast();                                   // a caixa do sistema fala por si
       await navigator.share({ files: [file], title: SHARE_MSG, text: SHARE_MSG });
       flashOK();
-      toast("Tudo certo! Replay entregue", "ok");
+      toast("Replay compartilhado", "ok");
       return;
     }catch(err){
       if (err && err.name === "AbortError"){ hideToast(); return; }  // usuário cancelou
@@ -4256,7 +4267,7 @@ async function deliver(blob, name){
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
     flashOK();
-    toast("Vídeo baixado — abra a notificação de download e toque em salvar na galeria", "ok", 5000);
+    toast("Download iniciado. Salve o vídeo pela notificação.", "ok", 5000);
   }catch(err){
     toast(err && err.name === "QuotaExceededError"
       ? "Armazenamento insuficiente no celular" : "Não foi possível salvar", "err");
