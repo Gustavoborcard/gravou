@@ -295,17 +295,17 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .central-screen{padding:0;align-items:stretch;justify-content:flex-start;text-align:left;overflow:hidden;background:var(--bg)}
 .central-screen::before,.central-screen::after{display:none}
 .central-scroll{width:100%;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}
-.central-shell{width:100%;max-width:560px;min-height:100%;margin:0 auto;display:flex;flex-direction:column;background:var(--bg)}
-.central-brand{min-height:clamp(240px,38vh,330px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:calc(28px + var(--safe-t)) 24px 28px}
-.central-brand .sym{display:block;width:clamp(68px,20vw,88px);height:auto}
-.central-brand .wm{display:block;width:clamp(190px,58vw,250px);height:auto}
-.central-replay-section{padding:18px 20px 20px;border-top:1px solid rgba(255,255,255,.025);background:#0e0e0e}
-.central-replay-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:44px}
+.central-shell{width:100%;max-width:520px;min-height:100%;margin:0 auto;display:flex;flex-direction:column;background:var(--bg)}
+.central-brand{min-height:clamp(238px,36vh,310px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(34px + var(--safe-t)) 24px 18px}
+.central-brand .sym{display:block;width:clamp(52px,15vw,64px);height:auto;transform:translateY(6px)}
+.central-brand .wm{display:block;width:clamp(180px,53vw,228px);height:auto}
+.central-replay-section{padding:10px 20px 18px;border-top:0;background:var(--bg)}
+.central-replay-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:40px}
 .central-replay-heading h2{font-family:'Inter',sans-serif;font-size:12px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim)}
 .central-see-all{min-height:44px;border:0;background:transparent;color:var(--accent);font:inherit;font-size:14px;font-weight:800;padding:0 2px;cursor:pointer}
 .central-see-all:active{opacity:.72}
-.central-preview-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:9px}
-.central-preview-card{position:relative;min-width:0;aspect-ratio:1/1;border:1px solid var(--line);border-radius:12px;overflow:hidden;padding:0;background:#181818;color:var(--text);font:inherit;cursor:pointer}
+.central-preview-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:6px}
+.central-preview-card{position:relative;min-width:0;aspect-ratio:1/1;border:1px solid var(--line);border-radius:10px;overflow:hidden;padding:0;background:#181818;color:var(--text);font:inherit;cursor:pointer}
 .central-preview-card:active{transform:scale(.97)}
 .central-preview-visual{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(155deg,#263746 0 40%,#17452d 40% 100%)}
 .central-preview-card:nth-child(2) .central-preview-visual{background:linear-gradient(155deg,#303946 0 40%,#205338 40% 100%)}
@@ -318,18 +318,18 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .central-preview-more{display:flex;align-items:center;justify-content:center;border-color:var(--line);background:#171717;color:rgba(250,250,247,.68);font-size:18px;font-weight:800}
 .central-empty{min-height:116px;margin-top:9px;border:1px dashed var(--line);border-radius:12px;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center;color:var(--text-dim);font-size:14px;line-height:1.45}
 .central-empty[hidden]{display:none}
-.central-action-panel{padding:14px 20px calc(22px + var(--safe-b));border-top:1px solid rgba(255,255,255,.035);background:var(--bg)}
+.central-action-panel{padding:10px 20px calc(22px + var(--safe-b));border-top:0;background:var(--bg)}
 .central-actions{max-width:410px;margin:0 auto;gap:12px}
 .central-actions .btn{min-height:58px}
 .central-actions .central-danger{min-height:44px;padding:10px 20px;background:transparent;color:var(--text-dim);font-family:'Inter',sans-serif;font-size:14px;font-weight:600}
 .central-actions .central-danger:active{background:rgba(255,255,255,.04)}
 @media (max-width:360px){
-  .central-brand{min-height:220px;gap:16px}.central-replay-section{padding-left:14px;padding-right:14px}.central-preview-grid{gap:8px}.central-action-panel{padding-left:14px;padding-right:14px}
+  .central-brand{min-height:218px;gap:10px}.central-replay-section{padding-left:14px;padding-right:14px}.central-preview-grid{gap:8px}.central-action-panel{padding-left:14px;padding-right:14px}
 }
 @media (orientation:landscape) and (max-height:600px){
   .central-shell{max-width:none;min-height:100%;display:grid;grid-template-columns:minmax(190px,35vw) minmax(0,1fr);grid-template-rows:auto 1fr}
-  .central-brand{grid-column:1;grid-row:1/3;min-height:100vh;gap:14px;padding:calc(16px + var(--safe-t)) 20px calc(16px + var(--safe-b))}
-  .central-brand .sym{width:min(68px,17vh)}.central-brand .wm{width:min(190px,29vw)}
+  .central-brand{grid-column:1;grid-row:1/3;min-height:100vh;gap:8px;padding:calc(16px + var(--safe-t)) 20px calc(16px + var(--safe-b))}
+  .central-brand .sym{width:min(52px,14vh);transform:translateY(4px)}.central-brand .wm{width:min(172px,27vw)}
   .central-replay-section{grid-column:2;grid-row:1;padding:calc(10px + var(--safe-t)) calc(16px + env(safe-area-inset-right,0px)) 12px 16px}
   .central-action-panel{grid-column:2;grid-row:2;padding:10px calc(16px + env(safe-area-inset-right,0px)) calc(10px + var(--safe-b)) 16px}
   .central-actions{gap:8px}.central-actions .btn{min-height:44px;padding:10px 20px;font-size:15px}.central-actions .central-danger{min-height:36px;padding:6px}
@@ -433,7 +433,7 @@ a{color:var(--accent)}
   </div>
   <p class="hint">É só abrir, gravar e usar.</p>
   <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
-  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v83a central</p>
+  <p id="ver-label" style="margin-top:14px;font-size:11px;color:var(--text-dim);opacity:.7">v83a.1 central</p>
 </section>
 
 <!-- PERMISSÃO -->
@@ -787,19 +787,19 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
 </script>
 <script>
 /* =========================================================
-   Gravei v83a - Central de Replays com prévias leves
+   Gravei v83a.1 - polimento visual da Central de Replays
    Um unico MediaRecorder alimenta um buffer circular. No toque,
    os fragmentos recentes sao normalizados e reescritos como um
    MP4 plano autonomo, compativel com Fotos e WhatsApp no iPhone.
    ========================================================= */
 "use strict";
 
-/* ---------- diagnóstico local v83a ----------
+/* ---------- diagnóstico local v83a.1 ----------
    Guarda apenas eventos técnicos; nunca guarda vídeo, áudio ou imagens.
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v83a-central-shell";
+  const VERSION = "v83a1-central-polish";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
