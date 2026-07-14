@@ -541,11 +541,11 @@ a{color:var(--accent)}
 </section>
 
 <!-- GALERIA: cartões verticais, miniaturas e favoritos -->
-<section class="screen gallery-screen" id="s-gallery">
+<section class="screen gallery-screen" id="s-gallery" aria-labelledby="gallery-title">
   <header class="gallery-header">
     <button type="button" class="gallery-back" id="b-gallery-back">‹ Central</button>
     <div class="gallery-header-copy">
-      <h2>Meus Replays</h2>
+      <h2 id="gallery-title">Meus Replays</h2>
       <p id="gallery-summary">Carregando…</p>
     </div>
     <button type="button" class="gallery-select" id="gallery-select">Selecionar</button>
@@ -577,7 +577,7 @@ a{color:var(--accent)}
   </header>
   <div class="player-stage">
     <video id="gallery-player" controls playsinline preload="metadata"></video>
-    <div class="player-loading" id="player-loading">Preparando replay…</div>
+    <div class="player-loading" id="player-loading" role="status" aria-live="polite">Preparando replay…</div>
   </div>
   <footer class="player-footer">
     <div class="player-nav">
@@ -799,7 +799,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v83c-direct-player";
+  const VERSION = "v83d-player-hardening";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -2625,6 +2625,7 @@ let playerObjectUrl = null;
 let playerBlob = null;
 let playerInfo = null;
 let playerShareBusy = false;
+let playerAutoplayAttempt = 0;
 let galleryThumbUrls = new Map();
 let thumbnailQueue = [];
 let thumbnailQueuedKeys = new Set();
@@ -3629,6 +3630,13 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden"){
     stopThumbnailWork();
     releaseCentralPreviewUrls();
+    if ($("s-player").classList.contains("active")){
+      const video = $("gallery-player");
+      const wasPlaying = !video.paused;
+      playerAutoplayAttempt++;
+      try{ video.pause(); }catch(_){}
+      if (wasPlaying) diag("player.pause.hidden", { origin: playerOrigin, position: galleryIndex + 1 });
+    }
     return;
   }
   if ($("s-gallery").classList.contains("active")) startThumbnailObservation();
@@ -3797,6 +3805,7 @@ async function closeGalleryToCentral(){
 }
 
 function clearPlayerMedia(){
+  playerAutoplayAttempt++;
   const video = $("gallery-player");
   video.onloadedmetadata = null;
   video.onerror = null;
@@ -3820,9 +3829,40 @@ function setPlayerOrigin(origin){
 }
 
 function updatePlayerNavigation(){
-  $("player-position").textContent = (galleryIndex + 1) + " de " + playerEntries.length;
+  const position = (galleryIndex + 1) + " de " + playerEntries.length;
+  $("player-position").textContent = position;
+  $("gallery-player").setAttribute("aria-label", "Replay " + position);
   $("player-prev").disabled = galleryIndex <= 0;
   $("player-next").disabled = galleryIndex < 0 || galleryIndex >= playerEntries.length - 1;
+}
+
+function requestPlayerAutoplay(video, token){
+  const attempt = ++playerAutoplayAttempt;
+  const startedAt = performance.now();
+  const details = { origin: playerOrigin, position: galleryIndex + 1, total: playerEntries.length };
+  diag("player.autoplay.attempt", details);
+  let result;
+  try{
+    result = video.play();
+  }catch(err){
+    if (token === playerLoadToken && attempt === playerAutoplayAttempt){
+      diag("player.autoplay.blocked", { ...details, errorName: err && err.name || "Error", synchronous: true });
+    }
+    return;
+  }
+  if (!result || typeof result.then !== "function"){
+    if (token === playerLoadToken && attempt === playerAutoplayAttempt){
+      diag("player.autoplay.requested", { ...details, elapsedMs: Math.round(performance.now() - startedAt) });
+    }
+    return;
+  }
+  Promise.resolve(result).then(() => {
+    if (token !== playerLoadToken || attempt !== playerAutoplayAttempt) return;
+    diag("player.autoplay.success", { ...details, elapsedMs: Math.round(performance.now() - startedAt) });
+  }).catch(err => {
+    if (token !== playerLoadToken || attempt !== playerAutoplayAttempt) return;
+    diag("player.autoplay.blocked", { ...details, errorName: err && err.name || "Error", synchronous: false });
+  });
 }
 
 async function enrichReplayFromPlayer(entry, video, token){
@@ -3891,6 +3931,7 @@ async function openReplayAt(index, resetSnapshot = false, origin = null){
     };
     video.src = playerObjectUrl;
     video.load();
+    requestPlayerAutoplay(video, token);
     $("player-share").disabled = false;
   }catch(err){
     console.error("gravei player", err);
