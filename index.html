@@ -270,7 +270,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 #btn-save:active{transform:translateX(-50%) scale(.95)}
 #btn-save .inner{
   position:absolute;inset:6%;z-index:1;width:auto;height:auto;border-radius:50%;
-  background:radial-gradient(circle at 50% 38%,rgba(250,250,247,.055),transparent 44%),rgba(18,18,18,.42);
+  background:radial-gradient(circle at 50% 38%,rgba(250,250,247,.055),transparent 44%),rgba(18,18,18,.54);
   box-shadow:inset 0 0 0 1px rgba(250,250,247,.15);
   backdrop-filter:blur(2px) saturate(.9);-webkit-backdrop-filter:blur(2px) saturate(.9);
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--text);
@@ -937,7 +937,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v91";
+  const VERSION = "v92";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -2798,6 +2798,81 @@ function flashOK(){
   f.classList.add("go");
 }
 
+/* Pulso físico opcional. O Safari expõe o LED traseiro como `torch`,
+não como flash fotográfico. Falha ou ausência de suporte nunca afetam
+o salvamento: flash de tela e vibração continuam sendo a confirmação. */
+const REAR_TORCH_DELAY_MS = 220;
+const REAR_TORCH_PULSE_MS = 140;
+let rearTorchPulseActive = false;
+let rearTorchPulseDisabled = false;
+
+function activeRearTorchTrack(){
+  if (rearTorchPulseDisabled || rearTorchPulseActive || !state.active ||
+      !state.stream || state.captureRecovering || !state.captureRec ||
+      state.captureRec.state !== "recording") return null;
+  const track = state.stream.getVideoTracks()[0];
+  if (!track || track.readyState !== "live" ||
+      typeof track.getCapabilities !== "function" ||
+      typeof track.applyConstraints !== "function") return null;
+  let caps;
+  try{ caps = track.getCapabilities() || {}; }catch(_){ return null; }
+  const torchCapable = caps.torch === true ||
+    (Array.isArray(caps.torch) && caps.torch.includes(true));
+  if (!torchCapable) return null;
+  let facingMode = "";
+  try{ facingMode = String((track.getSettings && track.getSettings().facingMode) || ""); }catch(_){}
+  if (facingMode === "user") return null;
+  if (facingMode !== "environment"){
+    const activeCam = state.cams[state.camIndex];
+    if (activeCam && activeCam.side === "front") return null;
+  }
+  return track;                                      // torch real confirma uma fonte iluminável
+}
+
+async function turnRearTorchOff(track){
+  if (!track || track.readyState !== "live") return true;
+  try{
+    await track.applyConstraints({ advanced: [{ torch: false }] });
+    return true;
+  }catch(firstError){
+    try{
+      await track.applyConstraints({ torch: false });
+      return true;
+    }catch(lastError){
+      diag("torch.pulse.offError", { firstError, lastError });
+      return false;
+    }
+  }
+}
+
+async function pulseRearTorch(){
+  const track = activeRearTorchTrack();
+  if (!track) return false;
+  rearTorchPulseActive = true;
+  let lit = false;
+  try{
+    await track.applyConstraints({ advanced: [{ torch: true }] });
+    lit = true;
+    diag("torch.pulse.on", { durationMs: REAR_TORCH_PULSE_MS });
+    await sleep(REAR_TORCH_PULSE_MS);
+  }catch(error){
+    rearTorchPulseDisabled = true;                   // não pressiona novamente esta sessão
+    diag("torch.pulse.error", { error });
+  }finally{
+    if (lit){
+      const off = await turnRearTorchOff(track);
+      if (!off) rearTorchPulseDisabled = true;
+      diag("torch.pulse.done", { off });
+    }
+    rearTorchPulseActive = false;
+  }
+  return lit;
+}
+
+function confirmReplaySaved(){
+  flashOK();
+  setTimeout(() => { void pulseRearTorch(); }, REAR_TORCH_DELAY_MS);
+}
 /* ---------- wake lock (tela ligada) ---------- */
 async function requestWakeLock(){
   try{ if ("wakeLock" in navigator) state.wakeLock = await navigator.wakeLock.request("screen"); }catch(_){}
@@ -2981,7 +3056,7 @@ async function persistReplayBlob(blob, requestedDuration){
   }
   const n=await vault.count();
   updateCountChip(n);
-  flashOK();
+  confirmReplaySaved();
   toast('Replay '+n+' guardado','ok',1800);
   diag("persist.done", { replayId, count: n, elapsedMs: Math.round(performance.now()-startedAt) });
 }
