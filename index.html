@@ -404,10 +404,10 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .central-screen::before,.central-screen::after{display:none}
 .central-scroll{width:100%;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}
 .central-shell{width:100%;max-width:520px;min-height:100%;margin:0 auto;display:flex;flex-direction:column;background:var(--bg)}
-.central-brand{min-height:clamp(238px,36vh,310px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(34px + var(--safe-t)) 24px 18px}
+.central-brand{min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:calc(26px + var(--safe-t)) 24px 8px}
 .central-brand .sym{display:block;width:clamp(52px,15vw,64px);height:auto;transform:translateY(6px) scaleY(-1);transform-origin:center;transform-box:fill-box}
 .central-brand .wm{display:block;width:clamp(180px,53vw,228px);height:auto}
-.central-replay-section{padding:10px 20px 18px;border-top:0;background:var(--bg)}
+.central-replay-section{padding:4px 20px 18px;border-top:0;background:var(--bg)}
 .central-replay-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:40px}
 .central-replay-heading h2{font-family:'Inter',sans-serif;font-size:12px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim)}
 .central-see-all{min-height:44px;border:0;background:transparent;color:var(--accent);font:inherit;font-size:14px;font-weight:800;padding:0 2px;cursor:pointer}
@@ -433,7 +433,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .central-actions .central-danger{min-height:44px;padding:10px 20px;background:transparent;color:var(--text-dim);font-family:'Inter',sans-serif;font-size:14px;font-weight:600}
 .central-actions .central-danger:active{background:rgba(255,255,255,.04)}
 @media (max-width:360px){
-  .central-brand{min-height:218px;gap:10px}.central-replay-section{padding-left:14px;padding-right:14px}.central-preview-grid{gap:8px}.central-action-panel{padding-left:14px;padding-right:14px}
+  .central-brand{min-height:0;gap:8px;padding:calc(22px + var(--safe-t)) 18px 6px}.central-replay-section{padding-left:14px;padding-right:14px}.central-preview-grid{gap:8px}.central-action-panel{padding-left:14px;padding-right:14px}
 }
 @media (orientation:landscape) and (max-height:600px){
   .central-shell{max-width:none;min-height:100%;display:grid;grid-template-columns:minmax(190px,35vw) minmax(0,1fr);grid-template-rows:auto 1fr}
@@ -937,7 +937,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v92";
+  const VERSION = "v93";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -3492,6 +3492,9 @@ let playerBlob = null;
 let playerInfo = null;
 let playerShareBusy = false;
 let playerAutoplayAttempt = 0;
+const PLAYER_CONTROLS_HIDE_MS = 2500;
+let playerControlsTimer = null;
+let playerControlsEpoch = 0;
 let galleryThumbUrls = new Map();
 let thumbnailQueue = [];
 let thumbnailQueuedKeys = new Set();
@@ -4683,6 +4686,7 @@ async function closeGalleryToCentral(){
 function clearPlayerMedia(){
   playerAutoplayAttempt++;
   const video = $("gallery-player");
+  resetPlayerControls();
   video.onloadedmetadata = null;
   video.onerror = null;
   try{ video.pause(); }catch(_){}
@@ -4740,6 +4744,86 @@ function requestPlayerAutoplay(video, token){
     diag("player.autoplay.blocked", { ...details, errorName: err && err.name || "Error", synchronous: false });
   });
 }
+
+function playerControlsMayHide(video){
+  return !!(video && $("s-player").classList.contains("active") &&
+    document.visibilityState === "visible" && !video.paused && !video.ended &&
+    !video.seeking && !video.error && video.readyState >= 2 &&
+    document.pictureInPictureElement !== video && !video.webkitDisplayingFullscreen);
+}
+
+function cancelPlayerControlsHide(){
+  playerControlsEpoch++;
+  if (playerControlsTimer !== null){
+    clearTimeout(playerControlsTimer);
+    playerControlsTimer = null;
+  }
+}
+
+function schedulePlayerControlsHide(){
+  const video = $("gallery-player");
+  cancelPlayerControlsHide();
+  if (!playerControlsMayHide(video)){
+    if (video) video.controls = true;
+    return;
+  }
+  const epoch = playerControlsEpoch;
+  const loadToken = playerLoadToken;
+  playerControlsTimer = setTimeout(() => {
+    playerControlsTimer = null;
+    if (epoch !== playerControlsEpoch || loadToken !== playerLoadToken ||
+        video !== $("gallery-player") || !playerControlsMayHide(video)) return;
+    video.controls = false;
+    diag("player.controls.hidden", { origin: playerOrigin, position: galleryIndex + 1 });
+  }, PLAYER_CONTROLS_HIDE_MS);
+}
+
+function showPlayerControls(autoHide = false){
+  const video = $("gallery-player");
+  cancelPlayerControlsHide();
+  if (!video) return;
+  video.controls = true;
+  if (autoHide && playerControlsMayHide(video)) schedulePlayerControlsHide();
+}
+
+function resetPlayerControls(){
+  showPlayerControls(false);
+}
+
+function installPlayerControlsManager(){
+  const video = $("gallery-player");
+  if (!video || video.dataset.graveiControlsManaged === "1") return;
+  video.dataset.graveiControlsManaged = "1";
+  const keepVisible = () => showPlayerControls(false);
+  video.addEventListener("playing", schedulePlayerControlsHide);
+  video.addEventListener("pause", keepVisible);
+  video.addEventListener("ended", keepVisible);
+  video.addEventListener("waiting", keepVisible);
+  video.addEventListener("stalled", keepVisible);
+  video.addEventListener("seeking", keepVisible);
+  video.addEventListener("error", keepVisible);
+  video.addEventListener("emptied", keepVisible);
+  video.addEventListener("loadedmetadata", keepVisible);
+  video.addEventListener("seeked", () => showPlayerControls(!video.paused && !video.ended));
+  video.addEventListener("webkitbeginfullscreen", keepVisible);
+  video.addEventListener("webkitendfullscreen", () => showPlayerControls(!video.paused && !video.ended));
+  video.addEventListener("enterpictureinpicture", keepVisible);
+  video.addEventListener("leavepictureinpicture", () => showPlayerControls(!video.paused && !video.ended));
+  const stage = video.closest(".player-stage");
+  if (stage){
+    stage.addEventListener("click", event => {
+      if (!$("s-player").classList.contains("active")) return;
+      const wasHidden = !video.controls;
+      showPlayerControls(!video.paused && !video.ended);
+      if (wasHidden){
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }, true);
+  }
+}
+
+installPlayerControlsManager();
 
 async function enrichReplayFromPlayer(entry, video, token){
   if (token !== playerLoadToken || !playerBlob || !playerInfo) return;
