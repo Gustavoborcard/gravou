@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="Gravei">
 <title>Gravei — O replay dos seus melhores momentos.</title>
 <link rel="apple-touch-icon" href="icon-gravei-1024.png">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%23121212'/%3E%3Cg transform='translate(12 12) scale(0.62) translate(-12 -12)' fill='none'%3E%3Cpolyline points='23 5.2 23 10 18.2 10' stroke='%23FAFAF7' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M20.49 15a9 9 0 1 1-2.12-9.36L23 10' stroke='%23FAFAF7' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='12' cy='12' r='3.6' fill='%23FF3B30'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%23121212'/%3E%3Cg transform='translate(12 12) scale(0.62 -0.62) translate(-12 -12)' fill='none'%3E%3Cpolyline points='23 5.2 23 10 18.2 10' stroke='%23FAFAF7' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M20.49 15a9 9 0 1 1-2.12-9.36L23 10' stroke='%23FAFAF7' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='12' cy='12' r='3.6' fill='%23FF3B30'/%3E%3C/g%3E%3C/svg%3E">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -474,7 +474,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .replay-card-select{position:absolute;top:10px;right:10px;z-index:4;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:2px solid rgba(255,255,255,.78);border-radius:50%;background:rgba(0,0,0,.48);color:#fff;opacity:0;transform:scale(.88);transition:opacity .14s ease,transform .14s ease,background .14s ease}
 .replay-card-select svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;opacity:0}
 .selection-mode .replay-card-select{opacity:1;transform:scale(1)}
-.selection-mode .replay-card-favorite{display:none}
+.selection-mode .replay-card-favorite{pointer-events:none}
 .replay-card.is-selected .replay-card-select{background:var(--rec);border-color:var(--rec)}
 .replay-card.is-selected .replay-card-select svg{opacity:1}
 .replay-card-visual{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;isolation:isolate;background:radial-gradient(circle at 50% 46%,rgba(255,59,48,.11) 0,rgba(255,59,48,.045) 24%,transparent 48%),linear-gradient(145deg,#262626 0%,#191919 52%,#111 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.045)}
@@ -940,7 +940,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v96";
+  const VERSION = "v98";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
