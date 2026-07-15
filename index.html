@@ -404,7 +404,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .central-screen::before,.central-screen::after{display:none}
 .central-scroll{width:100%;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}
 .central-shell{width:100%;max-width:520px;min-height:100%;margin:0 auto;display:flex;flex-direction:column;background:var(--bg)}
-.central-brand{min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:calc(26px + var(--safe-t)) 24px 8px}
+.central-brand{min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:calc(26px + var(--safe-t)) 24px 8px;margin-top:auto}
 .central-brand .sym{display:block;width:clamp(52px,15vw,64px);height:auto;transform:translateY(6px) scaleY(-1);transform-origin:center;transform-box:fill-box}
 .central-brand .wm{display:block;width:clamp(180px,53vw,228px);height:auto}
 .central-replay-section{padding:4px 20px 18px;border-top:0;background:var(--bg)}
@@ -427,7 +427,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .central-preview-more{display:flex;align-items:center;justify-content:center;border-color:var(--line);background:#171717;color:rgba(250,250,247,.68);font-size:18px;font-weight:800}
 .central-empty{min-height:116px;margin-top:9px;border:1px dashed var(--line);border-radius:12px;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center;color:var(--text-dim);font-size:14px;line-height:1.45}
 .central-empty[hidden]{display:none}
-.central-action-panel{padding:10px 20px calc(22px + var(--safe-b));border-top:0;background:var(--bg)}
+.central-action-panel{padding:10px 20px calc(22px + var(--safe-b));border-top:0;background:var(--bg);margin-bottom:auto}
 .central-actions{max-width:410px;margin:0 auto;gap:12px}
 .central-actions .btn{min-height:58px}
 .central-actions .central-danger{min-height:44px;padding:10px 20px;background:transparent;color:var(--text-dim);font-family:'Inter',sans-serif;font-size:14px;font-weight:600}
@@ -437,10 +437,10 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 }
 @media (orientation:landscape) and (max-height:600px){
   .central-shell{max-width:none;min-height:100%;display:grid;grid-template-columns:minmax(190px,35vw) minmax(0,1fr);grid-template-rows:auto 1fr}
-  .central-brand{grid-column:1;grid-row:1/3;min-height:100vh;gap:8px;padding:calc(16px + var(--safe-t)) 20px calc(16px + var(--safe-b))}
+  .central-brand{grid-column:1;grid-row:1/3;min-height:100vh;gap:8px;padding:calc(16px + var(--safe-t)) 20px calc(16px + var(--safe-b));margin-top:0}
   .central-brand .sym{width:min(52px,14vh);transform:translateY(4px) scaleY(-1)}.central-brand .wm{width:min(172px,27vw)}
   .central-replay-section{grid-column:2;grid-row:1;padding:calc(10px + var(--safe-t)) calc(16px + env(safe-area-inset-right,0px)) 12px 16px}
-  .central-action-panel{grid-column:2;grid-row:2;padding:10px calc(16px + env(safe-area-inset-right,0px)) calc(10px + var(--safe-b)) 16px}
+  .central-action-panel{grid-column:2;grid-row:2;padding:10px calc(16px + env(safe-area-inset-right,0px)) calc(10px + var(--safe-b)) 16px;margin-bottom:0}
   .central-actions{gap:8px}.central-actions .btn{min-height:44px;padding:10px 20px;font-size:15px}.central-actions .central-danger{min-height:36px;padding:6px}
   .central-preview-grid{max-width:420px}.central-empty{min-height:90px}
 }
@@ -459,9 +459,11 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .gallery-header h2{font-size:20px;white-space:nowrap}
 .gallery-header p{font-size:12px;color:var(--text-dim);margin-top:2px;white-space:nowrap}
 .gallery-header-spacer{display:block;min-width:76px}
-.gallery-filters{display:grid;grid-template-columns:1fr 1fr;gap:4px;width:calc(100% - 32px);max-width:420px;margin:10px auto 0;padding:4px;border:1px solid var(--line);border-radius:14px;background:var(--surface);flex-shrink:0}
-.gallery-filter{min-height:44px;border:0;border-radius:10px;background:transparent;color:var(--text-dim);font:inherit;font-size:14px;font-weight:700;cursor:pointer}
-.gallery-filter[aria-selected="true"]{background:#2d2d2d;color:var(--text);box-shadow:0 1px 6px rgba(0,0,0,.24)}
+.gallery-filters{display:flex;align-items:center;justify-content:center;gap:12px;width:max-content;max-width:calc(100% - 32px);margin:12px auto 0;padding:0;border:0;background:transparent;flex-shrink:0}
+.gallery-filter{min-width:104px;min-height:46px;padding:0 24px;border:1px solid var(--line);border-radius:999px;background:#202020;color:rgba(250,250,247,.62);font:inherit;font-size:15px;font-weight:700;white-space:nowrap;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.gallery-filter[aria-selected="true"]{background:#fafaf7;border-color:#fafaf7;color:#161616;box-shadow:none}
+.gallery-filter:active:not(:disabled){transform:scale(.97)}
+.gallery-filter:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .gallery-filter:disabled{opacity:.4;cursor:default}
 .gallery-scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 16px calc(28px + var(--safe-b))}
 .gallery-list{display:flex;flex-direction:column;gap:16px;width:100%;max-width:640px;margin:0 auto}
@@ -493,7 +495,8 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .favorite-btn.is-favorite{color:var(--rec)}
 .favorite-btn.is-favorite svg{fill:currentColor;transform:scale(1.04)}
 .favorite-btn:disabled{opacity:.55;cursor:default}
-.replay-card-favorite{position:absolute;right:10px;bottom:8px;z-index:3}
+.replay-card-favorite{position:absolute;right:10px;bottom:8px;z-index:3;background:transparent}
+.replay-card-favorite svg{filter:drop-shadow(0 1px 2px rgba(0,0,0,.92))}
 .player-favorite{justify-self:end;background:transparent}
 .gallery-empty{max-width:360px;margin:18vh auto 0;text-align:center;color:var(--text-dim);line-height:1.55;padding:0 24px}
 .gallery-empty[hidden]{display:none}
@@ -937,7 +940,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v93";
+  const VERSION = "v94";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
