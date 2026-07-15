@@ -142,14 +142,20 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 #rec-screen.dimmed #shade{opacity:.95}
 #rec-screen.dimmed .rec-top{opacity:.08}
 #rec-screen.dimmed #btn-flip{opacity:.08}
-/* botão: anel aceso + rótulos em meio-brilho; miolo preto (OLED off) */
+/* botão em economia: miolo OLED, ação ainda disponível em um toque */
 #rec-screen.dimmed #btn-save{opacity:1}
-#rec-screen.dimmed #btn-save .inner{background:rgba(0,0,0,.92)}
+#rec-screen.dimmed #btn-save .inner{
+  background:rgba(0,0,0,.93);box-shadow:inset 0 0 0 1px rgba(250,250,247,.08);
+  backdrop-filter:none;-webkit-backdrop-filter:none
+}
+#rec-screen.dimmed #btn-save .action-ring-track{stroke:rgba(250,250,247,.13)}
+#rec-screen.dimmed #btn-save .action-ring-progress{stroke:rgba(255,59,48,.62)}
 #rec-screen.dimmed #btn-save .rw,
-#rec-screen.dimmed #btn-save .secs{opacity:.6}
-#rec-screen.dimmed #btn-save .lbl{font-family:'Poppins',sans-serif;opacity:.5;color:var(--accent)}
-#btn-save .inner{transition:background .6s ease}
-#btn-save .rw,#btn-save .lbl,#btn-save .secs{transition:opacity .6s ease, color .6s ease}
+#rec-screen.dimmed #btn-save .lbl,
+#rec-screen.dimmed #btn-save .save-sub{opacity:.6;color:var(--text)}
+#rec-screen.dimmed #btn-save .save-sub .secs{color:var(--accent)}
+#btn-save .inner{transition:background .6s ease,box-shadow .6s ease}
+#btn-save .rw,#btn-save .lbl,#btn-save .save-sub{transition:opacity .6s ease,color .6s ease}
 .rec-top,#btn-flip{transition:opacity .6s ease}
 
 .rec-top{
@@ -236,37 +242,55 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 #ctl-code:focus{outline:none;border-color:var(--accent)}
 #ctl-status{font-size:15px;color:var(--text);margin-top:14px;min-height:22px}
 #btn-ctl{
-  width:min(300px,78vw,44vh);height:min(300px,78vw,44vh);border-radius:50%;border:none;cursor:pointer;padding:14px;
-  background:conic-gradient(var(--accent) 100%, rgba(255,255,255,.28) 0);
+  position:relative;
+  width:min(300px,78vw,44vh);height:min(300px,78vw,44vh);border-radius:50%;border:none;cursor:pointer;padding:0;
+  background:transparent;isolation:isolate;
   transition:transform .08s ease;margin-top:28px;display:none;
 }
 #btn-ctl:active{transform:scale(.95)}
 #btn-ctl .inner{
-  width:100%;height:100%;border-radius:50%;background:rgba(18,18,18,.6);
+  position:absolute;inset:6%;z-index:1;width:auto;height:auto;border-radius:50%;
+  background:radial-gradient(circle at 50% 38%,rgba(250,250,247,.07),transparent 44%),rgba(18,18,18,.72);
+  box-shadow:inset 0 0 0 1px rgba(250,250,247,.14);
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--text);
-  position:relative;overflow:hidden;
+  overflow:hidden;
 }
 #btn-ctl .rw{line-height:0}
-#btn-ctl .rw svg{width:52px;height:52px}
+#btn-ctl .rw svg{width:52px;height:52px;transform:scaleY(-1);transform-origin:center;transform-box:fill-box}
 #btn-ctl .lbl{font-family:'Poppins',sans-serif;font-size:19px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
+#btn-ctl .ctl-sub{font-family:'Inter',sans-serif;font-size:14px;font-weight:700;color:var(--text-dim)}
 
 /* botão principal com anel de buffer (assinatura visual) */
 #btn-save{
   position:fixed;z-index:6;left:50%;bottom:calc(22px + var(--safe-b));transform:translateX(-50%);
-  width:min(300px,78vw,44vh);height:min(300px,78vw,44vh);border-radius:50%;border:none;cursor:pointer;padding:14px;
-  background:conic-gradient(var(--accent) calc(var(--buf,0)*1%), rgba(255,255,255,.28) 0);
+  width:min(300px,78vw,44vh);height:min(300px,78vw,44vh);border-radius:50%;border:none;cursor:pointer;padding:0;
+  background:transparent;isolation:isolate;
   transition:transform .08s ease, opacity .6s ease;
 }
 #btn-save:active{transform:translateX(-50%) scale(.95)}
 #btn-save .inner{
-  width:100%;height:100%;border-radius:50%;background:rgba(18,18,18,.34);
+  position:absolute;inset:6%;z-index:1;width:auto;height:auto;border-radius:50%;
+  background:radial-gradient(circle at 50% 38%,rgba(250,250,247,.055),transparent 44%),rgba(18,18,18,.42);
+  box-shadow:inset 0 0 0 1px rgba(250,250,247,.15);
+  backdrop-filter:blur(2px) saturate(.9);-webkit-backdrop-filter:blur(2px) saturate(.9);
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--text);
-  position:relative;overflow:hidden;
+  overflow:hidden;
 }
+.action-ring{position:absolute;inset:0;z-index:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+.action-ring-track,.action-ring-progress{fill:none;stroke-width:2.8}
+.action-ring-track{stroke:rgba(250,250,247,.24)}
+.action-ring-progress{
+  stroke:var(--accent);stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:100;
+  transform:rotate(-90deg);transform-origin:50% 50%
+}
+#btn-save .action-ring-progress{transition:stroke-dashoffset .9s linear}
+#btn-ctl .action-ring-progress{stroke-dashoffset:0}
+.action-ring-progress.ring-snap{transition:none!important}
 #btn-save .rw{line-height:0}
 #btn-save .rw svg{width:52px;height:52px;transform:scaleY(-1);transform-origin:center;transform-box:fill-box}
-#btn-save .lbl{font-size:19px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
-#btn-save .secs{font-size:42px;font-weight:900;color:var(--accent)}
+#btn-save .lbl{font-family:'Poppins',sans-serif;font-size:19px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
+#btn-save .save-sub{font-family:'Inter',sans-serif;font-size:15px;font-weight:700;color:var(--text)}
+#btn-save .secs{font-size:18px;font-weight:800;color:var(--accent)}
 .ripple{position:absolute;border-radius:50%;background:rgba(255,59,48,.45);transform:scale(0);animation:rip .5s ease-out;pointer-events:none}
 @keyframes rip{to{transform:scale(3.2);opacity:0}}
 
@@ -590,10 +614,14 @@ a{color:var(--accent)}
     <svg viewBox="0 0 24 24"><path d="M20 8h-3l-2-3H9L7 8H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1z"/><path d="M9.5 13.5a2.5 2.5 0 0 1 4.3-1.7M14.5 13.5a2.5 2.5 0 0 1-4.3 1.7"/><path d="M14 11.5l.6-.9.9.6M10 15.5l-.6.9-.9-.6"/></svg>
   </button>
   <button id="btn-save" aria-label="Salvar replay">
+    <svg class="action-ring" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+      <circle class="action-ring-track" cx="50" cy="50" r="46" pathLength="100"></circle>
+      <circle class="action-ring-progress" cx="50" cy="50" r="46" pathLength="100" data-progress="0"></circle>
+    </svg>
     <span class="inner">
       <span class="rw"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><polyline points="23 5.2 23 10 18.2 10" stroke="#FAFAF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="#FAFAF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.4" fill="#FF3B30"/></svg></span>
-      <span class="lbl">Salvar últimos</span>
-      <span class="secs" id="save-secs">20s</span>
+      <span class="lbl">Salvar replay</span>
+      <span class="save-sub">últimos <span class="secs" id="save-secs">20s</span></span>
     </span>
   </button>
 </section>
@@ -687,9 +715,14 @@ a{color:var(--accent)}
   </div>
   <p id="ctl-status"></p>
   <button id="btn-ctl" aria-label="Salvar replay na câmera">
+    <svg class="action-ring" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+      <circle class="action-ring-track" cx="50" cy="50" r="46" pathLength="100"></circle>
+      <circle class="action-ring-progress" cx="50" cy="50" r="46" pathLength="100" data-progress="100"></circle>
+    </svg>
     <span class="inner">
       <span class="rw"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><polyline points="23 5.2 23 10 18.2 10" stroke="#FAFAF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="#FAFAF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.4" fill="#FF3B30"/></svg></span>
       <span class="lbl">Salvar replay</span>
+      <span class="ctl-sub">câmera conectada</span>
     </span>
   </button>
   <button class="link-btn" id="b-ctl-disc" style="display:none">Desconectar</button>
@@ -904,7 +937,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v90";
+  const VERSION = "v91";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -1380,7 +1413,7 @@ function setDuration(d, announce = false){
   updateDurLabels();
   syncDurationChips();
   const available = Math.min(state.bufferSeconds, state.duration);
-  $("btn-save").style.setProperty("--buf", (available / state.duration) * 100);
+  setSaveRingProgress((available / state.duration) * 100);
   if (announce){
     toast(d + "s selecionado", "info", 2400);
   }
@@ -2741,7 +2774,22 @@ async function flushCurrentChunk(){
   diag("flush.done", { target, timedOut, processed: state.processedEventSerial, elapsedMs: Math.round(performance.now()-startedAt), fragments: state.fragments.length })
 }
 /* ---------- anel de buffer ---------- */
-function startRing(){clearInterval(state.timerId);state.timerId=setInterval(()=>{const avail=Math.min(state.bufferSeconds,state.duration);$('btn-save').style.setProperty('--buf',(avail/state.duration)*100);if(state.active&&document.visibilityState==='visible'&&state.captureRec&&state.captureRec.state==='recording'&&Date.now()-state.lastChunkAt>6500){restartCaptureRecorder("ring.stale");toast('Gravação retomada','info',2400)}},250)}
+function setSaveRingProgress(percent){
+  const btn=$("btn-save");
+  if(!btn)return;
+  const numeric=Number(percent);
+  const next=Number.isFinite(numeric)?Math.max(0,Math.min(100,numeric)):0;
+  btn.style.setProperty("--buf",String(next));
+  const ring=btn.querySelector(".action-ring-progress");
+  if(!ring)return;
+  const previous=Number(ring.dataset.progress||0);
+  const snap=next+.001<previous;
+  if(snap)ring.classList.add("ring-snap");
+  ring.style.strokeDashoffset=String(100-next);
+  ring.dataset.progress=String(next);
+  if(snap){void ring.getBoundingClientRect();ring.classList.remove("ring-snap")}
+}
+function startRing(){clearInterval(state.timerId);state.timerId=setInterval(()=>{const avail=Math.min(state.bufferSeconds,state.duration);setSaveRingProgress((avail/state.duration)*100);if(state.active&&document.visibilityState==='visible'&&state.captureRec&&state.captureRec.state==='recording'&&Date.now()-state.lastChunkAt>6500){restartCaptureRecorder("ring.stale");toast('Gravação retomada','info',2400)}},250)}
 
 function flashOK(){
   const f = $("flash");
@@ -5050,7 +5098,7 @@ $("b-ctl-connect").onclick = async () => {
       conn.on("open", () => {
         opened = true;
         clearTimeout(giveUp);
-        ctlStatus("Conectado à câmera ✓");
+        ctlStatus("");
         $("ctl-actions").style.display = "none";
         $("ctl-code").style.display = "none";
         $("ctl-title").textContent = "Controle conectado";
