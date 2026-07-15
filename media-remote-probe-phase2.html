@@ -1,0 +1,991 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src blob: data:; media-src blob: data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Gravei · controle remoto · Fase 2</title>
+<style>:root {
+  color-scheme: light dark;
+  background-color: var(--background) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: light-dark(rgb(255 255 255), rgb(24 24 24));
+  --foreground: light-dark(rgb(26 28 31), rgb(255 255 255));
+  --card: color-mix(in oklab, var(--foreground) 5%, transparent);
+  --card-foreground: var(--foreground);
+  --popover: light-dark(rgb(255 255 255), rgb(45 45 45));
+  --popover-foreground: var(--foreground);
+  --primary: light-dark(rgb(51 156 255), rgb(131 195 255));
+  --primary-foreground: light-dark(rgb(255 255 255), rgb(13 13 13));
+  --secondary: light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: light-dark(
+    rgb(26 28 31 / 49.4%),
+    rgb(255 255 255 / 49.8%)
+  );
+  --accent: light-dark(rgb(229 242 255), rgb(13 39 63));
+  --accent-foreground: var(--primary);
+  --destructive: light-dark(rgb(226 85 7), rgb(255 133 73));
+  --border: light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%));
+  --input: light-dark(
+    rgb(26 28 31 / 11.8%),
+    color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+  );
+  --ring: light-dark(rgb(51 156 255), rgb(131 195 255 / 76%));
+  --font-size-base: 14px;
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, "Segoe UI", sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --radius: 12.5px;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17 17'%3E%3Cpath d='M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z'/%3E%3C/svg%3E");
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+  --color-background-primary: var(--background);
+  --color-text-primary: var(--foreground);
+  --color-border-secondary: var(--border);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html > body {
+  margin: 0;
+  padding: 5px;
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: pointer;
+  font-weight: var(--viz-font-weight-medium);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: superellipse(1.5);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget > :not(.card) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls > .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls > .form-label > :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type="file"] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type="file"]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type="file"]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type="color"] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: superellipse(1.5);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type="checkbox"]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: "";
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type="radio"] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type="radio"]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: "";
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+    [aria-pressed="true"],
+    [aria-selected="true"],
+    .is-selected
+  ) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed="true"], [aria-selected="true"], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget > svg {
+  width: 100%;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html,body{margin:0;min-height:100%;}body{box-sizing:border-box;padding:max(1rem,env(safe-area-inset-top)) max(1rem,env(safe-area-inset-right)) max(1rem,env(safe-area-inset-bottom)) max(1rem,env(safe-area-inset-left));}main{width:min(100%,736px);margin:0 auto;}</style>
+</head>
+<body>
+<main>
+<section id="gravei-media-remote-phase2" aria-labelledby="phase2-title">
+  <style>
+    #gravei-media-remote-phase2{color:var(--foreground);width:100%}
+    #gravei-media-remote-phase2 .probe-shell,#gravei-media-remote-phase2 .probe-heading,#gravei-media-remote-phase2 .probe-section{display:grid;gap:.75rem}
+    #gravei-media-remote-phase2 .probe-shell{gap:1rem}
+    #gravei-media-remote-phase2 h2,#gravei-media-remote-phase2 h3,#gravei-media-remote-phase2 p{margin:0}
+    #gravei-media-remote-phase2 .status-line,#gravei-media-remote-phase2 .check{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+    #gravei-media-remote-phase2 .status-dot{width:.65rem;height:.65rem;border-radius:50%;background:var(--muted-foreground);flex:0 0 auto}
+    #gravei-media-remote-phase2[data-state="active"] .status-dot{background:var(--viz-series-1)}
+    #gravei-media-remote-phase2[data-state="error"] .status-dot{background:var(--destructive)}
+    #gravei-media-remote-phase2 .metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.65rem}
+    #gravei-media-remote-phase2 .counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.65rem}
+    #gravei-media-remote-phase2 .count{text-align:center;min-width:0}
+    #gravei-media-remote-phase2 .count strong{display:block;font-variant-numeric:tabular-nums}
+    #gravei-media-remote-phase2 .checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.4rem 1rem;padding:0;margin:0;list-style:none}
+    #gravei-media-remote-phase2 .check-mark{width:1.1rem;text-align:center;color:var(--muted-foreground)}
+    #gravei-media-remote-phase2 .check[data-result="yes"] .check-mark{color:var(--viz-series-1)}
+    #gravei-media-remote-phase2 .check[data-result="no"] .check-mark{color:var(--destructive)}
+    #gravei-media-remote-phase2 .event-log{max-height:15rem;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+    #gravei-media-remote-phase2 .note{padding-left:.75rem;border-left:2px solid var(--border)}
+    @media(max-width:560px){
+      #gravei-media-remote-phase2 .metrics{grid-template-columns:1fr}
+      #gravei-media-remote-phase2 .checks{grid-template-columns:1fr}
+      #gravei-media-remote-phase2 .counts{grid-template-columns:repeat(2,minmax(0,1fr))}
+    }
+  </style>
+  <div class="probe-shell">
+    <header class="probe-heading">
+      <span class="viz-badge">Fase 2 · portador real</span>
+      <h2 id="phase2-title">Controle por relógio ou fone</h2>
+      <p class="text-muted">Usa uma mídia local praticamente inaudível. Não acessa câmera, microfone, replays ou armazenamento.</p>
+      <div class="status-line" role="status" aria-live="polite"><span class="status-dot" aria-hidden="true"></span><span id="phase2-status">Pronto para ativar</span></div>
+    </header>
+
+    <div class="viz-controls" aria-label="Controles do teste">
+      <button id="phase2-start" class="btn btn-primary" type="button">Ativar controle</button>
+      <button id="phase2-stop" class="btn" type="button" disabled>Desativar controle</button>
+    </div>
+
+    <section class="probe-section" aria-labelledby="phase2-health-title">
+      <h3 id="phase2-health-title">Estado do portador</h3>
+      <div class="metrics">
+        <div class="card viz-stat"><span class="text-muted">Reprodução</span><span class="viz-stat-value" id="carrier-state">Parada</span></div>
+        <div class="card viz-stat"><span class="text-muted">Tempo</span><span class="viz-stat-value" id="carrier-time">0,0 s</span></div>
+        <div class="card viz-stat"><span class="text-muted">Comandos</span><span class="viz-stat-value" id="remote-total">0</span></div>
+      </div>
+    </section>
+
+    <section class="probe-section" aria-labelledby="phase2-count-title">
+      <h3 id="phase2-count-title">Comandos reais recebidos</h3>
+      <div class="card counts">
+        <div class="count"><span class="text-muted">Play</span><strong id="phase2-count-play">0</strong></div>
+        <div class="count"><span class="text-muted">Pause</span><strong id="phase2-count-pause">0</strong></div>
+        <div class="count"><span class="text-muted">Anterior</span><strong id="phase2-count-previous">0</strong></div>
+        <div class="count"><span class="text-muted">Próxima</span><strong id="phase2-count-next">0</strong></div>
+      </div>
+    </section>
+
+    <section class="probe-section" aria-labelledby="phase2-cap-title">
+      <h3 id="phase2-cap-title">Verificações</h3>
+      <ul class="checks">
+        <li class="check" id="phase2-check-session" data-result="unknown"><span class="check-mark" aria-hidden="true">•</span><span>Media Session disponível</span></li>
+        <li class="check" id="phase2-check-ready" data-result="unknown"><span class="check-mark" aria-hidden="true">•</span><span>Mídia preparada</span></li>
+        <li class="check" id="phase2-check-play" data-result="unknown"><span class="check-mark" aria-hidden="true">•</span><span>Reprodução autorizada</span></li>
+        <li class="check" id="phase2-check-advancing" data-result="unknown"><span class="check-mark" aria-hidden="true">•</span><span>Portador avançando</span></li>
+        <li class="check" id="phase2-check-command" data-result="unknown"><span class="check-mark" aria-hidden="true">•</span><span>Primeiro comando real</span></li>
+      </ul>
+    </section>
+
+    <section class="probe-section" aria-labelledby="phase2-log-title">
+      <h3 id="phase2-log-title">Eventos</h3>
+      <pre class="card event-log text-small" id="phase2-log" aria-live="polite">Aguardando ativação.</pre>
+      <div class="viz-controls">
+        <button id="phase2-share" class="btn" type="button">Compartilhar diagnóstico</button>
+        <button id="phase2-copy" class="btn" type="button">Copiar resumo</button>
+        <button id="phase2-clear" class="btn btn-ghost" type="button">Limpar eventos</button>
+      </div>
+    </section>
+
+    <p class="note text-small text-muted">O sinal possui amplitude mínima, não é mudo e nasce apenas na memória desta página. Os comandos contam, mas nunca salvam replay.</p>
+    <audio id="phase2-carrier" preload="auto" loop playsinline aria-hidden="true"></audio>
+  </div>
+
+  <script>
+    (() => {
+      const root=document.getElementById('gravei-media-remote-phase2');
+      if(!root||root.dataset.ready==='true')return;
+      root.dataset.ready='true';root.dataset.state='idle';
+
+      const ACTIONS=['play','pause','previoustrack','nexttrack'];
+      const labels={play:'Play',pause:'Pause',previoustrack:'Anterior',nexttrack:'Próxima'};
+      const ids={play:'phase2-count-play',pause:'phase2-count-pause',previoustrack:'phase2-count-previous',nexttrack:'phase2-count-next'};
+      const SIGNAL={format:'pcm-wav',sampleRate:8000,channels:1,bitsPerSample:16,durationSeconds:8,frequencyHz:440,amplitudeLsb:1};
+      const state={active:false,starting:false,startedAt:null,stoppedAt:null,lastRemoteAt:null,lastCarrierTime:0,loopCount:0,heartbeatCount:0,carrierAdvanceCount:0,acceptedActions:[],rejectedActions:[],counts:{play:0,pause:0,previoustrack:0,nexttrack:0},events:[],heartbeatId:null,objectUrl:null};
+
+      const byId=id=>root.querySelector('#'+id);
+      const carrier=byId('phase2-carrier'),status=byId('phase2-status'),logEl=byId('phase2-log'),startBtn=byId('phase2-start'),stopBtn=byId('phase2-stop');
+      const nowIso=()=>new Date().toISOString();
+
+      function writeAscii(view,offset,text){for(let i=0;i<text.length;i+=1)view.setUint8(offset+i,text.charCodeAt(i))}
+      function createSignal(){
+        const frames=SIGNAL.sampleRate*SIGNAL.durationSeconds;
+        const dataBytes=frames*SIGNAL.channels*2;
+        const buffer=new ArrayBuffer(44+dataBytes);
+        const view=new DataView(buffer);
+        writeAscii(view,0,'RIFF');view.setUint32(4,36+dataBytes,true);writeAscii(view,8,'WAVE');writeAscii(view,12,'fmt ');
+        view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,SIGNAL.channels,true);view.setUint32(24,SIGNAL.sampleRate,true);
+        view.setUint32(28,SIGNAL.sampleRate*SIGNAL.channels*2,true);view.setUint16(32,SIGNAL.channels*2,true);view.setUint16(34,16,true);
+        writeAscii(view,36,'data');view.setUint32(40,dataBytes,true);
+        for(let i=0;i<frames;i+=1){const sample=Math.round(Math.sin((2*Math.PI*SIGNAL.frequencyHz*i)/SIGNAL.sampleRate)*SIGNAL.amplitudeLsb);view.setInt16(44+i*2,sample,true)}
+        return new Blob([buffer],{type:'audio/wav'});
+      }
+
+      function mediaSnapshot(){
+        const a=navigator.audioSession;
+        return{visibility:document.visibilityState,focused:typeof document.hasFocus==='function'?document.hasFocus():null,playbackState:'mediaSession'in navigator?navigator.mediaSession.playbackState:null,audioSessionType:a&&'type'in a?a.type:null,audioSessionState:a&&'state'in a?a.state:null,carrier:{paused:carrier.paused,ended:carrier.ended,currentTime:Number(carrier.currentTime.toFixed(3)),duration:Number.isFinite(carrier.duration)?Number(carrier.duration.toFixed(3)):null,readyState:carrier.readyState,networkState:carrier.networkState,muted:carrier.muted,volume:carrier.volume,error:carrier.error?{code:carrier.error.code,message:carrier.error.message||null}:null}};
+      }
+
+      function renderLog(){
+        if(!state.events.length){logEl.textContent='Nenhum evento registrado.';return}
+        logEl.textContent=state.events.map(event=>{const time=event.at.slice(11,23),action=event.action?' · '+(labels[event.action]||event.action):'',gap=typeof event.sincePreviousMs==='number'?' · +'+event.sincePreviousMs+' ms':'';return time+' · '+event.type+action+gap}).join('\n');
+        logEl.scrollTop=logEl.scrollHeight;
+      }
+
+      function record(type,extra={}){state.events.push({at:nowIso(),type,...extra,context:mediaSnapshot()});renderLog()}
+
+      function setCheck(id,result){
+        const item=byId(id);if(!item)return;
+        const mark=item.querySelector('.check-mark');
+        if(result===null){item.dataset.result='unknown';if(mark)mark.textContent='•';return}
+        item.dataset.result=result?'yes':'no';if(mark)mark.textContent=result?'✓':'×';
+      }
+
+      function updateUi(){
+        ACTIONS.forEach(action=>{byId(ids[action]).textContent=String(state.counts[action])});
+        const total=ACTIONS.reduce((sum,action)=>sum+state.counts[action],0);
+        byId('remote-total').textContent=String(total);
+        byId('carrier-time').textContent=carrier.currentTime.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' s';
+        byId('carrier-state').textContent=state.active&&!carrier.paused?'Ativa':state.starting?'Abrindo':'Parada';
+      }
+
+      async function ensureCarrier(reason){
+        if(!state.active)return;
+        if(!carrier.paused){try{navigator.mediaSession.playbackState='playing'}catch(_){};return}
+        try{await carrier.play();try{navigator.mediaSession.playbackState='playing'}catch(_){};record('portador-retomado',{reason})}
+        catch(error){root.dataset.state='error';status.textContent='Não foi possível retomar a mídia';record('retomada-falhou',{reason,error:String(error&&error.message?error.message:error)})}
+      }
+
+      function handleRemote(action,details){
+        if(!state.active)return;
+        const at=Date.now(),gap=state.lastRemoteAt===null?null:at-state.lastRemoteAt;
+        state.lastRemoteAt=at;state.counts[action]+=1;setCheck('phase2-check-command',true);updateUi();
+        status.textContent=labels[action]+' recebido do controle';
+        record('comando-real',{action,sincePreviousMs:gap,details:details&&typeof details==='object'?{action:details.action||null,fastSeek:details.fastSeek||false,seekOffset:details.seekOffset||null,seekTime:details.seekTime||null}:null});
+        setTimeout(()=>ensureCarrier('comando-'+action),0);
+      }
+
+      function registerMediaSession(){
+        setCheck('phase2-check-session','mediaSession'in navigator);
+        if(!('mediaSession'in navigator))return false;
+        state.acceptedActions=[];state.rejectedActions=[];
+        if('MediaMetadata'in window){
+          try{navigator.mediaSession.metadata=new MediaMetadata({title:'Gravei · controle remoto',artist:'Teste com portador inaudível',album:'Fase 2'})}
+          catch(error){record('metadata-rejeitada',{error:String(error&&error.message?error.message:error)})}
+        }
+        ACTIONS.forEach(action=>{
+          try{navigator.mediaSession.setActionHandler(action,details=>handleRemote(action,details));state.acceptedActions.push(action)}
+          catch(error){state.rejectedActions.push({action,error:String(error&&error.message?error.message:error)})}
+        });
+        record('acoes-registradas',{accepted:state.acceptedActions.slice(),rejected:state.rejectedActions.slice()});
+        return state.acceptedActions.length>0;
+      }
+
+      function heartbeat(){
+        if(!state.active)return;
+        state.heartbeatCount+=1;
+        const current=carrier.currentTime;
+        const advanced=!carrier.paused&&(current>state.lastCarrierTime+.05||current<state.lastCarrierTime-.5);
+        if(advanced){state.carrierAdvanceCount+=1;setCheck('phase2-check-advancing',true)}
+        if(current<state.lastCarrierTime-.5)state.loopCount+=1;
+        state.lastCarrierTime=current;updateUi();
+        record('portador-pulso',{advanced,heartbeat:state.heartbeatCount,loopCount:state.loopCount});
+      }
+
+      async function start(){
+        if(state.active||state.starting)return;
+        state.starting=true;state.startedAt=nowIso();state.stoppedAt=null;state.lastRemoteAt=null;state.lastCarrierTime=0;state.loopCount=0;state.heartbeatCount=0;state.carrierAdvanceCount=0;
+        setCheck('phase2-check-play',null);setCheck('phase2-check-advancing',null);setCheck('phase2-check-command',null);
+        root.dataset.state='active';startBtn.disabled=true;stopBtn.disabled=false;status.textContent='Ativando o controle…';updateUi();record('teste-iniciado',{method:'near-silent-html-audio'});
+        registerMediaSession();
+        try{
+          const playPromise=carrier.play();
+          if(playPromise&&typeof playPromise.then==='function')await playPromise;
+          state.active=true;state.starting=false;setCheck('phase2-check-play',true);setCheck('phase2-check-ready',carrier.readyState>=2);
+          try{navigator.mediaSession.playbackState='playing'}catch(error){record('playback-state-rejeitado',{error:String(error&&error.message?error.message:error)})}
+          state.lastCarrierTime=carrier.currentTime;status.textContent='Controle ativo — abra o Reproduzindo';updateUi();record('reproducao-autorizada');
+          clearInterval(state.heartbeatId);state.heartbeatId=setInterval(heartbeat,2500);
+        }catch(error){
+          state.active=false;state.starting=false;root.dataset.state='error';setCheck('phase2-check-play',false);status.textContent='O Safari bloqueou a reprodução';startBtn.disabled=false;stopBtn.disabled=true;updateUi();record('reproducao-bloqueada',{error:String(error&&error.message?error.message:error)});
+        }
+      }
+
+      function teardown(reason){
+        clearInterval(state.heartbeatId);state.heartbeatId=null;
+        if('mediaSession'in navigator){ACTIONS.forEach(action=>{try{navigator.mediaSession.setActionHandler(action,null)}catch(_){}});try{navigator.mediaSession.metadata=null}catch(_){};try{navigator.mediaSession.playbackState='none'}catch(_){}}
+        const wasRunning=state.active||state.starting;state.active=false;state.starting=false;carrier.pause();try{carrier.currentTime=0}catch(_){};state.stoppedAt=nowIso();
+        if(wasRunning)record('teste-encerrado',{reason});
+        root.dataset.state='idle';status.textContent=reason==='manual'?'Controle desativado':'Pronto para ativar';startBtn.disabled=false;stopBtn.disabled=true;updateUi();
+      }
+
+      function diagnostic(){
+        return{schema:'gravei-media-remote-probe-v2',probeVersion:'media-remote-probe-02',method:'near-silent-html-audio',generatedAt:nowIso(),signal:{...SIGNAL},environment:{userAgent:navigator.userAgent,language:navigator.language,platform:navigator.platform,online:navigator.onLine,secureContext:window.isSecureContext===true,standalone:window.matchMedia?window.matchMedia('(display-mode: standalone)').matches:false,mediaSession:'mediaSession'in navigator,mediaMetadata:'MediaMetadata'in window,audioSession:'audioSession'in navigator},test:{active:state.active,starting:state.starting,startedAt:state.startedAt,stoppedAt:state.stoppedAt,acceptedActions:state.acceptedActions,rejectedActions:state.rejectedActions,counts:{...state.counts},heartbeatCount:state.heartbeatCount,carrierAdvanceCount:state.carrierAdvanceCount,loopCount:state.loopCount},snapshot:mediaSnapshot(),events:state.events};
+      }
+
+      function diagnosticFile(){const stamp=nowIso().replace(/[:.]/g,'-'),json=JSON.stringify(diagnostic(),null,2);return new File([json],'gravei-media-remote-phase2-'+stamp+'.json',{type:'application/json'})}
+
+      async function shareDiagnostic(){
+        const file=diagnosticFile();
+        try{if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){await navigator.share({files:[file],title:'Diagnóstico Gravei — Fase 2'});status.textContent='Diagnóstico compartilhado';record('diagnostico-compartilhado');return}}
+        catch(error){if(error&&error.name==='AbortError')return;record('compartilhamento-falhou',{error:String(error&&error.message?error.message:error)})}
+        const url=URL.createObjectURL(file),link=document.createElement('a');link.href=url;link.download=file.name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);status.textContent='Diagnóstico baixado';record('diagnostico-baixado');
+      }
+
+      async function copySummary(){
+        const summary=JSON.stringify(diagnostic(),null,2);
+        try{await navigator.clipboard.writeText(summary)}
+        catch(_){const area=document.createElement('textarea');area.value=summary;area.setAttribute('readonly','');area.style.position='absolute';area.style.left='-9999px';document.body.appendChild(area);area.select();document.execCommand('copy');area.remove()}
+        status.textContent='Resumo copiado';record('resumo-copiado');
+      }
+
+      state.objectUrl=URL.createObjectURL(createSignal());carrier.src=state.objectUrl;carrier.volume=1;carrier.muted=false;carrier.load();
+      ['loadedmetadata','canplay','play','playing','pause','waiting','stalled','ended','error'].forEach(type=>carrier.addEventListener(type,()=>{
+        if(type==='loadedmetadata'||type==='canplay')setCheck('phase2-check-ready',true);
+        if(type==='error')root.dataset.state='error';
+        updateUi();record('midia-'+type);
+      }));
+      carrier.addEventListener('timeupdate',updateUi);
+      startBtn.addEventListener('click',start);stopBtn.addEventListener('click',()=>teardown('manual'));
+      byId('phase2-share').addEventListener('click',shareDiagnostic);byId('phase2-copy').addEventListener('click',copySummary);
+      byId('phase2-clear').addEventListener('click',()=>{state.events=[];renderLog();status.textContent=state.active?'Controle ativo — abra o Reproduzindo':'Eventos limpos'});
+      document.addEventListener('visibilitychange',()=>record('visibilidade-alterada'));window.addEventListener('focus',()=>record('janela-em-foco'));window.addEventListener('blur',()=>record('janela-sem-foco'));
+      window.addEventListener('pagehide',()=>{teardown('pagehide');if(state.objectUrl){URL.revokeObjectURL(state.objectUrl);state.objectUrl=null}},{once:true});
+
+      setCheck('phase2-check-session','mediaSession'in navigator);updateUi();
+    })();
+  </script>
+</section>
+
+</main>
+</body>
+</html>
