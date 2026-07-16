@@ -1,0 +1,1101 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src blob: data:; media-src blob: data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Gravei · câmera e controle remoto</title>
+<style>:root {
+  color-scheme: light dark;
+  background-color: var(--background) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: light-dark(rgb(255 255 255), rgb(24 24 24));
+  --foreground: light-dark(rgb(26 28 31), rgb(255 255 255));
+  --card: color-mix(in oklab, var(--foreground) 5%, transparent);
+  --card-foreground: var(--foreground);
+  --popover: light-dark(rgb(255 255 255), rgb(45 45 45));
+  --popover-foreground: var(--foreground);
+  --primary: light-dark(rgb(51 156 255), rgb(131 195 255));
+  --primary-foreground: light-dark(rgb(255 255 255), rgb(13 13 13));
+  --secondary: light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: light-dark(
+    rgb(26 28 31 / 49.4%),
+    rgb(255 255 255 / 49.8%)
+  );
+  --accent: light-dark(rgb(229 242 255), rgb(13 39 63));
+  --accent-foreground: var(--primary);
+  --destructive: light-dark(rgb(226 85 7), rgb(255 133 73));
+  --border: light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%));
+  --input: light-dark(
+    rgb(26 28 31 / 11.8%),
+    color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+  );
+  --ring: light-dark(rgb(51 156 255), rgb(131 195 255 / 76%));
+  --font-size-base: 14px;
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, "Segoe UI", sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --radius: 12.5px;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17 17'%3E%3Cpath d='M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z'/%3E%3C/svg%3E");
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+  --color-background-primary: var(--background);
+  --color-text-primary: var(--foreground);
+  --color-border-secondary: var(--border);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html > body {
+  margin: 0;
+  padding: 5px;
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: pointer;
+  font-weight: var(--viz-font-weight-medium);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: superellipse(1.5);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget > :not(.card) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls > .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls > .form-label > :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type="file"] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type="file"]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type="file"]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type="color"] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: superellipse(1.5);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type="checkbox"]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: "";
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type="radio"] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type="radio"]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: "";
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+    [aria-pressed="true"],
+    [aria-selected="true"],
+    .is-selected
+  ) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed="true"], [aria-selected="true"], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget > svg {
+  width: 100%;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html,body{margin:0;min-height:100%;}body{box-sizing:border-box;padding:max(1rem,env(safe-area-inset-top)) max(1rem,env(safe-area-inset-right)) max(1rem,env(safe-area-inset-bottom)) max(1rem,env(safe-area-inset-left));}main{width:min(100%,736px);margin:0 auto;}</style>
+</head>
+<body>
+<main>
+<section id="gravei-camera-media-control-probe" aria-labelledby="p3-title">
+  <style>
+    #gravei-camera-media-control-probe{color:var(--foreground);width:100%}
+    #gravei-camera-media-control-probe .shell,#gravei-camera-media-control-probe .heading,#gravei-camera-media-control-probe .section{display:grid;gap:.75rem}
+    #gravei-camera-media-control-probe .shell{gap:1rem}
+    #gravei-camera-media-control-probe h2,#gravei-camera-media-control-probe h3,#gravei-camera-media-control-probe p{margin:0}
+    #gravei-camera-media-control-probe .status-line,#gravei-camera-media-control-probe .check{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+    #gravei-camera-media-control-probe .status-dot{width:.65rem;height:.65rem;border-radius:50%;background:var(--muted-foreground);flex:0 0 auto}
+    #gravei-camera-media-control-probe[data-state="recording"] .status-dot{background:var(--destructive)}
+    #gravei-camera-media-control-probe[data-state="remote"] .status-dot{background:var(--viz-series-1)}
+    #gravei-camera-media-control-probe[data-state="error"] .status-dot{background:var(--destructive)}
+    #gravei-camera-media-control-probe .preview{width:100%;aspect-ratio:16/9;object-fit:contain;display:block;background:var(--muted)}
+    #gravei-camera-media-control-probe .metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.65rem}
+    #gravei-camera-media-control-probe .counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.65rem}
+    #gravei-camera-media-control-probe .count{text-align:center;min-width:0}
+    #gravei-camera-media-control-probe .count strong{display:block;font-variant-numeric:tabular-nums}
+    #gravei-camera-media-control-probe .checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.4rem 1rem;padding:0;margin:0;list-style:none}
+    #gravei-camera-media-control-probe .check-mark{width:1.1rem;text-align:center;color:var(--muted-foreground)}
+    #gravei-camera-media-control-probe .check[data-result="yes"] .check-mark{color:var(--viz-series-1)}
+    #gravei-camera-media-control-probe .check[data-result="no"] .check-mark{color:var(--destructive)}
+    #gravei-camera-media-control-probe .event-log{max-height:15rem;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+    #gravei-camera-media-control-probe .note{padding-left:.75rem;border-left:2px solid var(--border)}
+    #gravei-camera-media-control-probe [hidden]{display:none!important}
+    @media(max-width:560px){
+      #gravei-camera-media-control-probe .metrics{grid-template-columns:1fr}
+      #gravei-camera-media-control-probe .checks{grid-template-columns:1fr}
+      #gravei-camera-media-control-probe .counts{grid-template-columns:repeat(2,minmax(0,1fr))}
+    }
+  </style>
+
+  <div class="shell">
+    <header class="heading">
+      <span class="viz-badge">Bancada · câmera + relógio</span>
+      <h2 id="p3-title">Teste combinado</h2>
+      <p class="text-muted">Um gravador, uma câmera e o portador inaudível. Nada é enviado ou guardado automaticamente.</p>
+      <div class="status-line" role="status" aria-live="polite"><span class="status-dot" aria-hidden="true"></span><span id="p3-status">Pronto para abrir a câmera</span></div>
+    </header>
+
+    <video id="p3-live" class="card preview" muted playsinline aria-label="Prévia ao vivo da câmera"></video>
+    <video id="p3-result" class="card preview" controls playsinline hidden aria-label="Resultado do teste"></video>
+
+    <div class="viz-controls" aria-label="Etapas do teste">
+      <button id="p3-open" class="btn btn-primary" type="button">1. Abrir câmera e gravar</button>
+      <button id="p3-remote" class="btn" type="button" disabled>2. Ativar relógio</button>
+      <button id="p3-finish" class="btn" type="button" disabled>3. Finalizar teste</button>
+    </div>
+
+    <section class="section" aria-labelledby="p3-health-title">
+      <h3 id="p3-health-title">Estado combinado</h3>
+      <div class="metrics">
+        <div class="card viz-stat"><span class="text-muted">Gravação</span><span class="viz-stat-value" id="p3-recording-time">0 s</span></div>
+        <div class="card viz-stat"><span class="text-muted">Fragmentos</span><span class="viz-stat-value" id="p3-fragments">0</span></div>
+        <div class="card viz-stat"><span class="text-muted">Comandos</span><span class="viz-stat-value" id="p3-total">0</span></div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="p3-count-title">
+      <h3 id="p3-count-title">Comandos reais recebidos</h3>
+      <div class="card counts">
+        <div class="count"><span class="text-muted">Play</span><strong id="p3-count-play">0</strong></div>
+        <div class="count"><span class="text-muted">Pause</span><strong id="p3-count-pause">0</strong></div>
+        <div class="count"><span class="text-muted">Anterior</span><strong id="p3-count-previous">0</strong></div>
+        <div class="count"><span class="text-muted">Próxima</span><strong id="p3-count-next">0</strong></div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="p3-check-title">
+      <h3 id="p3-check-title">Verificações</h3>
+      <ul class="checks">
+        <li class="check" id="p3-check-camera" data-result="unknown"><span class="check-mark" aria-hidden="true">•</span><span>Câmera e microfone ativos</span></li>
+        <li class="check" id="p3-check-recorder" data-result="unknown"><span class="check-mark" aria-hidden="true">•</span><span>MediaRecorder gravando</span></li>
+        <li class="check" id="p3-check-carrier" data-result="unknown"><span class="check-mark" aria-hidden="true">•</span><span>Portador avançando</span></li>
+        <li class="check" id="p3-check-command" data-result="unknown"><span class="check-mark" aria-hidden="true">•</span><span>Comando do relógio recebido</span></li>
+        <li class="check" id="p3-check-file" data-result="unknown"><span class="check-mark" aria-hidden="true">•</span><span>Arquivo final reconhecido</span></li>
+      </ul>
+    </section>
+
+    <section class="section" id="p3-result-actions" aria-labelledby="p3-result-title" hidden>
+      <h3 id="p3-result-title">Resultado</h3>
+      <p id="p3-result-summary" class="text-muted"></p>
+      <div class="viz-controls">
+        <button id="p3-share" class="btn btn-primary" type="button">Compartilhar vídeo e diagnóstico</button>
+        <button id="p3-copy" class="btn" type="button">Copiar diagnóstico</button>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="p3-log-title">
+      <h3 id="p3-log-title">Eventos</h3>
+      <pre class="card event-log text-small" id="p3-log" aria-live="polite">Aguardando início.</pre>
+    </section>
+
+    <p class="note text-small text-muted">Use a câmera traseira, ative o relógio, pressione os quatro controles e finalize após 20 a 30 segundos. Os controles não salvam nada nesta bancada.</p>
+    <audio id="p3-carrier" preload="auto" loop playsinline aria-hidden="true"></audio>
+  </div>
+
+  <script>
+    (() => {
+      const root=document.getElementById('gravei-camera-media-control-probe');
+      if(!root||root.dataset.ready==='true')return;
+      root.dataset.ready='true';root.dataset.state='idle';
+
+      const ACTIONS=['play','pause','previoustrack','nexttrack'];
+      const labels={play:'Play',pause:'Pause',previoustrack:'Anterior',nexttrack:'Próxima'};
+      const countIds={play:'p3-count-play',pause:'p3-count-pause',previoustrack:'p3-count-previous',nexttrack:'p3-count-next'};
+      const SIGNAL={format:'pcm-wav',sampleRate:8000,channels:1,bitsPerSample:16,durationSeconds:8,frequencyHz:440,amplitudeLsb:1};
+      const TIMESLICE_MS=1000;
+      const MAX_BYTES=80*1024*1024;
+      const state={phase:'idle',stream:null,recorder:null,mime:null,keyframeMode:null,keyframeOptionRead:false,chunks:[],bytes:0,dataEvents:0,recordingStartedAt:null,recordingStoppedAt:null,streamOpenedAt:null,carrierActive:false,carrierStartedAt:null,carrierLastTime:0,carrierAdvanceCount:0,carrierHeartbeatCount:0,carrierLoopCount:0,lastRemoteAt:null,acceptedActions:[],rejectedActions:[],counts:{play:0,pause:0,previoustrack:0,nexttrack:0},events:[],uiTimer:null,heartbeatTimer:null,carrierUrl:null,resultUrl:null,resultBlob:null,resultDuration:null,resultPlayable:null};
+
+      const byId=id=>root.querySelector('#'+id);
+      const status=byId('p3-status'),live=byId('p3-live'),result=byId('p3-result'),carrier=byId('p3-carrier');
+      const openBtn=byId('p3-open'),remoteBtn=byId('p3-remote'),finishBtn=byId('p3-finish'),logEl=byId('p3-log');
+      const nowIso=()=>new Date().toISOString();
+
+      function writeAscii(view,offset,text){for(let i=0;i<text.length;i+=1)view.setUint8(offset+i,text.charCodeAt(i))}
+      function createSignal(){
+        const frames=SIGNAL.sampleRate*SIGNAL.durationSeconds,dataBytes=frames*2,buffer=new ArrayBuffer(44+dataBytes),view=new DataView(buffer);
+        writeAscii(view,0,'RIFF');view.setUint32(4,36+dataBytes,true);writeAscii(view,8,'WAVE');writeAscii(view,12,'fmt ');
+        view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,SIGNAL.sampleRate,true);
+        view.setUint32(28,SIGNAL.sampleRate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);writeAscii(view,36,'data');view.setUint32(40,dataBytes,true);
+        for(let i=0;i<frames;i+=1){view.setInt16(44+i*2,Math.round(Math.sin((2*Math.PI*SIGNAL.frequencyHz*i)/SIGNAL.sampleRate)*SIGNAL.amplitudeLsb),true)}
+        return new Blob([buffer],{type:'audio/wav'});
+      }
+
+      function errorValue(error){return error?{name:error.name||null,message:error.message||String(error)}:null}
+      function trackSnapshot(track){
+        if(!track)return null;
+        let settings=null;
+        try{settings=track.getSettings?track.getSettings():null}catch(_){}
+        return{kind:track.kind,id:track.id,label:track.label,enabled:track.enabled,muted:track.muted,readyState:track.readyState,settings};
+      }
+      function snapshot(){
+        const audioSession=navigator.audioSession,videoTrack=state.stream&&state.stream.getVideoTracks()[0],audioTrack=state.stream&&state.stream.getAudioTracks()[0];
+        return{visibility:document.visibilityState,focused:typeof document.hasFocus==='function'?document.hasFocus():null,phase:state.phase,recorderState:state.recorder?state.recorder.state:null,bytes:state.bytes,dataEvents:state.dataEvents,videoTrack:trackSnapshot(videoTrack),audioTrack:trackSnapshot(audioTrack),carrier:{active:state.carrierActive,paused:carrier.paused,currentTime:Number(carrier.currentTime.toFixed(3)),readyState:carrier.readyState,error:carrier.error?{code:carrier.error.code,message:carrier.error.message||null}:null},mediaSessionPlayback:'mediaSession'in navigator?navigator.mediaSession.playbackState:null,audioSessionType:audioSession&&'type'in audioSession?audioSession.type:null,audioSessionState:audioSession&&'state'in audioSession?audioSession.state:null};
+      }
+
+      function renderLog(){
+        if(!state.events.length){logEl.textContent='Nenhum evento registrado.';return}
+        logEl.textContent=state.events.map(event=>{const time=event.at.slice(11,23),action=event.action?' · '+(labels[event.action]||event.action):'',detail=event.bytes?' · '+event.bytes+' B':'';return time+' · '+event.type+action+detail}).join('\n');
+        logEl.scrollTop=logEl.scrollHeight;
+      }
+      function record(type,extra={}){state.events.push({at:nowIso(),type,...extra,context:snapshot()});renderLog()}
+
+      function setCheck(id,value){
+        const item=byId(id);if(!item)return;
+        const mark=item.querySelector('.check-mark');
+        if(value===null){item.dataset.result='unknown';if(mark)mark.textContent='•';return}
+        item.dataset.result=value?'yes':'no';if(mark)mark.textContent=value?'✓':'×';
+      }
+
+      function elapsedSeconds(){
+        if(!state.recordingStartedAt)return 0;
+        const end=state.recordingStoppedAt?Date.parse(state.recordingStoppedAt):Date.now();
+        return Math.max(0,(end-Date.parse(state.recordingStartedAt))/1000);
+      }
+
+      function updateUi(){
+        const total=ACTIONS.reduce((sum,action)=>sum+state.counts[action],0);
+        ACTIONS.forEach(action=>{byId(countIds[action]).textContent=String(state.counts[action])});
+        byId('p3-total').textContent=String(total);
+        byId('p3-fragments').textContent=String(state.dataEvents);
+        byId('p3-recording-time').textContent=elapsedSeconds().toLocaleString('pt-BR',{maximumFractionDigits:0})+' s';
+      }
+
+      function pickMime(){
+        if(!window.MediaRecorder||typeof MediaRecorder.isTypeSupported!=='function')return null;
+        const candidates=['video/mp4','video/mp4;codecs=avc1.42E01E,mp4a.40.2'];
+        for(const candidate of candidates){try{if(MediaRecorder.isTypeSupported(candidate))return candidate}catch(_){}}
+        return null;
+      }
+
+      function makeRecorder(stream,mime){
+        const base={videoBitsPerSecond:2500000,mimeType:mime},requested={...base};
+        let optionRead=false;
+        Object.defineProperty(requested,'videoKeyFrameIntervalDuration',{enumerable:true,get(){optionRead=true;return TIMESLICE_MS}});
+        try{const recorder=new MediaRecorder(stream,requested);state.keyframeOptionRead=optionRead;state.keyframeMode='requested';return recorder}
+        catch(firstError){
+          record('keyframe-option-rejeitada',{error:errorValue(firstError),optionRead});
+          try{const recorder=new MediaRecorder(stream,base);state.keyframeMode='fallback-bitrate';return recorder}
+          catch(secondError){
+            try{const recorder=new MediaRecorder(stream,{mimeType:mime});state.keyframeMode='fallback-mime';return recorder}
+            catch(thirdError){const error=new Error('MediaRecorder MP4 indisponível');error.name='NotSupportedError';error.cause=thirdError;throw error}
+          }
+        }
+      }
+
+      function monitorTrack(track){
+        if(!track)return;
+        ['mute','unmute','ended'].forEach(type=>track.addEventListener(type,()=>{record('trilha-'+track.kind+'-'+type);const video=state.stream&&state.stream.getVideoTracks()[0],audio=state.stream&&state.stream.getAudioTracks()[0],healthy=!!video&&!!audio&&video.readyState==='live'&&audio.readyState==='live'&&!video.muted&&!audio.muted;setCheck('p3-check-camera',healthy);if(type==='ended'&&state.phase!=='finished'){root.dataset.state='error';status.textContent='Uma trilha da câmera foi encerrada'}}));
+      }
+
+      async function openCamera(){
+        if(state.phase!=='idle')return;
+        openBtn.disabled=true;status.textContent='Abrindo câmera e microfone…';record('camera-solicitada');
+        try{
+          state.mime=pickMime();
+          if(!state.mime)throw Object.assign(new Error('MP4 MediaRecorder indisponível'),{name:'NotSupportedError'});
+          state.stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30},facingMode:'environment'},audio:true});
+          state.streamOpenedAt=nowIso();live.srcObject=state.stream;
+          try{await live.play()}catch(error){record('previa-play-falhou',{error:errorValue(error)})}
+          const videoTrack=state.stream.getVideoTracks()[0],audioTrack=state.stream.getAudioTracks()[0];
+          monitorTrack(videoTrack);monitorTrack(audioTrack);setCheck('p3-check-camera',!!videoTrack&&!!audioTrack&&videoTrack.readyState==='live'&&audioTrack.readyState==='live');
+          record('camera-aberta',{mime:state.mime,video:trackSnapshot(videoTrack),audio:trackSnapshot(audioTrack)});
+          state.recorder=makeRecorder(state.stream,state.mime);
+          state.recorder.addEventListener('dataavailable',event=>{
+            if(!event.data||!event.data.size)return;
+            state.dataEvents+=1;state.bytes+=event.data.size;state.chunks.push(event.data);record('recorder-dados',{bytes:event.data.size,totalBytes:state.bytes,serial:state.dataEvents});updateUi();
+            if(state.bytes>MAX_BYTES){root.dataset.state='error';status.textContent='Teste interrompido pelo limite de memória';record('limite-memoria',{limitBytes:MAX_BYTES});finishTest()}
+          });
+          state.recorder.addEventListener('error',event=>{setCheck('p3-check-recorder',false);root.dataset.state='error';status.textContent='Erro no gravador';record('recorder-erro',{error:errorValue(event.error||event)})});
+          state.recorder.addEventListener('pause',()=>{setCheck('p3-check-recorder',false);record('recorder-pause')});
+          state.recorder.addEventListener('resume',()=>{setCheck('p3-check-recorder',true);record('recorder-resume')});
+          state.recorder.addEventListener('start',()=>record('recorder-start-event'));
+          state.recorder.start(TIMESLICE_MS);
+          state.recordingStartedAt=nowIso();state.phase='recording';root.dataset.state='recording';setCheck('p3-check-recorder',state.recorder.state==='recording');
+          remoteBtn.disabled=false;finishBtn.disabled=false;status.textContent='Gravando — agora ative o relógio';record('gravacao-iniciada',{mime:state.recorder.mimeType||state.mime,keyframeMode:state.keyframeMode,keyframeOptionRead:state.keyframeOptionRead});
+          clearInterval(state.uiTimer);state.uiTimer=setInterval(updateUi,250);updateUi();
+        }catch(error){
+          state.phase='error';root.dataset.state='error';status.textContent=error.name==='NotAllowedError'?'Permissão de câmera negada':'Não foi possível iniciar a câmera';record('camera-falhou',{error:errorValue(error)});openBtn.disabled=false;stopTracks();
+        }
+      }
+
+      function registerMediaSession(){
+        if(!('mediaSession'in navigator))throw Object.assign(new Error('Media Session indisponível'),{name:'NotSupportedError'});
+        state.acceptedActions=[];state.rejectedActions=[];
+        if('MediaMetadata'in window)navigator.mediaSession.metadata=new MediaMetadata({title:'Gravei · teste com câmera',artist:'Controle remoto experimental',album:'Bancada combinada'});
+        ACTIONS.forEach(action=>{try{navigator.mediaSession.setActionHandler(action,details=>handleRemote(action,details));state.acceptedActions.push(action)}catch(error){state.rejectedActions.push({action,error:errorValue(error)})}});
+        record('acoes-registradas',{accepted:state.acceptedActions.slice(),rejected:state.rejectedActions.slice()});
+      }
+
+      async function ensureCarrier(reason){
+        if(!state.carrierActive)return;
+        if(!carrier.paused){try{navigator.mediaSession.playbackState='playing'}catch(_){};return}
+        try{await carrier.play();try{navigator.mediaSession.playbackState='playing'}catch(_){};record('portador-retomado',{reason})}
+        catch(error){root.dataset.state='error';status.textContent='O portador perdeu a reprodução';record('portador-retomada-falhou',{reason,error:errorValue(error)})}
+      }
+
+      function handleRemote(action,details){
+        if(!state.carrierActive)return;
+        const at=Date.now(),gap=state.lastRemoteAt===null?null:at-state.lastRemoteAt;
+        state.lastRemoteAt=at;state.counts[action]+=1;setCheck('p3-check-command',true);updateUi();
+        status.textContent=labels[action]+' recebido — gravação continua';
+        record('comando-real',{action,sincePreviousMs:gap,recordingElapsedMs:Math.round(elapsedSeconds()*1000),details:details&&typeof details==='object'?{action:details.action||null,fastSeek:details.fastSeek||false,seekOffset:details.seekOffset||null,seekTime:details.seekTime||null}:null});
+        setTimeout(()=>ensureCarrier('comando-'+action),0);
+      }
+
+      function carrierHeartbeat(){
+        if(!state.carrierActive)return;
+        const current=carrier.currentTime,advanced=!carrier.paused&&(current>state.carrierLastTime+.05||current<state.carrierLastTime-.5);
+        state.carrierHeartbeatCount+=1;if(advanced){state.carrierAdvanceCount+=1;setCheck('p3-check-carrier',true)}
+        if(current<state.carrierLastTime-.5)state.carrierLoopCount+=1;
+        state.carrierLastTime=current;record('portador-pulso',{advanced,heartbeat:state.carrierHeartbeatCount,loopCount:state.carrierLoopCount});
+      }
+
+      async function activateRemote(){
+        if(state.phase!=='recording'||state.carrierActive)return;
+        remoteBtn.disabled=true;status.textContent='Ativando controle do relógio…';setCheck('p3-check-carrier',null);setCheck('p3-check-command',null);
+        try{
+          registerMediaSession();
+          const playPromise=carrier.play();if(playPromise&&typeof playPromise.then==='function')await playPromise;
+          state.carrierActive=true;state.carrierStartedAt=nowIso();state.carrierLastTime=carrier.currentTime;
+          try{navigator.mediaSession.playbackState='playing'}catch(error){record('playback-state-rejeitado',{error:errorValue(error)})}
+          state.phase='combined';root.dataset.state='remote';status.textContent='Câmera e relógio ativos';record('portador-ativado');
+          clearInterval(state.heartbeatTimer);state.heartbeatTimer=setInterval(carrierHeartbeat,2500);
+        }catch(error){
+          remoteBtn.disabled=false;root.dataset.state='error';status.textContent='Não foi possível ativar o relógio';record('portador-falhou',{error:errorValue(error)});
+        }
+      }
+
+      function stopRemote(){
+        clearInterval(state.heartbeatTimer);state.heartbeatTimer=null;state.carrierActive=false;carrier.pause();
+        if('mediaSession'in navigator){ACTIONS.forEach(action=>{try{navigator.mediaSession.setActionHandler(action,null)}catch(_){}});try{navigator.mediaSession.metadata=null}catch(_){};try{navigator.mediaSession.playbackState='none'}catch(_){}}
+      }
+
+      function stopTracks(){
+        if(state.stream){state.stream.getTracks().forEach(track=>{try{track.stop()}catch(_){}})}
+        live.srcObject=null;
+      }
+
+      function waitRecorderStop(recorder){
+        return new Promise(resolve=>{
+          if(!recorder||recorder.state==='inactive'){resolve();return}
+          const done=()=>resolve();recorder.addEventListener('stop',done,{once:true});
+          try{recorder.stop()}catch(_){resolve()}
+          setTimeout(resolve,4000);
+        });
+      }
+
+      function waitMetadata(video,timeoutMs){
+        return new Promise(resolve=>{
+          let settled=false;
+          const finish=value=>{if(settled)return;settled=true;clearTimeout(timer);video.removeEventListener('loadedmetadata',loaded);video.removeEventListener('error',failed);resolve(value)};
+          const loaded=()=>finish({ok:Number.isFinite(video.duration)&&video.duration>0,duration:Number.isFinite(video.duration)?video.duration:null,width:video.videoWidth||null,height:video.videoHeight||null});
+          const failed=()=>finish({ok:false,error:video.error?{code:video.error.code,message:video.error.message||null}:null});
+          const timer=setTimeout(()=>finish({ok:false,timeout:true}),timeoutMs);
+          video.addEventListener('loadedmetadata',loaded,{once:true});video.addEventListener('error',failed,{once:true});
+          if(video.readyState>=1)loaded();
+        });
+      }
+
+      async function finishTest(){
+        if(state.phase==='finishing'||state.phase==='finished'||state.phase==='idle')return;
+        state.phase='finishing';finishBtn.disabled=true;remoteBtn.disabled=true;status.textContent='Finalizando o arquivo…';record('finalizacao-iniciada');
+        stopRemote();
+        const recorder=state.recorder;
+        await waitRecorderStop(recorder);
+        state.recordingStoppedAt=nowIso();clearInterval(state.uiTimer);state.uiTimer=null;stopTracks();
+        state.resultBlob=new Blob(state.chunks,{type:(recorder&&recorder.mimeType)||state.mime||'video/mp4'});
+        if(state.resultUrl)URL.revokeObjectURL(state.resultUrl);
+        state.resultUrl=URL.createObjectURL(state.resultBlob);result.src=state.resultUrl;result.hidden=false;live.hidden=true;result.load();
+        const validation=await waitMetadata(result,6000);
+        state.resultPlayable=validation.ok;state.resultDuration=validation.duration;setCheck('p3-check-file',validation.ok);
+        state.phase='finished';root.dataset.state=validation.ok?'idle':'error';status.textContent=validation.ok?'Teste finalizado — confira o vídeo':'O arquivo não abriu corretamente';
+        record('arquivo-final',{bytes:state.resultBlob.size,type:state.resultBlob.type,validation});
+        byId('p3-result-summary').textContent=(validation.ok?validation.duration.toLocaleString('pt-BR',{maximumFractionDigits:1})+' s · ':'Duração indisponível · ')+(state.resultBlob.size/1048576).toLocaleString('pt-BR',{maximumFractionDigits:1})+' MB';
+        byId('p3-result-actions').hidden=false;openBtn.hidden=true;updateUi();
+      }
+
+      function diagnostic(){
+        return{schema:'gravei-camera-media-control-probe-v1',probeVersion:'camera-media-control-probe-01',generatedAt:nowIso(),reference:{cameraConstraints:{video:{width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30},facingMode:'environment'},audio:true},mimeCandidates:['video/mp4','video/mp4;codecs=avc1.42E01E,mp4a.40.2'],videoBitsPerSecond:2500000,timesliceMs:TIMESLICE_MS,keyframeRequestMs:TIMESLICE_MS},signal:{...SIGNAL},environment:{userAgent:navigator.userAgent,language:navigator.language,platform:navigator.platform,secureContext:window.isSecureContext===true,mediaSession:'mediaSession'in navigator,mediaMetadata:'MediaMetadata'in window,audioSession:'audioSession'in navigator},test:{phase:state.phase,mime:state.mime,keyframeMode:state.keyframeMode,keyframeOptionRead:state.keyframeOptionRead,streamOpenedAt:state.streamOpenedAt,recordingStartedAt:state.recordingStartedAt,recordingStoppedAt:state.recordingStoppedAt,recordingDurationSeconds:elapsedSeconds(),carrierStartedAt:state.carrierStartedAt,carrierHeartbeatCount:state.carrierHeartbeatCount,carrierAdvanceCount:state.carrierAdvanceCount,carrierLoopCount:state.carrierLoopCount,acceptedActions:state.acceptedActions,rejectedActions:state.rejectedActions,counts:{...state.counts},dataEvents:state.dataEvents,recordedBytes:state.bytes,resultBytes:state.resultBlob?state.resultBlob.size:null,resultType:state.resultBlob?state.resultBlob.type:null,resultDuration:state.resultDuration,resultPlayable:state.resultPlayable},snapshot:snapshot(),events:state.events};
+      }
+
+      function makeFiles(){
+        const stamp=nowIso().replace(/[:.]/g,'-'),json=JSON.stringify(diagnostic(),null,2),jsonFile=new File([json],'gravei-camera-media-control-'+stamp+'.json',{type:'application/json'});
+        const videoFile=state.resultBlob?new File([state.resultBlob],'gravei-camera-media-control-'+stamp+'.mp4',{type:state.resultBlob.type||'video/mp4'}):null;
+        return{jsonFile,videoFile,json};
+      }
+
+      function downloadFile(file){
+        const url=URL.createObjectURL(file),link=document.createElement('a');link.href=url;link.download=file.name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+      }
+
+      async function shareResult(){
+        const files=makeFiles(),list=files.videoFile?[files.videoFile,files.jsonFile]:[files.jsonFile];
+        try{if(navigator.share&&(!navigator.canShare||navigator.canShare({files:list}))){await navigator.share({files:list,title:'Bancada Gravei — câmera e relógio'});status.textContent='Resultado compartilhado';record('resultado-compartilhado');return}}
+        catch(error){if(error&&error.name==='AbortError')return;record('compartilhamento-falhou',{error:errorValue(error)})}
+        list.forEach(downloadFile);status.textContent='Resultado baixado';record('resultado-baixado');
+      }
+
+      async function copyDiagnostic(){
+        const text=makeFiles().json;
+        try{await navigator.clipboard.writeText(text)}
+        catch(_){const area=document.createElement('textarea');area.value=text;area.setAttribute('readonly','');area.style.position='absolute';area.style.left='-9999px';document.body.appendChild(area);area.select();document.execCommand('copy');area.remove()}
+        status.textContent='Diagnóstico copiado';record('diagnostico-copiado');
+      }
+
+      state.carrierUrl=URL.createObjectURL(createSignal());carrier.src=state.carrierUrl;carrier.volume=1;carrier.muted=false;carrier.load();
+      ['play','playing','pause','waiting','stalled','ended','error'].forEach(type=>carrier.addEventListener(type,()=>{if(type==='waiting'||type==='stalled'||type==='error')setCheck('p3-check-carrier',false);record('portador-'+type)}));
+      openBtn.addEventListener('click',openCamera);remoteBtn.addEventListener('click',activateRemote);finishBtn.addEventListener('click',finishTest);
+      byId('p3-share').addEventListener('click',shareResult);byId('p3-copy').addEventListener('click',copyDiagnostic);
+      result.addEventListener('playing',()=>record('resultado-playing'));result.addEventListener('pause',()=>record('resultado-pause'));result.addEventListener('ended',()=>record('resultado-ended'));result.addEventListener('error',()=>record('resultado-error',{error:result.error?{code:result.error.code,message:result.error.message||null}:null}));
+      document.addEventListener('visibilitychange',()=>record('visibilidade-alterada'));window.addEventListener('focus',()=>record('janela-em-foco'));window.addEventListener('blur',()=>record('janela-sem-foco'));
+      window.addEventListener('pagehide',()=>{stopRemote();if(state.recorder&&state.recorder.state!=='inactive'){try{state.recorder.stop()}catch(_){}}stopTracks();clearInterval(state.uiTimer);if(state.carrierUrl)URL.revokeObjectURL(state.carrierUrl);if(state.resultUrl)URL.revokeObjectURL(state.resultUrl)},{once:true});
+      updateUi();
+    })();
+  </script>
+</section>
+
+</main>
+</body>
+</html>
