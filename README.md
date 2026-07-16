@@ -1,4 +1,4 @@
-# Gravei v2.01
+# Gravei v2.04-probe
 
 Aplicativo web para registrar e guardar replays diretamente no navegador.
 
@@ -18,7 +18,11 @@ Aplicativo web para registrar e guardar replays diretamente no navegador.
 
 O endereço normalmente será:
 
-`https://SEU-USUARIO.github.io/NOME-DO-REPOSITORIO/?v=2.01`
+`https://SEU-USUARIO.github.io/NOME-DO-REPOSITORIO/?v=2.03`
+
+## Teste experimental do botão Play
+
+Abra a versão publicada com `?watchplay=1&diag=1&v=2.04`. Sem `watchplay=1`, o comportamento aprovado da v2.03 permanece ativo.
 
 ## Observações importantes
 
@@ -27,9 +31,9 @@ O endereço normalmente será:
 - Captura, cofre, galeria e processamento dos replays ficam no aparelho do usuário.
 - Google Fonts é carregado pela internet. Se falhar, o app utiliza as fontes de fallback.
 - O controle por outro celular carrega PeerJS pela internet e, por natureza, precisa de conexão.
-- O controle pelo relógio é ativado manualmente durante a gravação e usa os controles de mídia do aparelho, sem aplicativo adicional.
+- O controle pelo relógio usa os controles de mídia do aparelho, sem aplicativo adicional. Ao voltar da Central, ele é retomado automaticamente se já estava ativo.
 - Não é necessário compilar, instalar dependências ou executar um processo de build.
 
 ## Versão
 
-`v2.01`
+`v2.04-probe`
