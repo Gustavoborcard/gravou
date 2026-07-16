@@ -195,7 +195,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 #chip-remote:active{transform:scale(.95)}
 #chip-remote svg{width:22px;height:22px}
 
-/* overlay de pareamento v2.04-probe */
+/* overlay de pareamento v2.05-ring-probe */
  #pair{
    position:fixed;inset:0;z-index:30;display:none;align-items:flex-end;justify-content:center;
    padding-top:calc(var(--safe-t) + 12px);background:rgba(0,0,0,.64)
@@ -981,7 +981,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v2.04-probe";
+  const VERSION = "v2.05-ring-probe";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -2844,7 +2844,7 @@ function setSaveRingProgress(percent){
   ring.dataset.progress=String(next);
   if(snap){void ring.getBoundingClientRect();ring.classList.remove("ring-snap")}
 }
-function startRing(){clearInterval(state.timerId);state.timerId=setInterval(()=>{const avail=Math.min(state.bufferSeconds,state.duration);setSaveRingProgress((avail/state.duration)*100);if(state.active&&document.visibilityState==='visible'&&state.captureRec&&state.captureRec.state==='recording'&&Date.now()-state.lastChunkAt>6500){restartCaptureRecorder("ring.stale");toast('Gravação retomada','info',2400)}},250)}
+function startRing(){clearInterval(state.timerId);state.timerId=setInterval(()=>{const avail=Math.min(state.bufferSeconds,state.duration);setSaveRingProgress((avail/state.duration)*100);watchRemoteSyncPosition('ring');if(state.active&&document.visibilityState==='visible'&&state.captureRec&&state.captureRec.state==='recording'&&Date.now()-state.lastChunkAt>6500){restartCaptureRecorder("ring.stale");toast('Gravação retomada','info',2400)}},250)}
 
 function flashOK(){
   const f = $("flash");
@@ -5075,16 +5075,82 @@ async function deliver(blob, name){
    uma sessao de midia reconhecivel por relogios. Os comandos chamam
    o mesmo saveReplay() do botao principal; nao existe segundo buffer. */
 const WATCH_REMOTE_PLAY_READY_PROBE = new URLSearchParams(location.search).get('watchplay') === '1';
+const WATCH_REMOTE_RING_PROBE = new URLSearchParams(location.search).get('watchring') === '1';
 const WATCH_REMOTE_ACTIONS = ['play','pause','previoustrack','nexttrack'];
 const watchRemote = {
   active:false, starting:false, acceptedActions:[], carrierUrl:null,
   healthTimer:null, readyTimer:null, failureTimer:null, lastCommandAt:0,
   resumeAfterCentral:false, awaitingCapture:false, startSerial:0,
-  presentation:'playing', lastAppliedPlaybackState:null
+  presentation:'playing', lastAppliedPlaybackState:null,
+  lastPositionSignature:null, positionFailed:false, positionSupportReported:false
 };
 
 function watchRemoteSupported(){
   return !!(navigator.mediaSession && typeof window.MediaMetadata === 'function' && $('watch-carrier'));
+}
+function watchRemotePositionSupported(){
+  return !!(watchRemoteSupported() && typeof navigator.mediaSession.setPositionState === 'function');
+}
+function watchRemotePositionSnapshot(){
+  const duration=Number(state.duration),rawAvailable=Number(state.bufferSeconds);
+  if(!Number.isFinite(duration)||duration<=0)return null;
+  const available=Number.isFinite(rawAvailable)?Math.max(0,Math.min(rawAvailable,duration)):0;
+  const full=available>=duration;
+  return {
+    duration,
+    available,
+    position: full ? Math.max(0, duration - 0.01) : available,
+    playbackRate: full ? 0.0001 : 1,
+    full,
+    progress:Number(((available/duration)*100).toFixed(1))
+  };
+}
+function watchRemoteSyncPosition(reason='buffer',force=false){
+  if(!WATCH_REMOTE_RING_PROBE||!watchRemote.active)return false;
+  if(watchRemote.positionFailed)return false;
+  if(!watchRemotePositionSupported()){
+    if(!watchRemote.positionSupportReported){
+      watchRemote.positionSupportReported=true;
+      diag('watch.position.unsupported',{reason,probe:true});
+    }
+    return false;
+  }
+  const snapshot=watchRemotePositionSnapshot();
+  if(!snapshot)return false;
+  const signature=[snapshot.duration.toFixed(3),snapshot.position.toFixed(3),snapshot.playbackRate,snapshot.full].join('|');
+  if(!force&&signature===watchRemote.lastPositionSignature)return true;
+  try{
+    navigator.mediaSession.setPositionState({
+      duration:snapshot.duration,
+      playbackRate:snapshot.playbackRate,
+      position:snapshot.position
+    });
+    watchRemote.lastPositionSignature=signature;
+    diag('watch.position.applied',{
+      reason,
+      duration:snapshot.duration,
+      available:Number(snapshot.available.toFixed(3)),
+      position:Number(snapshot.position.toFixed(3)),
+      playbackRate:snapshot.playbackRate,
+      progress:snapshot.progress,
+      full:snapshot.full,
+      fragments:state.fragments.length,
+      saving:state.saving
+    });
+    return true;
+  }catch(err){
+    watchRemote.positionFailed=true;
+    diag('watch.position.error',{reason,probe:true,error:err,snapshot});
+    return false;
+  }
+}
+function watchRemoteClearPosition(reason='clear'){
+  watchRemote.lastPositionSignature=null;
+  if(!WATCH_REMOTE_RING_PROBE||!watchRemotePositionSupported())return;
+  try{
+    navigator.mediaSession.setPositionState();
+    diag('watch.position.cleared',{reason});
+  }catch(err){diag('watch.position.clearError',{reason,error:err})}
 }
 function makeWatchCarrierUrl(){
   const sampleRate=8000,seconds=8,samples=sampleRate*seconds,bytesPerSample=2;
@@ -5133,6 +5199,7 @@ function watchRemoteSetMetadata(title,artist,album,presentation='busy'){
     diag('watch.metadata.artworkFallback',{error:err});
   }
   watchRemoteApplyPlaybackState('metadata.'+presentation,true);
+  watchRemoteSyncPosition('metadata.'+presentation,true);
   return true
 }
 function watchRemoteClearReadyTimer(){clearTimeout(watchRemote.readyTimer);watchRemote.readyTimer=null}
@@ -5255,10 +5322,12 @@ function stopWatchRemote(reason='manual',options={}){
   watchRemote.startSerial++;
   watchRemote.active=false;watchRemote.starting=false;watchRemote.awaitingCapture=false;watchRemote.acceptedActions=[];watchRemote.lastCommandAt=0;
   watchRemote.presentation='playing';watchRemote.lastAppliedPlaybackState=null;
+  watchRemote.lastPositionSignature=null;watchRemote.positionFailed=false;watchRemote.positionSupportReported=false;
   if(!preserveResume)watchRemote.resumeAfterCentral=false;
   clearInterval(watchRemote.healthTimer);watchRemote.healthTimer=null;watchRemoteClearReadyTimer();
   clearTimeout(watchRemote.failureTimer);watchRemote.failureTimer=null;
   if(watchRemoteSupported()){
+    watchRemoteClearPosition(reason);
     for(const action of WATCH_REMOTE_ACTIONS){try{navigator.mediaSession.setActionHandler(action,null)}catch(_){}}
     try{navigator.mediaSession.metadata=null}catch(_){}
     try{navigator.mediaSession.playbackState='none'}catch(_){}
@@ -5282,6 +5351,7 @@ function startWatchRemote(options={}){
   const serial=++watchRemote.startSerial;
   const carrier=$('watch-carrier');
   try{
+    watchRemote.lastPositionSignature=null;watchRemote.positionFailed=false;watchRemote.positionSupportReported=false;
     watchRemote.acceptedActions=[];
     for(const action of WATCH_REMOTE_ACTIONS){
       try{navigator.mediaSession.setActionHandler(action,()=>watchRemoteCommand(action));watchRemote.acceptedActions.push(action)}
@@ -5300,7 +5370,7 @@ function startWatchRemote(options={}){
       clearInterval(watchRemote.healthTimer);
       watchRemote.healthTimer=setInterval(()=>watchRemoteEnsureCarrier('interval'),2500);
       syncRemoteChip();updateWatchRemoteUI();
-      diag('watch.started',{actions:watchRemote.acceptedActions,resume,awaitingCapture:watchRemote.awaitingCapture});
+      diag('watch.started',{actions:watchRemote.acceptedActions,resume,awaitingCapture:watchRemote.awaitingCapture,ringProbe:WATCH_REMOTE_RING_PROBE,positionSupported:watchRemotePositionSupported()});
       return true
     }).catch(err=>{
       if(serial!==watchRemote.startSerial)return false;

@@ -1,4 +1,4 @@
-# Gravei v2.04-probe
+# Gravei v2.05-ring-probe
 
 Aplicativo web para registrar e guardar replays diretamente no navegador.
 
@@ -18,11 +18,13 @@ Aplicativo web para registrar e guardar replays diretamente no navegador.
 
 O endereço normalmente será:
 
-`https://SEU-USUARIO.github.io/NOME-DO-REPOSITORIO/?v=2.03`
+`https://SEU-USUARIO.github.io/NOME-DO-REPOSITORIO/?v=2.05`
 
-## Teste experimental do botão Play
+## Teste experimental do anel de buffer no Apple Watch
 
-Abra a versão publicada com `?watchplay=1&diag=1&v=2.04`. Sem `watchplay=1`, o comportamento aprovado da v2.03 permanece ativo.
+Abra a versão publicada com `?watchring=1&diag=1&v=2.05`. Sem `watchring=1`, o comportamento da v2.04 permanece intacto.
+
+Para isolar o experimento, não inclua `watchplay=1` neste teste. O anel do relógio receberá a mesma duração e o mesmo tempo de buffer usados pelo anel do botão no celular. O diagnóstico registra `watch.position.applied`, `watch.position.unsupported` ou `watch.position.error`.
 
 ## Observações importantes
 
@@ -36,4 +38,4 @@ Abra a versão publicada com `?watchplay=1&diag=1&v=2.04`. Sem `watchplay=1`, o 
 
 ## Versão
 
-`v2.04-probe`
+`v2.05-ring-probe`
