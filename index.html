@@ -195,7 +195,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 #chip-remote:active{transform:scale(.95)}
 #chip-remote svg{width:22px;height:22px}
 
-/* overlay de pareamento v2.06-visual-probe */
+/* overlay de pareamento v2.07-steady-probe */
  #pair{
    position:fixed;inset:0;z-index:30;display:none;align-items:flex-end;justify-content:center;
    padding-top:calc(var(--safe-t) + 12px);background:rgba(0,0,0,.64)
@@ -981,7 +981,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v2.06-visual-probe";
+  const VERSION = "v2.07-steady-probe";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -5168,6 +5168,7 @@ function makeWatchCarrierUrl(){
   return URL.createObjectURL(new Blob([buffer],{type:'audio/wav'}));
 }
 function watchRemoteDesiredPlaybackState(presentation='busy'){
+  if(WATCH_REMOTE_HARD_PAUSE_PROBE)return presentation==='opening'?'playing':'paused';
   return WATCH_REMOTE_PLAY_READY_PROBE&&(presentation==='ready'||presentation==='saved'||presentation==='error')?'paused':'playing'
 }
 function watchRemoteApplyPlaybackState(reason='state',force=false){
@@ -5223,7 +5224,7 @@ function watchRemoteShowReady(reason='state'){
 function watchRemoteShowSaving(duration=state.duration){
   if(!watchRemote.active)return;
   watchRemoteClearReadyTimer();
-  watchRemoteSetMetadata('Gravei · Salvando','Aguarde','Replay de '+duration+'s','busy')
+  watchRemoteSetMetadata('Gravei · Salvando','Aguarde','Replay de '+duration+'s','saving')
 }
 function watchRemoteShowSaved(duration=state.duration,count=null){
   if(!watchRemote.active)return;
@@ -5239,7 +5240,7 @@ function watchRemoteShowError(){
 function watchRemoteShowOpening(){
   if(!watchRemote.active)return;
   watchRemoteClearReadyTimer();
-  watchRemoteSetMetadata('Gravei · Replay','Abrindo câmera','Aguarde','busy')
+  watchRemoteSetMetadata('Gravei · Replay','Abrindo câmera','Aguarde','opening')
 }
 function watchRemoteCaptureReady(){
   if(!watchRemote.active)return;
@@ -5299,6 +5300,18 @@ function watchRemoteCommand(action){
   diag('watch.command',{action,deltaMs:watchRemote.lastCommandAt?Math.round(now-watchRemote.lastCommandAt):null,active:state.active,saving:state.saving,capturePhase:state.capturePhase});
   watchRemote.lastCommandAt=now;
   watchRemoteEnsureCarrier('command.'+action);
+  if(WATCH_REMOTE_HARD_PAUSE_PROBE){
+    const carrier=$('watch-carrier');
+    let playbackState='unknown';
+    try{playbackState=navigator.mediaSession.playbackState}catch(_){}
+    diag('watch.command.presentation',{
+      action,desired:watchRemote.presentation,
+      carrierPaused:carrier?carrier.paused:null,
+      carrierEnded:carrier?carrier.ended:null,
+      carrierTime:carrier&&Number.isFinite(carrier.currentTime)?Number(carrier.currentTime.toFixed(3)):null,
+      playbackState
+    })
+  }
   if(!watchRemote.active)return;
   if(watchRemote.awaitingCapture){diag('watch.command.ignored',{action,reason:'capture-opening'});return}
   if(!state.active||!$('rec-screen').classList.contains('active')||!state.captureRec||state.captureRec.state!=='recording'){
