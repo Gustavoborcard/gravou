@@ -623,7 +623,7 @@ a{color:var(--accent)}
       <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="7 10 12 15 17 10"/></svg>
     </button>
     <button class="badge" id="chip-count"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg><span id="count-n">0</span></button>
-    <button class="badge" id="chip-remote" aria-label="Controle remoto" aria-haspopup="dialog" aria-expanded="false"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><path d="M7.8 16.2a6 6 0 0 1 0-8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 19.1a10 10 0 0 1 0-14.2M19.1 4.9a10 10 0 0 1 0 14.2"/></svg></button>
+    <button class="badge" id="chip-remote" aria-label="Controle remoto" aria-haspopup="dialog" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g transform="rotate(-10 10 13)" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5.5" width="10" height="15" rx="3"/><circle cx="10" cy="9.6" r="1.45"/><circle cx="8.2" cy="14" r=".7" fill="currentColor" stroke="none"/><circle cx="11.8" cy="14" r=".7" fill="currentColor" stroke="none"/><path d="M8.2 17.2h3.6"/></g><path d="M16.4 6.5a3.6 3.6 0 0 1 2.1 2.1M17.1 3.2a6.6 6.6 0 0 1 4 4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></button>
   </div>
   <button class="icon-btn" id="btn-flip" aria-label="Trocar câmera">
     <svg viewBox="0 0 24 24"><path d="M20 8h-3l-2-3H9L7 8H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1z"/><path d="M9.5 13.5a2.5 2.5 0 0 1 4.3-1.7M14.5 13.5a2.5 2.5 0 0 1-4.3 1.7"/><path d="M14 11.5l.6-.9.9.6M10 15.5l-.6.9-.9-.6"/></svg>
@@ -966,7 +966,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v2.01";
+  const VERSION = "v2.02";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -1598,9 +1598,11 @@ let confirmFn = null;
   });
   
   /* ---------- parar sessão (câmera/energia) ---------- */
-function stopSession(){
-  diag("session.stop", { active: state.active, saving: state.saving, generation: state.captureGeneration, fragments: state.fragments.length, capturePhase: state.capturePhase });
-  try{stopWatchRemote("session.stop")}catch(_){}
+function stopSession(options = {}){
+  const preserveWatchIntent=!!options.preserveWatchIntent;
+  diag("session.stop", { active: state.active, saving: state.saving, generation: state.captureGeneration, fragments: state.fragments.length, capturePhase: state.capturePhase, preserveWatchIntent });
+  if(preserveWatchIntent){try{suspendWatchRemoteForCentral()}catch(_){}}
+  else{try{stopWatchRemote("session.stop")}catch(_){}}
   if (captureStartInProgress()) cancelCaptureStart("session.stop");
   state.active = false;
   sentinelStop();
@@ -1654,8 +1656,10 @@ $("b-again").onclick = () => {
   stopThumbnailWork();
   diag("ui.record.start.tap", { source: "central", everRecorded: !!state.everRecorded, phase: state.capturePhase });
   // volta a gravar: replays ficam intactos; usa a duração já escolhida
-  if (state.everRecorded) requestRecordingStart("central");
-  else show("s-time");
+  if (state.everRecorded){
+    resumeWatchRemoteFromGesture();
+    requestRecordingStart("central");
+  }else show("s-time");
 };
 $("b-home").onclick = async () => {
   stopThumbnailWork();
@@ -1702,7 +1706,7 @@ $("b-discard").onclick = async () => {
 $("chip-count").onclick = async () => {
   diag("ui.central.tap", { saving: state.saving, active: state.active, fragments: state.fragments.length });
   vibrate(20);
-  stopSession();
+  stopSession({ preserveWatchIntent:true });
   await openCentral();
 };
 
@@ -2011,6 +2015,7 @@ async function waitForCaptureHealth(generation, intent, timeoutMs = CAPTURE_HEAL
 async function startRecording(source = "duration", options = {}){
   const diagStartAt = performance.now();
   if (!normalizeTransientCaptureUi("recording.start")){
+    watchRemoteCaptureFailed("normalize");
     toast("Aguarde a ação atual terminar", "info", 2200);
     return;
   }
@@ -2040,6 +2045,7 @@ async function startRecording(source = "duration", options = {}){
     setCaptureStartUi(false, intent.source);
     state.captureIntent = null;
     setCapturePhase("idle", { intentId: intent.id, reason: "mime" });
+    watchRemoteCaptureFailed("mime");
     showFormatUnsupported();
     return;
   }
@@ -2074,6 +2080,7 @@ async function startRecording(source = "duration", options = {}){
       armDim();
       watchCamera();
       sentinelStart();
+      watchRemoteCaptureReady();
       try{ startRemote(); }catch(_){}
       diag("recording.start.ready", {
         intentId: intent.id, elapsedMs: Math.round(performance.now() - diagStartAt),
@@ -2107,6 +2114,7 @@ async function startRecording(source = "duration", options = {}){
   setCaptureStartUi(false, intent.source);
   if (state.captureIntent === intent) state.captureIntent = null;
   if (cancelled){
+    watchRemoteCaptureCancelled("capture.cancelled");
     setCapturePhase("idle", { intentId: intent.id, reason: "cancelled" });
     hideToast();
     return;
@@ -2115,6 +2123,7 @@ async function startRecording(source = "duration", options = {}){
     intentId: intent.id, elapsedMs: Math.round(performance.now() - diagStartAt), error: lastErr
   });
   hideToast();
+  watchRemoteCaptureFailed("camera.error");
   if (lastErr && (lastErr.name === "NotAllowedError" || lastErr.name === "SecurityError")){
     setCapturePhase("error", { intentId: intent.id, reason: "permission" });
     show("s-denied");
@@ -5054,7 +5063,8 @@ async function deliver(blob, name){
 const WATCH_REMOTE_ACTIONS = ['play','pause','previoustrack','nexttrack'];
 const watchRemote = {
   active:false, starting:false, acceptedActions:[], carrierUrl:null,
-  healthTimer:null, readyTimer:null, lastCommandAt:0
+  healthTimer:null, readyTimer:null, failureTimer:null, lastCommandAt:0,
+  resumeAfterCentral:false, awaitingCapture:false, startSerial:0
 };
 
 function watchRemoteSupported(){
@@ -5097,7 +5107,7 @@ function watchRemoteScheduleReady(delay=2600){
 function watchRemoteShowReady(reason='state'){
   if(!watchRemote.active||state.saving)return;
   watchRemoteClearReadyTimer();
-  watchRemoteSetMetadata('Gravei · Salvar replay','\u23EA\uFE0E  \u23EF\uFE0E  \u23E9\uFE0E salvam','Câmera ativa · '+state.duration+'s');
+  watchRemoteSetMetadata('Gravei · Replay','\u23EA\uFE0E  \u23EF\uFE0E  \u23E9\uFE0E salvam','Câmera ativa · '+state.duration+'s');
   diag('watch.metadata.ready',{reason,duration:state.duration})
 }
 function watchRemoteShowSaving(duration=state.duration){
@@ -5116,7 +5126,35 @@ function watchRemoteShowError(){
   watchRemoteSetMetadata('Erro ao salvar','Confira o iPhone','Gravei');
   watchRemoteScheduleReady(3200)
 }
-function watchRemoteEnsureCarrier(reason='health'){
+function watchRemoteShowOpening(){
+  if(!watchRemote.active)return;
+  watchRemoteClearReadyTimer();
+  watchRemoteSetMetadata('Gravei · Replay','Abrindo câmera','Aguarde')
+}
+function watchRemoteCaptureReady(){
+  if(!watchRemote.active)return;
+  const resumed=watchRemote.awaitingCapture;
+  watchRemote.awaitingCapture=false;
+  clearTimeout(watchRemote.failureTimer);watchRemote.failureTimer=null;
+  watchRemoteShowReady(resumed?'central.resume':'recording.ready');
+  if(resumed)diag('watch.resume.ready',{duration:state.duration})
+}
+function watchRemoteCaptureFailed(reason='camera.error'){
+  if(!watchRemote.active||!watchRemote.awaitingCapture)return;
+  watchRemote.awaitingCapture=false;
+  watchRemoteShowError();
+  clearTimeout(watchRemote.failureTimer);
+  watchRemote.failureTimer=setTimeout(()=>{
+    watchRemote.failureTimer=null;
+    if(watchRemote.active&&!state.active)stopWatchRemote('capture.failed')
+  },2200);
+  diag('watch.resume.captureFailed',{reason})
+}
+function watchRemoteCaptureCancelled(reason='capture.cancelled'){
+  if(!watchRemote.active||!watchRemote.awaitingCapture)return;
+  diag('watch.resume.cancelled',{reason});
+  stopWatchRemote(reason)
+}function watchRemoteEnsureCarrier(reason='health'){
   if(!watchRemote.active)return;
   const carrier=$('watch-carrier');
   if(!carrier)return;
@@ -5131,6 +5169,7 @@ function watchRemoteCommand(action){
   watchRemote.lastCommandAt=now;
   watchRemoteEnsureCarrier('command.'+action);
   if(!watchRemote.active)return;
+  if(watchRemote.awaitingCapture){diag('watch.command.ignored',{action,reason:'capture-opening'});return}
   if(!state.active||!$('rec-screen').classList.contains('active')||!state.captureRec||state.captureRec.state!=='recording'){
     diag('watch.command.ignored',{action,reason:'capture-inactive'});
     watchRemoteShowError();
@@ -5152,10 +5191,31 @@ function updateWatchRemoteUI(){
   else{toggle.textContent='Ativar no relógio';text.textContent='Desativado'}
 }
 function syncRemoteChip(){remoteChip(cam2.conns.length>0||watchRemote.active)}
-function stopWatchRemote(reason='manual'){
+function suspendWatchRemoteForCentral(){
+  const shouldResume=!!(watchRemote.active||watchRemote.starting);
+  watchRemote.resumeAfterCentral=shouldResume;
+  if(!shouldResume)return false;
+  diag('watch.suspend.central',{active:watchRemote.active,starting:watchRemote.starting});
+  stopWatchRemote('central',{preserveResume:true});
+  return true
+}
+function resumeWatchRemoteFromGesture(){
+  if(!watchRemote.resumeAfterCentral)return false;
+  watchRemote.resumeAfterCentral=false;
+  diag('watch.resume.requested',{capturePhase:state.capturePhase});
+  void startWatchRemote({allowOpening:true,resume:true}).then(started=>{
+    if(!started)diag('watch.resume.notStarted',{capturePhase:state.capturePhase})
+  });
+  return true
+}
+function stopWatchRemote(reason='manual',options={}){
+  const preserveResume=!!options.preserveResume;
   const wasActive=watchRemote.active||watchRemote.starting;
-  watchRemote.active=false;watchRemote.starting=false;watchRemote.acceptedActions=[];watchRemote.lastCommandAt=0;
+  watchRemote.startSerial++;
+  watchRemote.active=false;watchRemote.starting=false;watchRemote.awaitingCapture=false;watchRemote.acceptedActions=[];watchRemote.lastCommandAt=0;
+  if(!preserveResume)watchRemote.resumeAfterCentral=false;
   clearInterval(watchRemote.healthTimer);watchRemote.healthTimer=null;watchRemoteClearReadyTimer();
+  clearTimeout(watchRemote.failureTimer);watchRemote.failureTimer=null;
   if(watchRemoteSupported()){
     for(const action of WATCH_REMOTE_ACTIONS){try{navigator.mediaSession.setActionHandler(action,null)}catch(_){}}
     try{navigator.mediaSession.metadata=null}catch(_){}
@@ -5167,14 +5227,17 @@ function stopWatchRemote(reason='manual'){
   watchRemote.carrierUrl=null;
   try{syncRemoteChip()}catch(_){}
   updateWatchRemoteUI();
-  if(wasActive)diag('watch.stopped',{reason})
+  if(wasActive)diag('watch.stopped',{reason,preserveResume})
 }
-function startWatchRemote(){
+function startWatchRemote(options={}){
+  const allowOpening=!!options.allowOpening,resume=!!options.resume;
+  const failureText=resume?'Controle do relógio não reconectou':'Não foi possível ativar no relógio';
   if(watchRemote.active)return Promise.resolve(true);
   if(watchRemote.starting)return Promise.resolve(false);
-  if(!watchRemoteSupported()){updateWatchRemoteUI();toast('Controle pelo relógio indisponível','err',2600);return Promise.resolve(false)}
-  if(!state.active||!$('rec-screen').classList.contains('active')){toast('Inicie a gravação primeiro','info',2200);return Promise.resolve(false)}
-  watchRemote.starting=true;updateWatchRemoteUI();
+  if(!watchRemoteSupported()){updateWatchRemoteUI();toast(resume?failureText:'Controle pelo relógio indisponível','err',2600);return Promise.resolve(false)}
+  if(!allowOpening&&(!state.active||!$('rec-screen').classList.contains('active'))){toast('Inicie a gravação primeiro','info',2200);return Promise.resolve(false)}
+  watchRemote.starting=true;watchRemote.awaitingCapture=allowOpening;updateWatchRemoteUI();
+  const serial=++watchRemote.startSerial;
   const carrier=$('watch-carrier');
   try{
     watchRemote.acceptedActions=[];
@@ -5186,24 +5249,28 @@ function startWatchRemote(){
     watchRemote.carrierUrl=makeWatchCarrierUrl();
     carrier.src=watchRemote.carrierUrl;carrier.loop=true;carrier.muted=false;carrier.volume=1;
     watchRemote.active=true;
-    watchRemoteShowReady('activation');
+    if(allowOpening)watchRemoteShowOpening();else watchRemoteShowReady('activation');
     const playResult=carrier.play();
     return Promise.resolve(playResult).then(()=>{
+      if(serial!==watchRemote.startSerial||!watchRemote.active)return false;
       watchRemote.starting=false;
+      clearInterval(watchRemote.healthTimer);
       watchRemote.healthTimer=setInterval(()=>watchRemoteEnsureCarrier('interval'),2500);
       syncRemoteChip();updateWatchRemoteUI();
-      diag('watch.started',{actions:watchRemote.acceptedActions});
+      diag('watch.started',{actions:watchRemote.acceptedActions,resume,awaitingCapture:watchRemote.awaitingCapture});
       return true
     }).catch(err=>{
-      diag('watch.start.error',{error:err});
+      if(serial!==watchRemote.startSerial)return false;
+      diag('watch.start.error',{error:err,resume});
       stopWatchRemote('start.error');
-      toast('Não foi possível ativar no relógio','err',2800);
+      toast(failureText,'err',2800);
       return false
     })
   }catch(err){
-    diag('watch.start.error',{error:err});
+    if(serial!==watchRemote.startSerial)return Promise.resolve(false);
+    diag('watch.start.error',{error:err,resume});
     stopWatchRemote('start.error');
-    toast('Não foi possível ativar no relógio','err',2800);
+    toast(failureText,'err',2800);
     return Promise.resolve(false)
   }
 }
