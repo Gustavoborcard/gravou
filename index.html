@@ -195,7 +195,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 #chip-remote:active{transform:scale(.95)}
 #chip-remote svg{width:22px;height:22px}
 
-/* overlay de pareamento v2.03 */
+/* overlay de pareamento v2.04-probe */
  #pair{
    position:fixed;inset:0;z-index:30;display:none;align-items:flex-end;justify-content:center;
    padding-top:calc(var(--safe-t) + 12px);background:rgba(0,0,0,.64)
@@ -981,7 +981,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v2.03";
+  const VERSION = "v2.04-probe";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -5074,11 +5074,13 @@ async function deliver(blob, name){
    Usa uma faixa de audio praticamente inaudivel apenas para manter
    uma sessao de midia reconhecivel por relogios. Os comandos chamam
    o mesmo saveReplay() do botao principal; nao existe segundo buffer. */
+const WATCH_REMOTE_PLAY_READY_PROBE = new URLSearchParams(location.search).get('watchplay') === '1';
 const WATCH_REMOTE_ACTIONS = ['play','pause','previoustrack','nexttrack'];
 const watchRemote = {
   active:false, starting:false, acceptedActions:[], carrierUrl:null,
   healthTimer:null, readyTimer:null, failureTimer:null, lastCommandAt:0,
-  resumeAfterCentral:false, awaitingCapture:false, startSerial:0
+  resumeAfterCentral:false, awaitingCapture:false, startSerial:0,
+  presentation:'playing', lastAppliedPlaybackState:null
 };
 
 function watchRemoteSupported(){
@@ -5096,8 +5098,31 @@ function makeWatchCarrierUrl(){
   for(let i=0;i<samples;i++)view.setInt16(44+i*2,Math.round(Math.sin(2*Math.PI*440*i/sampleRate)),true);
   return URL.createObjectURL(new Blob([buffer],{type:'audio/wav'}));
 }
-function watchRemoteSetMetadata(title,artist,album){
+function watchRemoteDesiredPlaybackState(presentation='busy'){
+  return WATCH_REMOTE_PLAY_READY_PROBE&&(presentation==='ready'||presentation==='saved'||presentation==='error')?'paused':'playing'
+}
+function watchRemoteApplyPlaybackState(reason='state',force=false){
   if(!watchRemote.active||!watchRemoteSupported())return false;
+  const desired=watchRemote.presentation||'playing';
+  try{
+    const before=navigator.mediaSession.playbackState;
+    navigator.mediaSession.playbackState=desired;
+    const after=navigator.mediaSession.playbackState;
+    const changed=watchRemote.lastAppliedPlaybackState!==desired||before!==desired||after!==desired;
+    watchRemote.lastAppliedPlaybackState=desired;
+    if(force||changed){
+      const carrier=$('watch-carrier');
+      diag('watch.playback.presentation',{reason,probe:WATCH_REMOTE_PLAY_READY_PROBE,desired,before,after,carrierPaused:carrier?carrier.paused:null,carrierEnded:carrier?carrier.ended:null})
+    }
+    return after===desired
+  }catch(err){
+    diag('watch.playback.presentationError',{reason,probe:WATCH_REMOTE_PLAY_READY_PROBE,desired,error:err});
+    return false
+  }
+}
+function watchRemoteSetMetadata(title,artist,album,presentation='busy'){
+  if(!watchRemote.active||!watchRemoteSupported())return false;
+  watchRemote.presentation=watchRemoteDesiredPlaybackState(presentation);
   const base={title,artist,album};
   try{
     navigator.mediaSession.metadata=new MediaMetadata({...base,artwork:[{src:'gravei-watch-artwork-512.png?v=1',sizes:'512x512',type:'image/png'}]});
@@ -5107,7 +5132,7 @@ function watchRemoteSetMetadata(title,artist,album){
     }
     diag('watch.metadata.artworkFallback',{error:err});
   }
-  try{navigator.mediaSession.playbackState='playing'}catch(_){}
+  watchRemoteApplyPlaybackState('metadata.'+presentation,true);
   return true
 }
 function watchRemoteClearReadyTimer(){clearTimeout(watchRemote.readyTimer);watchRemote.readyTimer=null}
@@ -5121,29 +5146,29 @@ function watchRemoteScheduleReady(delay=2600){
 function watchRemoteShowReady(reason='state'){
   if(!watchRemote.active||state.saving)return;
   watchRemoteClearReadyTimer();
-  watchRemoteSetMetadata('Gravei · Replay','\u23EA\uFE0E  \u23EF\uFE0E  \u23E9\uFE0E salvam','Câmera ativa · '+state.duration+'s');
+  watchRemoteSetMetadata('Gravei · Replay','\u23EA\uFE0E  \u23EF\uFE0E  \u23E9\uFE0E salvam','Câmera ativa · '+state.duration+'s','ready');
   diag('watch.metadata.ready',{reason,duration:state.duration})
 }
 function watchRemoteShowSaving(duration=state.duration){
   if(!watchRemote.active)return;
   watchRemoteClearReadyTimer();
-  watchRemoteSetMetadata('Gravei · Salvando','Aguarde','Replay de '+duration+'s')
+  watchRemoteSetMetadata('Gravei · Salvando','Aguarde','Replay de '+duration+'s','busy')
 }
 function watchRemoteShowSaved(duration=state.duration,count=null){
   if(!watchRemote.active)return;
   const album=Number.isFinite(count)?count+' '+(count===1?'replay':'replays'):'Replay guardado';
-  watchRemoteSetMetadata('Replay salvo',duration+'s guardados',album);
+  watchRemoteSetMetadata('Replay salvo',duration+'s guardados',album,'saved');
   watchRemoteScheduleReady(2800)
 }
 function watchRemoteShowError(){
   if(!watchRemote.active)return;
-  watchRemoteSetMetadata('Erro ao salvar','Confira o iPhone','Gravei');
+  watchRemoteSetMetadata('Erro ao salvar','Confira o iPhone','Gravei','error');
   watchRemoteScheduleReady(3200)
 }
 function watchRemoteShowOpening(){
   if(!watchRemote.active)return;
   watchRemoteClearReadyTimer();
-  watchRemoteSetMetadata('Gravei · Replay','Abrindo câmera','Aguarde')
+  watchRemoteSetMetadata('Gravei · Replay','Abrindo câmera','Aguarde','busy')
 }
 function watchRemoteCaptureReady(){
   if(!watchRemote.active)return;
@@ -5173,8 +5198,10 @@ function watchRemoteCaptureCancelled(reason='capture.cancelled'){
   const carrier=$('watch-carrier');
   if(!carrier)return;
   try{
-    if(carrier.paused||carrier.ended)carrier.play().catch(err=>diag('watch.carrier.resumeError',{reason,error:err}));
-    navigator.mediaSession.playbackState='playing'
+    if(carrier.paused||carrier.ended){
+      Promise.resolve(carrier.play()).then(()=>watchRemoteApplyPlaybackState(reason+'.resumed',true)).catch(err=>diag('watch.carrier.resumeError',{reason,error:err}))
+    }
+    watchRemoteApplyPlaybackState(reason)
   }catch(err){diag('watch.carrier.healthError',{reason,error:err})}
 }
 function watchRemoteCommand(action){
@@ -5227,6 +5254,7 @@ function stopWatchRemote(reason='manual',options={}){
   const wasActive=watchRemote.active||watchRemote.starting;
   watchRemote.startSerial++;
   watchRemote.active=false;watchRemote.starting=false;watchRemote.awaitingCapture=false;watchRemote.acceptedActions=[];watchRemote.lastCommandAt=0;
+  watchRemote.presentation='playing';watchRemote.lastAppliedPlaybackState=null;
   if(!preserveResume)watchRemote.resumeAfterCentral=false;
   clearInterval(watchRemote.healthTimer);watchRemote.healthTimer=null;watchRemoteClearReadyTimer();
   clearTimeout(watchRemote.failureTimer);watchRemote.failureTimer=null;
@@ -5268,6 +5296,7 @@ function startWatchRemote(options={}){
     return Promise.resolve(playResult).then(()=>{
       if(serial!==watchRemote.startSerial||!watchRemote.active)return false;
       watchRemote.starting=false;
+      watchRemoteApplyPlaybackState('start.play',true);
       clearInterval(watchRemote.healthTimer);
       watchRemote.healthTimer=setInterval(()=>watchRemoteEnsureCarrier('interval'),2500);
       syncRemoteChip();updateWatchRemoteUI();
