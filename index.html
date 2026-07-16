@@ -195,7 +195,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 #chip-remote:active{transform:scale(.95)}
 #chip-remote svg{width:22px;height:22px}
 
-/* overlay de pareamento v2.05-ring-probe */
+/* overlay de pareamento v2.06-visual-probe */
  #pair{
    position:fixed;inset:0;z-index:30;display:none;align-items:flex-end;justify-content:center;
    padding-top:calc(var(--safe-t) + 12px);background:rgba(0,0,0,.64)
@@ -981,7 +981,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v2.05-ring-probe";
+  const VERSION = "v2.06-visual-probe";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -5074,7 +5074,9 @@ async function deliver(blob, name){
    Usa uma faixa de audio praticamente inaudivel apenas para manter
    uma sessao de midia reconhecivel por relogios. Os comandos chamam
    o mesmo saveReplay() do botao principal; nao existe segundo buffer. */
-const WATCH_REMOTE_PLAY_READY_PROBE = new URLSearchParams(location.search).get('watchplay') === '1';
+const WATCH_REMOTE_PLAY_MODE = new URLSearchParams(location.search).get('watchplay') || '';
+const WATCH_REMOTE_PLAY_READY_PROBE = WATCH_REMOTE_PLAY_MODE === '1' || WATCH_REMOTE_PLAY_MODE === 'hard';
+const WATCH_REMOTE_HARD_PAUSE_PROBE = WATCH_REMOTE_PLAY_MODE === 'hard';
 const WATCH_REMOTE_RING_PROBE = new URLSearchParams(location.search).get('watchring') === '1';
 const WATCH_REMOTE_ACTIONS = ['play','pause','previoustrack','nexttrack'];
 const watchRemote = {
@@ -5082,7 +5084,8 @@ const watchRemote = {
   healthTimer:null, readyTimer:null, failureTimer:null, lastCommandAt:0,
   resumeAfterCentral:false, awaitingCapture:false, startSerial:0,
   presentation:'playing', lastAppliedPlaybackState:null,
-  lastPositionSignature:null, positionFailed:false, positionSupportReported:false
+  lastPositionSignature:null, positionFailed:false, positionSupportReported:false,
+  lastCarrierShouldPlay:null
 };
 
 function watchRemoteSupported(){
@@ -5100,7 +5103,7 @@ function watchRemotePositionSnapshot(){
     duration,
     available,
     position: full ? Math.max(0, duration - 0.01) : available,
-    playbackRate: full ? 0.0001 : 1,
+    playbackRate: 1,
     full,
     progress:Number(((available/duration)*100).toFixed(1))
   };
@@ -5198,7 +5201,8 @@ function watchRemoteSetMetadata(title,artist,album,presentation='busy'){
     }
     diag('watch.metadata.artworkFallback',{error:err});
   }
-  watchRemoteApplyPlaybackState('metadata.'+presentation,true);
+  if(WATCH_REMOTE_HARD_PAUSE_PROBE)watchRemoteEnsureCarrier('metadata.'+presentation);
+  else watchRemoteApplyPlaybackState('metadata.'+presentation,true);
   watchRemoteSyncPosition('metadata.'+presentation,true);
   return true
 }
@@ -5260,15 +5264,34 @@ function watchRemoteCaptureCancelled(reason='capture.cancelled'){
   if(!watchRemote.active||!watchRemote.awaitingCapture)return;
   diag('watch.resume.cancelled',{reason});
   stopWatchRemote(reason)
-}function watchRemoteEnsureCarrier(reason='health'){
+}
+function watchRemoteCarrierShouldPlay(){
+  return !WATCH_REMOTE_HARD_PAUSE_PROBE || watchRemote.presentation === 'playing';
+}
+function watchRemoteEnsureCarrier(reason='health'){
   if(!watchRemote.active)return;
   const carrier=$('watch-carrier');
   if(!carrier)return;
+  const shouldPlay=watchRemoteCarrierShouldPlay();
+  const changed=watchRemote.lastCarrierShouldPlay!==shouldPlay;
+  watchRemote.lastCarrierShouldPlay=shouldPlay;
   try{
+    if(!shouldPlay){
+      if(!carrier.paused)carrier.pause();
+      watchRemoteApplyPlaybackState(reason+'.paused',changed);
+      if(WATCH_REMOTE_HARD_PAUSE_PROBE&&changed){
+        diag('watch.carrier.presentation',{reason,shouldPlay:false,carrierPaused:carrier.paused,presentation:watchRemote.presentation})
+      }
+      return
+    }
+    if(WATCH_REMOTE_HARD_PAUSE_PROBE&&changed){
+      diag('watch.carrier.presentation',{reason,shouldPlay:true,carrierPaused:carrier.paused,presentation:watchRemote.presentation})
+    }
     if(carrier.paused||carrier.ended){
       Promise.resolve(carrier.play()).then(()=>watchRemoteApplyPlaybackState(reason+'.resumed',true)).catch(err=>diag('watch.carrier.resumeError',{reason,error:err}))
+    }else{
+      watchRemoteApplyPlaybackState(reason)
     }
-    watchRemoteApplyPlaybackState(reason)
   }catch(err){diag('watch.carrier.healthError',{reason,error:err})}
 }
 function watchRemoteCommand(action){
@@ -5322,7 +5345,7 @@ function stopWatchRemote(reason='manual',options={}){
   watchRemote.startSerial++;
   watchRemote.active=false;watchRemote.starting=false;watchRemote.awaitingCapture=false;watchRemote.acceptedActions=[];watchRemote.lastCommandAt=0;
   watchRemote.presentation='playing';watchRemote.lastAppliedPlaybackState=null;
-  watchRemote.lastPositionSignature=null;watchRemote.positionFailed=false;watchRemote.positionSupportReported=false;
+  watchRemote.lastPositionSignature=null;watchRemote.positionFailed=false;watchRemote.positionSupportReported=false;watchRemote.lastCarrierShouldPlay=null;
   if(!preserveResume)watchRemote.resumeAfterCentral=false;
   clearInterval(watchRemote.healthTimer);watchRemote.healthTimer=null;watchRemoteClearReadyTimer();
   clearTimeout(watchRemote.failureTimer);watchRemote.failureTimer=null;
@@ -5351,7 +5374,7 @@ function startWatchRemote(options={}){
   const serial=++watchRemote.startSerial;
   const carrier=$('watch-carrier');
   try{
-    watchRemote.lastPositionSignature=null;watchRemote.positionFailed=false;watchRemote.positionSupportReported=false;
+    watchRemote.lastPositionSignature=null;watchRemote.positionFailed=false;watchRemote.positionSupportReported=false;watchRemote.lastCarrierShouldPlay=null;
     watchRemote.acceptedActions=[];
     for(const action of WATCH_REMOTE_ACTIONS){
       try{navigator.mediaSession.setActionHandler(action,()=>watchRemoteCommand(action));watchRemote.acceptedActions.push(action)}
@@ -5363,14 +5386,18 @@ function startWatchRemote(options={}){
     watchRemote.active=true;
     if(allowOpening)watchRemoteShowOpening();else watchRemoteShowReady('activation');
     const playResult=carrier.play();
-    return Promise.resolve(playResult).then(()=>{
+    return Promise.resolve(playResult).then(async()=>{
       if(serial!==watchRemote.startSerial||!watchRemote.active)return false;
+      if(WATCH_REMOTE_HARD_PAUSE_PROBE&&watchRemote.presentation==='paused'){
+        await sleep(180);
+        if(serial!==watchRemote.startSerial||!watchRemote.active)return false
+      }
       watchRemote.starting=false;
-      watchRemoteApplyPlaybackState('start.play',true);
+      watchRemoteEnsureCarrier('start.play');
       clearInterval(watchRemote.healthTimer);
       watchRemote.healthTimer=setInterval(()=>watchRemoteEnsureCarrier('interval'),2500);
       syncRemoteChip();updateWatchRemoteUI();
-      diag('watch.started',{actions:watchRemote.acceptedActions,resume,awaitingCapture:watchRemote.awaitingCapture,ringProbe:WATCH_REMOTE_RING_PROBE,positionSupported:watchRemotePositionSupported()});
+      diag('watch.started',{actions:watchRemote.acceptedActions,resume,awaitingCapture:watchRemote.awaitingCapture,ringProbe:WATCH_REMOTE_RING_PROBE,positionSupported:watchRemotePositionSupported(),playMode:WATCH_REMOTE_PLAY_MODE||'continuous',hardPauseProbe:WATCH_REMOTE_HARD_PAUSE_PROBE});
       return true
     }).catch(err=>{
       if(serial!==watchRemote.startSerial)return false;
