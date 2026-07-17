@@ -981,7 +981,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v2.05-full98-probe";
+  const VERSION = "v2.05-ring-probe";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -5099,7 +5099,7 @@ function watchRemotePositionSnapshot(){
   return {
     duration,
     available,
-    position: full ? duration * 0.98 : available,
+    position: full ? Math.max(0, duration - 0.01) : available,
     playbackRate: full ? 0.0001 : 1,
     full,
     progress:Number(((available/duration)*100).toFixed(1))
