@@ -847,7 +847,7 @@ a{color:var(--accent)}
 <div id="watch-lab" hidden>
   <button type="button" class="watch-lab-toggle" id="watch-lab-toggle" aria-expanded="true">LAB</button>
   <aside class="watch-lab-panel" id="watch-lab-panel" aria-label="Teste guiado do anel no Apple Watch">
-    <div class="watch-lab-head"><div><strong>Teste guiado do anel</strong><span id="watch-lab-build">v2.09a-watch-activation-lab &middot; guiado</span></div><div class="watch-lab-mode" id="watch-lab-mode">MODO</div></div>
+    <div class="watch-lab-head"><div><strong>Teste guiado do anel</strong><span id="watch-lab-build">v2.10-buffer-stability-candidate &middot; guiado</span></div><div class="watch-lab-mode" id="watch-lab-mode">MODO</div></div>
     <section class="watch-lab-guide" aria-live="polite">
       <div class="watch-lab-guide-step" id="watch-lab-step">Etapa 1 de 5</div><h2 id="watch-lab-instruction">Ative o controle pelo rel&oacute;gio</h2>
       <p id="watch-lab-instruction-detail">O LAB mostrar&aacute; apenas a pr&oacute;xima a&ccedil;&atilde;o.</p>
@@ -858,8 +858,8 @@ a{color:var(--accent)}
     <section class="watch-lab-observation" id="watch-lab-observation" hidden>
       <h3>1. Como est&aacute; o anel no rel&oacute;gio?</h3>
       <div class="watch-lab-buttons" id="watch-lab-ring-buttons"><button type="button" data-lab-ring="0-10" aria-pressed="false">0&ndash;10%</button><button type="button" data-lab-ring="25" aria-pressed="false">25%</button><button type="button" data-lab-ring="50" aria-pressed="false">50%</button><button type="button" data-lab-ring="75" aria-pressed="false">75%</button><button type="button" data-lab-ring="100" aria-pressed="false">100%</button><button type="button" data-lab-ring="reset" aria-pressed="false">Reiniciou</button><button type="button" data-lab-ring="missing" aria-pressed="false">Sumiu</button></div>
-      <h3>2. Qual s&iacute;mbolo aparece no centro?</h3>
-      <div class="watch-lab-buttons"><button type="button" data-lab-icon="play" aria-pressed="false">Play</button><button type="button" data-lab-icon="pause" aria-pressed="false">Pause</button><button type="button" data-lab-icon="other" aria-pressed="false">Outro</button></div>
+      <h3 id="watch-lab-icon-title">2. Qual s&iacute;mbolo aparece no centro?</h3>
+      <div class="watch-lab-buttons" id="watch-lab-icon-buttons"><button type="button" data-lab-icon="play" aria-pressed="false">Play</button><button type="button" data-lab-icon="pause" aria-pressed="false">Pause</button><button type="button" data-lab-icon="other" aria-pressed="false">Outro</button></div>
       <p class="watch-lab-note" id="watch-lab-note">Escolha uma op&ccedil;&atilde;o em cada pergunta.</p><button type="button" class="watch-lab-confirm" id="watch-lab-confirm" disabled>Confirmar observa&ccedil;&atilde;o</button>
     </section>
     <details class="watch-lab-tech"><summary>Ver dados t&eacute;cnicos</summary><div class="watch-lab-grid">
@@ -1048,10 +1048,11 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    Guarda apenas eventos técnicos; nunca guarda vídeo, áudio ou imagens.
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
-  const KEY = "gravei-diagnostic-v209a-watch-activation";
-  const VERSION = "v2.09a-watch-activation-lab";
+  const KEY = "gravei-diagnostic-v210-buffer-stability";
+  const VERSION = "v2.10-buffer-stability-candidate";
   const MAX_EVENTS = 5000;
   const MAX_CHARS = 1800000;
+  const FRESH_RUN = new URLSearchParams(location.search).get('diagfresh') === '1';
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
   let persistTimer = null;
   let report;
@@ -1104,6 +1105,7 @@ const GRAVEI_DIAG = (() => {
   }
 
   try{
+    if(FRESH_RUN)localStorage.removeItem(KEY);
     const saved = JSON.parse(localStorage.getItem(KEY) || "null");
     report = saved && saved.schema === 2 && Array.isArray(saved.events) ? saved : baseReport();
   }catch(_){ report = baseReport(); }
@@ -1154,7 +1156,7 @@ const GRAVEI_DIAG = (() => {
 
   function share(){
     const body = json();
-    const file = new File([body], "gravei-watch-activation-lab-" + new Date().toISOString().replace(/[:.]/g, "-") + ".json", { type: "application/json" });
+    const file = new File([body], "gravei-buffer-stability-" + new Date().toISOString().replace(/[:.]/g, "-") + ".json", { type: "application/json" });
     if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))){
       return navigator.share({ title: "Diagnóstico Gravei", files: [file] });
     }
@@ -5157,29 +5159,46 @@ async function deliver(blob, name){
    uma sessao de midia reconhecivel por relogios. Os comandos chamam
    o mesmo saveReplay() do botao principal; nao existe segundo buffer. */
 const WATCH_RING_LAB_PARAM = (new URLSearchParams(location.search).get('watchlab') || '').toLowerCase();
-const WATCH_RING_LAB_MODE = ['a','b','c'].includes(WATCH_RING_LAB_PARAM) ? WATCH_RING_LAB_PARAM : '';
+const WATCH_RING_LAB_MODE = ['a','b','c','d'].includes(WATCH_RING_LAB_PARAM) ? WATCH_RING_LAB_PARAM : '';
 const WATCH_RING_LAB_ACTIVE = WATCH_RING_LAB_MODE !== '';
 const WATCH_ACTIVATION_TARGET_PARAM = new URLSearchParams(location.search).get('watchtarget');
 const WATCH_ACTIVATION_TARGET_RAW = WATCH_ACTIVATION_TARGET_PARAM === null ? NaN : Number(WATCH_ACTIVATION_TARGET_PARAM);
 const WATCH_ACTIVATION_TARGET_PERCENT = WATCH_RING_LAB_MODE === 'c'
   ? (Number.isFinite(WATCH_ACTIVATION_TARGET_RAW) ? Math.max(0,Math.min(100,Math.round(WATCH_ACTIVATION_TARGET_RAW))) : 100)
   : null;
-const WATCH_RING_FULL_HEARTBEAT_MS = WATCH_RING_LAB_MODE === 'b' || WATCH_RING_LAB_MODE === 'c' ? 1000 : 0;
+const WATCH_RING_FULL_HEARTBEAT_MS = 1000;
 const WATCH_REMOTE_PLAY_READY_PROBE = false;
-const WATCH_REMOTE_RING_PROBE = WATCH_RING_LAB_ACTIVE;
+const WATCH_REMOTE_RING_PROBE = true;
 const WATCH_REMOTE_ACTIONS = ['play','pause','previoustrack','nexttrack'];
-const WATCH_RING_RETENTION_CHECKPOINTS = WATCH_RING_LAB_MODE === 'c' ? [0,10] : [0,5,15,30,60,120];
+const WATCH_RING_RETENTION_CHECKPOINTS = WATCH_RING_LAB_MODE === 'c' ? [0,10] : WATCH_RING_LAB_MODE === 'd' ? [0] : [0,5,15,30,60,120];
 const watchLab = {
   lastFullAppliedAt:0,lastSent:null,lastError:null,fullSince:0,checkpointIndex:0,
   loops:0,previousCarrierTime:null,lastCommand:null,commandCount:0,commandsAtFull:0,observationCount:0,
   lastObservation:null,manualCheckpointIndex:0,manualNotifiedIndex:-1,manualRing:null,manualIcon:null,
   sampleTimer:null,refreshTimer:null,setOpen:null
 };
+const watchBufferLab = {
+  activationStarted:false,
+  initialObserved:false,
+  centralSuspended:false,
+  centralResumed:false,
+  centralObserved:false,
+  hiddenSeen:false,
+  lifecycleRecovered:false,
+  lifecycleObserved:false,
+  commandSeen:false,
+  sourceGenerationAtStart:null,
+  sourceStable:true,
+  failures:[],
+  fullCycles:0
+};
 const watchRemote = {
   active:false, starting:false, acceptedActions:[], carrierUrl:null,
-  carrierReady:false, carrierPreparePromise:null,
+  carrierReady:false, carrierPreparePromise:null, sourceGeneration:0,
   healthTimer:null, readyTimer:null, failureTimer:null, lastCommandAt:0,
-  resumeAfterCentral:false, awaitingCapture:false, startSerial:0,
+  resumeAfterCentral:false, resumeAfterVisibility:false, awaitingCapture:false, startSerial:0,
+  lifecycleRecovering:false, lifecycleSerial:0, lifecycleNeedsGesture:false,
+  lifecycleLastState:'idle', lifecycleHiddenAt:0,
   activationAttempt:0, activationPhase:'idle', positionGateUntil:0,
   presentation:'playing', lastAppliedPlaybackState:null,
   lastPositionSignature:null, positionFailed:false, positionSupportReported:false
@@ -5254,6 +5273,7 @@ function watchRemoteSyncPosition(reason='buffer',force=false){
     watchRemote.positionFailed=true;
     watchLab.lastError=String(err&&err.message||err);
     diag('watch.position.error',{reason,probe:true,labMode:WATCH_RING_LAB_MODE,error:err,snapshot,carrier:watchLabCarrierSnapshot()});
+    try{watchBufferLabEvent('lifecycle.error',{reason,error:String(err&&err.message||err)})}catch(_){}
     watchLabRefresh();
     return false;
   }
@@ -5286,13 +5306,14 @@ function watchRemoteCarrierDetails(){
     networkState:carrier.networkState,
     paused:carrier.paused,
     currentTime:Number.isFinite(carrier.currentTime)?Number(carrier.currentTime.toFixed(3)):null,
-    duration:Number.isFinite(carrier.duration)?Number(carrier.duration.toFixed(3)):null
+    duration:Number.isFinite(carrier.duration)?Number(carrier.duration.toFixed(3)):null,
+    sourceGeneration:watchRemote.sourceGeneration
   }:null
 }
 function watchRemoteEnsureCarrierSource(reason='prepare'){
   const carrier=$('watch-carrier');
   if(!carrier)return null;
-  if(!watchRemote.carrierUrl)watchRemote.carrierUrl=makeWatchCarrierUrl();
+  if(!watchRemote.carrierUrl){watchRemote.carrierUrl=makeWatchCarrierUrl();watchRemote.sourceGeneration++}
   carrier.loop=true;
   carrier.muted=false;
   carrier.volume=1;
@@ -5437,15 +5458,89 @@ function watchRemoteCaptureCancelled(reason='capture.cancelled'){
   if(!watchRemote.active||!watchRemote.awaitingCapture)return;
   diag('watch.resume.cancelled',{reason});
   stopWatchRemote(reason)
-}function watchRemoteEnsureCarrier(reason='health'){
+}
+function watchRemoteBindActions(reason='bind'){
+  watchRemote.acceptedActions=[];
+  for(const action of WATCH_REMOTE_ACTIONS){
+    try{
+      navigator.mediaSession.setActionHandler(action,()=>watchRemoteCommand(action));
+      watchRemote.acceptedActions.push(action)
+    }catch(err){diag('watch.action.unsupported',{action,reason,error:err})}
+  }
+  diag('watch.actions.bound',{reason,count:watchRemote.acceptedActions.length,actions:watchRemote.acceptedActions});
+  return watchRemote.acceptedActions.length
+}
+function watchRemoteNoteHidden(reason='visibility.hidden'){
+  if(!watchRemote.active&&!watchRemote.starting)return false;
+  watchRemote.resumeAfterVisibility=true;
+  watchRemote.lifecycleHiddenAt=performance.now();
+  watchRemote.lifecycleLastState='hidden';
+  diag('watch.lifecycle.hidden',{reason,active:watchRemote.active,starting:watchRemote.starting,carrier:watchRemoteCarrierDetails(),sourceGeneration:watchRemote.sourceGeneration});
+  try{watchBufferLabEvent('lifecycle.hidden',{reason})}catch(_){}
+  return true
+}
+async function watchRemoteRecoverAfterLifecycle(reason='visibility.visible',options={}){
+  if(!watchRemote.active||document.visibilityState==='hidden')return false;
+  if(watchRemote.lifecycleRecovering)return false;
+  const carrier=watchRemoteEnsureCarrierSource(reason);
+  if(!carrier)return false;
+  const serial=++watchRemote.lifecycleSerial;
+  const startedAt=performance.now();
+  watchRemote.lifecycleRecovering=true;
+  watchRemote.lifecycleLastState='recovering';
+  watchRemote.positionGateUntil=Infinity;
+  watchRemote.positionFailed=false;
+  watchRemote.positionSupportReported=false;
+  const hiddenMs=watchRemote.lifecycleHiddenAt?Math.max(0,Math.round(performance.now()-watchRemote.lifecycleHiddenAt)):null;
+  try{
+    if(!watchRemoteBindActions(reason))throw Error('Nenhum comando de mídia disponível');
+    diag('watch.lifecycle.recover.begin',{reason,serial,hiddenMs,needsGesture:watchRemote.lifecycleNeedsGesture,carrier:watchRemoteCarrierDetails(),sourceGeneration:watchRemote.sourceGeneration});
+    if(carrier.paused||carrier.ended)await Promise.resolve(carrier.play());
+    if(serial!==watchRemote.lifecycleSerial||!watchRemote.active)return false;
+    watchRemote.resumeAfterVisibility=false;
+    watchRemote.lifecycleNeedsGesture=false;
+    watchRemote.lifecycleRecovering=false;
+    watchRemote.lifecycleLastState='ready';
+    watchRemote.positionGateUntil=performance.now()+180;
+    watchRemoteShowReady('lifecycle.'+reason,{syncPosition:false});
+    watchRemoteApplyPlaybackState('lifecycle.'+reason,true);
+    setTimeout(()=>{
+      if(serial!==watchRemote.lifecycleSerial||!watchRemote.active)return;
+      watchRemote.positionGateUntil=0;
+      const applied=watchRemoteSyncPosition('lifecycle.'+reason,true);
+      diag('watch.lifecycle.recover.position',{reason,serial,applied,elapsedMs:Math.round(performance.now()-startedAt),carrier:watchRemoteCarrierDetails(),sourceGeneration:watchRemote.sourceGeneration})
+    },220);
+    diag('watch.lifecycle.recover.ready',{reason,serial,hiddenMs,elapsedMs:Math.round(performance.now()-startedAt),carrier:watchRemoteCarrierDetails(),sourceGeneration:watchRemote.sourceGeneration});
+    try{watchBufferLabEvent('lifecycle.recovered',{reason,hiddenMs})}catch(_){}
+    return true
+  }catch(err){
+    if(serial!==watchRemote.lifecycleSerial)return false;
+    watchRemote.lifecycleRecovering=false;
+    watchRemote.lifecycleNeedsGesture=true;
+    watchRemote.resumeAfterVisibility=true;
+    watchRemote.lifecycleLastState='needs-gesture';
+    watchRemote.positionGateUntil=0;
+    diag('watch.lifecycle.recover.error',{reason,serial,hiddenMs,error:err,carrier:watchRemoteCarrierDetails(),sourceGeneration:watchRemote.sourceGeneration});
+    try{watchBufferLabEvent('lifecycle.error',{reason,error:String(err&&err.message||err)})}catch(_){}
+    if(options.fromGesture)toast('Não foi possível reconectar o relógio','err',2400);
+    return false
+  }
+}
+function watchRemoteEnsureCarrier(reason='health'){
   if(!watchRemote.active)return;
+  if(document.visibilityState==='hidden'){
+    watchRemoteNoteHidden(reason+'.hidden');
+    return
+  }
   const carrier=$('watch-carrier');
   if(!carrier)return;
   try{
-    if(carrier.paused||carrier.ended){
-      Promise.resolve(carrier.play()).then(()=>watchRemoteApplyPlaybackState(reason+'.resumed',true)).catch(err=>diag('watch.carrier.resumeError',{reason,error:err}))
+    if(carrier.paused||carrier.ended||watchRemote.resumeAfterVisibility||watchRemote.lifecycleNeedsGesture){
+      void watchRemoteRecoverAfterLifecycle(reason,{fromGesture:false});
+      return
     }
-    watchRemoteApplyPlaybackState(reason)
+    watchRemoteApplyPlaybackState(reason);
+    watchRemoteSyncPosition(reason)
   }catch(err){diag('watch.carrier.healthError',{reason,error:err})}
 }
 function watchRemoteCommand(action){
@@ -5457,7 +5552,7 @@ function watchRemoteCommand(action){
   if(!watchRemote.active)return;
   if(WATCH_RING_LAB_ACTIVE){
     watchLab.commandCount++;
-    watchLab.lastCommand={action,atMono:now,deltaMs:commandDeltaMs};
+    watchLab.lastCommand={action,atMono:now,deltaMs:commandDeltaMs};if(WATCH_RING_LAB_MODE==='d')watchBufferLabEvent('command',{action});
     diag('watch.lab.command.probe',{action,count:watchLab.commandCount,labMode:WATCH_RING_LAB_MODE,technical:watchLabTechnicalSnapshot('command')});
     watchLabRefresh();
     return
@@ -5488,16 +5583,24 @@ function suspendWatchRemoteForCentral(){
   const shouldResume=!!(watchRemote.active||watchRemote.starting);
   watchRemote.resumeAfterCentral=shouldResume;
   if(!shouldResume)return false;
-  diag('watch.suspend.central',{active:watchRemote.active,starting:watchRemote.starting});
+  watchRemote.lifecycleLastState='central-suspended';
+  diag('watch.suspend.central',{active:watchRemote.active,starting:watchRemote.starting,sourceGeneration:watchRemote.sourceGeneration,carrier:watchRemoteCarrierDetails()});
+  try{watchBufferLabEvent('central.suspended',{})}catch(_){}
   stopWatchRemote('central',{preserveResume:true});
   return true
 }
 function resumeWatchRemoteFromGesture(){
   if(!watchRemote.resumeAfterCentral)return false;
-  watchRemote.resumeAfterCentral=false;
-  diag('watch.resume.requested',{capturePhase:state.capturePhase});
+  diag('watch.resume.requested',{capturePhase:state.capturePhase,sourceGeneration:watchRemote.sourceGeneration,carrier:watchRemoteCarrierDetails()});
   void startWatchRemote({allowOpening:true,resume:true}).then(started=>{
-    if(!started)diag('watch.resume.notStarted',{capturePhase:state.capturePhase})
+    watchRemote.resumeAfterCentral=!started;
+    if(started){
+      watchRemote.lifecycleLastState='central-resumed';
+      try{watchBufferLabEvent('central.resumed',{})}catch(_){}
+    }else{
+      diag('watch.resume.notStarted',{capturePhase:state.capturePhase});
+      toast('Toque novamente para reconectar o relógio','info',2400)
+    }
   });
   return true
 }
@@ -5505,12 +5608,14 @@ function stopWatchRemote(reason='manual',options={}){
   const preserveResume=!!options.preserveResume;
   const wasActive=watchRemote.active||watchRemote.starting;
   watchRemote.startSerial++;
+  watchRemote.lifecycleSerial++;
   watchRemote.active=false;watchRemote.starting=false;watchRemote.awaitingCapture=false;watchRemote.acceptedActions=[];watchRemote.lastCommandAt=0;
   watchRemote.activationPhase='idle';watchRemote.positionGateUntil=0;
+  watchRemote.lifecycleRecovering=false;watchRemote.lifecycleNeedsGesture=false;
+  if(!preserveResume){watchRemote.resumeAfterCentral=false;watchRemote.resumeAfterVisibility=false;watchRemote.lifecycleLastState='idle'}
   watchRemote.presentation='playing';watchRemote.lastAppliedPlaybackState=null;
   watchRemote.lastPositionSignature=null;watchRemote.positionFailed=false;watchRemote.positionSupportReported=false;
   watchLabResetCycle(reason);
-  if(!preserveResume)watchRemote.resumeAfterCentral=false;
   clearInterval(watchRemote.healthTimer);watchRemote.healthTimer=null;watchRemoteClearReadyTimer();
   clearTimeout(watchRemote.failureTimer);watchRemote.failureTimer=null;
   if(watchRemoteSupported()){
@@ -5526,7 +5631,7 @@ function stopWatchRemote(reason='manual',options={}){
       if(Number.isFinite(carrier.duration)&&carrier.duration>0)carrier.currentTime=0
     }catch(_){}
   }
-  diag('watch.activation.carrierRetained',{reason,carrierReady:watchRemote.carrierReady,carrier:watchRemoteCarrierDetails()});
+  diag('watch.activation.carrierRetained',{reason,preserveResume,carrierReady:watchRemote.carrierReady,sourceGeneration:watchRemote.sourceGeneration,carrier:watchRemoteCarrierDetails()});
   try{syncRemoteChip()}catch(_){}
   updateWatchRemoteUI();
   if(wasActive)diag('watch.stopped',{reason,preserveResume})
@@ -5542,6 +5647,8 @@ function startWatchRemote(options={}){
   watchRemote.awaitingCapture=allowOpening;
   watchRemote.activationAttempt++;
   watchRemote.activationPhase='preparing';
+  watchRemote.lifecycleLastState='activating';
+  watchRemote.lifecycleNeedsGesture=false;
   watchRemote.positionGateUntil=Infinity;
   updateWatchRemoteUI();
   const serial=++watchRemote.startSerial;
@@ -5550,23 +5657,21 @@ function startWatchRemote(options={}){
   try{
     if(!carrier)throw Error('Portador de mídia indisponível');
     watchRemote.lastPositionSignature=null;watchRemote.positionFailed=false;watchRemote.positionSupportReported=false;
-    watchRemote.acceptedActions=[];
-    for(const action of WATCH_REMOTE_ACTIONS){
-      try{navigator.mediaSession.setActionHandler(action,()=>watchRemoteCommand(action));watchRemote.acceptedActions.push(action)}
-      catch(err){diag('watch.action.unsupported',{action,error:err})}
-    }
-    if(!watchRemote.acceptedActions.length)throw Error('Nenhum comando de mídia disponível');
+    if(!watchRemoteBindActions('activation'))throw Error('Nenhum comando de mídia disponível');
     watchRemote.active=true;
     watchRemote.activationPhase='play-called';
-    diag('watch.activation.phase',{phase:'play-called',attempt:watchRemote.activationAttempt,resume,targetPercent:WATCH_ACTIVATION_TARGET_PERCENT,bufferPercent:watchRemotePositionSnapshot()?.progress??null,carrier:watchRemoteCarrierDetails()});
+    diag('watch.activation.phase',{phase:'play-called',attempt:watchRemote.activationAttempt,resume,targetPercent:WATCH_ACTIVATION_TARGET_PERCENT,bufferPercent:watchRemotePositionSnapshot()?.progress??null,carrier:watchRemoteCarrierDetails(),sourceGeneration:watchRemote.sourceGeneration});
     const playResult=carrier.play();
     return Promise.resolve(playResult).then(()=>{
       if(serial!==watchRemote.startSerial||!watchRemote.active)return false;
       watchRemote.starting=false;
       watchRemote.carrierReady=carrier.readyState>=1;
       watchRemote.activationPhase='playing';
+      watchRemote.lifecycleLastState='ready';
+      watchRemote.resumeAfterVisibility=false;
+      watchRemote.lifecycleNeedsGesture=false;
       watchRemote.positionGateUntil=performance.now()+260;
-      diag('watch.activation.phase',{phase:'playing',attempt:watchRemote.activationAttempt,elapsedMs:Math.round(performance.now()-startedAt),carrier:watchRemoteCarrierDetails()});
+      diag('watch.activation.phase',{phase:'playing',attempt:watchRemote.activationAttempt,elapsedMs:Math.round(performance.now()-startedAt),carrier:watchRemoteCarrierDetails(),sourceGeneration:watchRemote.sourceGeneration});
       if(allowOpening)watchRemoteShowOpening({syncPosition:false});else watchRemoteShowReady('activation',{syncPosition:false});
       watchRemoteApplyPlaybackState('start.play',true);
       clearInterval(watchRemote.healthTimer);
@@ -5577,23 +5682,173 @@ function startWatchRemote(options={}){
         watchRemote.positionGateUntil=0;
         watchRemote.activationPhase='stable';
         const applied=watchRemoteSyncPosition('activation.stable',true);
-        diag('watch.activation.phase',{phase:'position-applied',attempt:watchRemote.activationAttempt,applied,elapsedMs:Math.round(performance.now()-startedAt),carrier:watchRemoteCarrierDetails()})
+        diag('watch.activation.phase',{phase:'position-applied',attempt:watchRemote.activationAttempt,applied,elapsedMs:Math.round(performance.now()-startedAt),carrier:watchRemoteCarrierDetails(),sourceGeneration:watchRemote.sourceGeneration})
       },280);
-      diag('watch.started',{actions:watchRemote.acceptedActions,resume,awaitingCapture:watchRemote.awaitingCapture,ringProbe:WATCH_REMOTE_RING_PROBE,positionSupported:watchRemotePositionSupported(),labMode:WATCH_RING_LAB_MODE,activationTargetPercent:WATCH_ACTIVATION_TARGET_PERCENT,fullHeartbeatMs:WATCH_RING_FULL_HEARTBEAT_MS});
+      diag('watch.started',{actions:watchRemote.acceptedActions,resume,awaitingCapture:watchRemote.awaitingCapture,ringProbe:WATCH_REMOTE_RING_PROBE,positionSupported:watchRemotePositionSupported(),labMode:WATCH_RING_LAB_MODE,activationTargetPercent:WATCH_ACTIVATION_TARGET_PERCENT,fullHeartbeatMs:WATCH_RING_FULL_HEARTBEAT_MS,sourceGeneration:watchRemote.sourceGeneration});
+      try{watchBufferLabEvent(resume?'central.started':'activation.started',{resume})}catch(_){}
       return true
     }).catch(err=>{
       if(serial!==watchRemote.startSerial)return false;
-      diag('watch.start.error',{error:err,resume,phase:watchRemote.activationPhase,attempt:watchRemote.activationAttempt,elapsedMs:Math.round(performance.now()-startedAt),carrier:watchRemoteCarrierDetails()});
-      stopWatchRemote('start.error');
+      diag('watch.start.error',{error:err,resume,phase:watchRemote.activationPhase,attempt:watchRemote.activationAttempt,elapsedMs:Math.round(performance.now()-startedAt),carrier:watchRemoteCarrierDetails(),sourceGeneration:watchRemote.sourceGeneration});
+      stopWatchRemote('start.error',{preserveResume:resume});
       toast(failureText,'err',2800);
       return false
     })
   }catch(err){
     if(serial!==watchRemote.startSerial)return Promise.resolve(false);
-    diag('watch.start.error',{error:err,resume,phase:watchRemote.activationPhase,attempt:watchRemote.activationAttempt,elapsedMs:Math.round(performance.now()-startedAt),carrier:watchRemoteCarrierDetails()});
-    stopWatchRemote('start.error');
+    diag('watch.start.error',{error:err,resume,phase:watchRemote.activationPhase,attempt:watchRemote.activationAttempt,elapsedMs:Math.round(performance.now()-startedAt),carrier:watchRemoteCarrierDetails(),sourceGeneration:watchRemote.sourceGeneration});
+    stopWatchRemote('start.error',{preserveResume:resume});
     toast(failureText,'err',2800);
     return Promise.resolve(false)
+  }
+}
+function watchBufferLabEvent(event,details={}){
+  if(WATCH_RING_LAB_MODE!=='d')return;
+  if(event==='activation.started'){
+    watchBufferLab.activationStarted=true;
+    if(watchBufferLab.sourceGenerationAtStart===null){watchBufferLab.sourceGenerationAtStart=watchRemote.sourceGeneration;watchBufferLab.captureGenerationAtStart=state.captureGeneration}
+  }else if(event==='central.suspended'){
+    watchBufferLab.centralSuspended=true
+  }else if(event==='central.resumed'||event==='central.started'){
+    watchBufferLab.centralResumed=true;watchBufferLab.centralResumedAtEpoch=Date.now()
+  }else if(event==='lifecycle.hidden'){
+    watchBufferLab.hiddenSeen=true
+  }else if(event==='lifecycle.recovered'){
+    watchBufferLab.lifecycleRecovered=true;watchBufferLab.lifecycleRecoveredAtEpoch=Date.now()
+  }else if(event==='lifecycle.error'){
+    watchBufferLab.failures.push({event,details})
+  }else if(event==='command'){
+    watchBufferLab.commandSeen=true
+  }
+  if(watchBufferLab.sourceGenerationAtStart!==null&&watchRemote.sourceGeneration!==watchBufferLab.sourceGenerationAtStart)watchBufferLab.sourceStable=false;
+  diag('watch.bufferLab.event',{event,details,state:{...watchBufferLab},sourceGeneration:watchRemote.sourceGeneration,carrier:watchRemoteCarrierDetails()});
+  watchLabRefresh()
+}
+function watchBufferLabCurrentObservation(){
+  const duration=Number(state.duration)||0;
+  const full=duration>0&&Number(state.bufferSeconds)>=duration&&watchRemote.active&&state.capturePhase==='recording';
+  if(!full)return null;
+  if(!watchBufferLab.initialObserved)return 'initial';
+  const centralHasNewCapture=Number(state.captureGeneration)!==Number(watchBufferLab.captureGenerationAtStart)&&Number(state.lastChunkAt)>=Number(watchBufferLab.centralResumedAtEpoch||Infinity);
+  if(watchBufferLab.centralResumed&&!watchBufferLab.centralObserved&&centralHasNewCapture)return 'central';
+  const lifecycleHasFreshChunk=Number(state.lastChunkAt)>=Number(watchBufferLab.lifecycleRecoveredAtEpoch||Infinity);
+  if(watchBufferLab.lifecycleRecovered&&!watchBufferLab.lifecycleObserved&&lifecycleHasFreshChunk)return 'lifecycle';
+  return null
+}
+function watchBufferLabObserveRing(value){
+  const checkpoint=watchBufferLabCurrentObservation();
+  if(!checkpoint)return;
+  watchLab.manualRing=value;
+  watchLab.manualIcon='deferred';
+  document.querySelectorAll('[data-lab-ring]').forEach(button=>{
+    const selected=button.dataset.labRing===value;
+    button.classList.toggle('is-selected',selected);
+    button.setAttribute('aria-pressed',String(selected))
+  });
+  diag('watch.bufferLab.observation.selected',{checkpoint,ring:value,sourceGeneration:watchRemote.sourceGeneration,carrier:watchRemoteCarrierDetails()});
+  const note=$('watch-lab-note');
+  if(note)note.textContent='Toque em confirmar para registrar.';
+  vibrate(12);
+  watchLabRefresh()
+}
+function watchBufferLabConfirmObservation(){
+  const checkpoint=watchBufferLabCurrentObservation();
+  if(!checkpoint||!watchLab.manualRing)return;
+  const ring=watchLab.manualRing;
+  if(checkpoint==='initial'){watchBufferLab.initialObserved=true;watchBufferLab.initialRing=ring}
+  else if(checkpoint==='central'){watchBufferLab.centralObserved=true;watchBufferLab.centralRing=ring}
+  else if(checkpoint==='lifecycle'){watchBufferLab.lifecycleObserved=true;watchBufferLab.lifecycleRing=ring}
+  if(ring!=='100')watchBufferLab.failures.push({event:'ring-not-full',checkpoint,ring});
+  diag('watch.bufferLab.observation.confirmed',{checkpoint,ring,state:{...watchBufferLab},technical:watchLabTechnicalSnapshot('buffer-observation')});
+  watchLabClearSelection();
+  const note=$('watch-lab-note');
+  if(note)note.textContent='Observação registrada.';
+  toast('Observação registrada','ok',1500);
+  vibrate([20,35,20]);
+  if(watchLab.setOpen)watchLab.setOpen(false);
+  watchLabRefresh()
+}
+function watchBufferLabPassed(){
+  return !!(
+    watchBufferLab.initialObserved&&watchBufferLab.centralObserved&&watchBufferLab.lifecycleObserved&&
+    watchBufferLab.initialRing==='100'&&watchBufferLab.centralRing==='100'&&watchBufferLab.lifecycleRing==='100'&&
+    watchBufferLab.commandSeen&&watchBufferLab.sourceStable&&watchBufferLab.failures.length===0&&
+    watchRemote.active&&!watchRemote.lifecycleNeedsGesture
+  )
+}
+function watchBufferLabRefresh(){
+  const mode=$('watch-lab-mode'),buffer=$('watch-lab-buffer'),sent=$('watch-lab-sent'),carrierEl=$('watch-lab-carrier'),session=$('watch-lab-session'),retention=$('watch-lab-retention'),command=$('watch-lab-command'),panel=$('watch-lab-panel'),toggle=$('watch-lab-toggle'),step=$('watch-lab-step'),instruction=$('watch-lab-instruction'),detail=$('watch-lab-instruction-detail'),progress=$('watch-lab-progress'),primary=$('watch-lab-primary'),observation=$('watch-lab-observation'),confirm=$('watch-lab-confirm');
+  const duration=Number(state.duration)||0,available=Math.max(0,Math.min(Number(state.bufferSeconds)||0,duration)),percent=duration?Math.round(available/duration*100):0,full=duration>0&&available>=duration;
+  const dueCheckpoint=watchBufferLabCurrentObservation();
+  if(mode)mode.textContent='BUFFER · resistência';
+  if(buffer)buffer.textContent=watchLabFinite(available,2)+' / '+duration+'s · '+percent+'% · '+state.fragments.length+' frag.';
+  if(sent){const s=watchLab.lastSent;sent.textContent=s?s.position+' / '+s.duration+'s · '+s.reason:(watchLab.lastError||'ainda não enviado')}
+  const carrier=watchLabCarrierSnapshot();
+  if(carrierEl)carrierEl.textContent=carrier?(carrier.paused?'pausado':'tocando')+' · fonte '+watchRemote.sourceGeneration:'inativo';
+  if(session)session.textContent=watchRemote.lifecycleLastState+' · '+watchRemote.acceptedActions.length+' comandos'+(watchRemote.lifecycleNeedsGesture?' · precisa toque':'');
+  if(retention)retention.textContent='inicial '+(watchBufferLab.initialRing||'—')+' · central '+(watchBufferLab.centralRing||'—')+' · retorno '+(watchBufferLab.lifecycleRing||'—');
+  if(command)command.textContent=watchBufferLab.commandSeen?'recebido':'aguardando';
+  let stage=1,title='Ative o controle do relógio',description='Toque abaixo. A ativação acontece diretamente, sem abrir outra tela.',action='activate',actionLabel='Ativar no relógio',due=false;
+  if(watchBufferLab.centralSuspended&&!watchBufferLab.centralResumed){
+    stage=3;title='Na Central, toque em Continuar gravando';description='Esse toque deve reconectar o relógio e reiniciar a câmera usando a mesma fonte.';action='collapse';actionLabel='Recolher LAB'
+  }else if(!watchRemote.active){
+    stage=1
+  }else if(!watchBufferLab.initialObserved){
+    stage=2;
+    if(dueCheckpoint==='initial'){due=true;title='Confira o anel inicial';description='No relógio, o anel deve estar completamente cheio. Marque abaixo.';action='';actionLabel=''}
+    else{title='Aguarde o primeiro buffer completar';description='Recolha o LAB e acompanhe o anel do celular.';action='collapse';actionLabel='Recolher e acompanhar'}
+  }else if(!watchBufferLab.centralSuspended){
+    stage=3;title='Teste a Central de Replays';description='Toque abaixo. Depois, na Central, escolha Continuar gravando.';action='central';actionLabel='Abrir Central de Replays'
+  }else if(!watchBufferLab.centralObserved){
+    stage=3;
+    if(dueCheckpoint==='central'){due=true;title='Confira o anel após a Central';description='Ele deve voltar a 100% usando a mesma fonte de mídia.';action='';actionLabel=''}
+    else{title='Aguarde o buffer após a Central';description='A câmera e o anel devem recomeçar normalmente.';action='collapse';actionLabel='Recolher e acompanhar'}
+  }else if(!watchBufferLab.hiddenSeen){
+    stage=4;title='Agora saia do app por 15 segundos';description='Abra outro aplicativo, espere 15 segundos e volte ao Gravei. Não feche a aba.';action='collapse';actionLabel='Recolher antes de sair'
+  }else if(!watchBufferLab.lifecycleRecovered){
+    stage=4;
+    if(watchRemote.lifecycleNeedsGesture){title='Toque para concluir a reconexão';description='O iOS exigiu um gesto. Este toque reutilizará a mesma fonte.';action='recover';actionLabel='Reconectar relógio'}
+    else{title='Reconectando o relógio';description='Aguarde um instante. A recuperação é automática.';action='';actionLabel=''}
+  }else if(!watchBufferLab.lifecycleObserved){
+    stage=4;
+    if(dueCheckpoint==='lifecycle'){due=true;title='Confira o anel após retornar';description='O anel deve estar cheio e o controle ainda deve responder.';action='';actionLabel=''}
+    else{title='Aguarde o buffer após retornar';description='Se a câmera precisou retomar, o anel encherá novamente.';action='collapse';actionLabel='Recolher e acompanhar'}
+  }else if(!watchBufferLab.commandSeen){
+    stage=5;title='Teste um comando no relógio';description='Pressione uma vez Play, voltar ou avançar. O LAB não salvará replay.';action='collapse';actionLabel='Recolher e usar o relógio'
+  }else{
+    stage=6;
+    const passed=watchBufferLabPassed();
+    title=passed?'Buffer aprovado nos três fluxos':'Teste concluído com alerta';
+    description=passed?'Sessão inicial, Central e retorno ao app passaram sem trocar a fonte.':'Compartilhe o diagnóstico para localizar o ponto que falhou.';
+    action='share';actionLabel='Compartilhar diagnóstico'
+  }
+  if(step)step.textContent='Etapa '+stage+' de 6';
+  if(instruction)instruction.textContent=title;
+  if(detail)detail.textContent=description;
+  if(progress)progress.style.width=(stage/6*100)+'%';
+  if(primary){primary.hidden=!action;primary.dataset.action=action;primary.textContent=actionLabel}
+  if(observation)observation.hidden=!due;
+  if(confirm)confirm.disabled=!watchLab.manualRing;
+  const checkpoints=[
+    {label:'Inicial',done:watchBufferLab.initialObserved,current:stage===2},
+    {label:'Central',done:watchBufferLab.centralObserved,current:stage===3},
+    {label:'Retorno',done:watchBufferLab.lifecycleObserved,current:stage===4}
+  ];
+  document.querySelectorAll('[data-lab-checkpoint-index]').forEach(chip=>{
+    const index=Number(chip.dataset.labCheckpointIndex),item=checkpoints[index];
+    chip.hidden=!item;
+    if(item){chip.textContent=item.label;chip.classList.toggle('is-done',item.done);chip.classList.toggle('is-current',item.current)}
+  });
+  if(toggle){
+    let label='LAB BUFFER';
+    if(panel&&panel.hidden){
+      if(due)label+=' · OBSERVAR';
+      else if(stage===2||stage===3||stage===4)label+=' · '+percent+'%';
+      else if(stage===5)label+=' · COMANDO';
+      else if(stage===6)label+=' · ENVIAR'
+    }else label='Recolher LAB';
+    toggle.textContent=label;
+    toggle.classList.toggle('is-due',!!(panel&&panel.hidden&&due))
   }
 }
 function watchLabFinite(value,digits=3){
@@ -5628,7 +5883,7 @@ function watchLabTechnicalSnapshot(reason='sample'){
 }
 function watchLabRecordSent(snapshot,reason,now,heartbeat){
   watchLab.lastSent={atMono:Math.round(now),reason,heartbeat,duration:snapshot.duration,available:watchLabFinite(snapshot.available),position:watchLabFinite(snapshot.position),playbackRate:snapshot.playbackRate,progress:snapshot.progress,full:snapshot.full};
-  if(snapshot.full){if(!watchLab.fullSince){watchLab.fullSince=now;watchLab.checkpointIndex=0;watchLab.manualCheckpointIndex=0;watchLab.manualNotifiedIndex=-1;watchLab.manualRing=null;watchLab.manualIcon=null;watchLab.commandsAtFull=watchLab.commandCount;diag('watch.lab.retention.started',{labMode:WATCH_RING_LAB_MODE,technical:watchLabTechnicalSnapshot('full-start')})}}
+  if(snapshot.full){if(!watchLab.fullSince){if(WATCH_RING_LAB_MODE==='d'){watchBufferLab.fullCycles++;diag('watch.bufferLab.fullCycle',{cycle:watchBufferLab.fullCycles,sourceGeneration:watchRemote.sourceGeneration})}watchLab.fullSince=now;watchLab.checkpointIndex=0;watchLab.manualCheckpointIndex=0;watchLab.manualNotifiedIndex=-1;watchLab.manualRing=null;watchLab.manualIcon=null;watchLab.commandsAtFull=watchLab.commandCount;diag('watch.lab.retention.started',{labMode:WATCH_RING_LAB_MODE,technical:watchLabTechnicalSnapshot('full-start')})}}
   else if(watchLab.fullSince){diag('watch.lab.retention.ended',{reason:'buffer-not-full',elapsedSeconds:watchLabFinite((now-watchLab.fullSince)/1000,1),technical:watchLabTechnicalSnapshot('full-end')});watchLab.fullSince=0;watchLab.checkpointIndex=0;watchLab.manualCheckpointIndex=0;watchLab.manualNotifiedIndex=-1;watchLab.manualRing=null;watchLab.manualIcon=null}
   watchLabRefresh()
 }
@@ -5645,6 +5900,7 @@ function watchLabSample(){
 }
 function watchLabClearSelection(){watchLab.manualRing=null;watchLab.manualIcon=null;document.querySelectorAll('[data-lab-ring],[data-lab-icon]').forEach(button=>{button.classList.remove('is-selected');button.setAttribute('aria-pressed','false')})}
 function watchLabObservation(kind,value){
+  if(WATCH_RING_LAB_MODE==='d'){if(kind==='ring')watchBufferLabObserveRing(value);return}
   if(!WATCH_RING_LAB_ACTIVE||!watchLab.fullSince)return;const target=WATCH_RING_RETENTION_CHECKPOINTS[watchLab.manualCheckpointIndex],elapsed=(performance.now()-watchLab.fullSince)/1000;if(target===undefined||elapsed<target)return;
   if(kind==='ring')watchLab.manualRing=value;else if(kind==='icon')watchLab.manualIcon=value;else return;
   const selector=kind==='ring'?'[data-lab-ring]':'[data-lab-icon]',dataKey=kind==='ring'?'labRing':'labIcon';document.querySelectorAll(selector).forEach(button=>{const selected=button.dataset[dataKey]===value;button.classList.toggle('is-selected',selected);button.setAttribute('aria-pressed',String(selected))});
@@ -5652,11 +5908,13 @@ function watchLabObservation(kind,value){
   const note=$('watch-lab-note');if(note)note.textContent=watchLab.manualRing&&watchLab.manualIcon?'Tudo marcado. Confirme para avancar.':'Agora marque a outra pergunta.';vibrate(12);watchLabRefresh()
 }
 function watchLabConfirmObservation(){
+  if(WATCH_RING_LAB_MODE==='d'){watchBufferLabConfirmObservation();return}
   if(!WATCH_RING_LAB_ACTIVE||!watchLab.fullSince)return;const target=WATCH_RING_RETENTION_CHECKPOINTS[watchLab.manualCheckpointIndex],elapsed=(performance.now()-watchLab.fullSince)/1000;if(target===undefined||elapsed<target||!watchLab.manualRing||!watchLab.manualIcon)return;
   diag('watch.lab.checkpoint.observed',{checkpointSeconds:target,elapsedSeconds:watchLabFinite(elapsed,1),ring:watchLab.manualRing,icon:watchLab.manualIcon,technical:watchLabTechnicalSnapshot('manual-confirm')});watchLab.manualCheckpointIndex++;watchLab.manualNotifiedIndex=-1;watchLabClearSelection();const note=$('watch-lab-note');if(note)note.textContent='Observacao registrada.';toast('Observacao registrada','ok',1600);vibrate([20,35,20]);if(watchLab.setOpen)watchLab.setOpen(false);watchLabRefresh()
 }
 function watchLabRefresh(){
   if(!WATCH_RING_LAB_ACTIVE)return;
+  if(WATCH_RING_LAB_MODE==='d'){watchBufferLabRefresh();return}
   const mode=$('watch-lab-mode'),buffer=$('watch-lab-buffer'),sent=$('watch-lab-sent'),carrierEl=$('watch-lab-carrier'),session=$('watch-lab-session'),retention=$('watch-lab-retention'),command=$('watch-lab-command'),panel=$('watch-lab-panel'),toggle=$('watch-lab-toggle'),step=$('watch-lab-step'),instruction=$('watch-lab-instruction'),detail=$('watch-lab-instruction-detail'),progress=$('watch-lab-progress'),primary=$('watch-lab-primary'),observation=$('watch-lab-observation'),confirm=$('watch-lab-confirm');
   const duration=Number(state.duration)||0,available=Math.max(0,Math.min(Number(state.bufferSeconds)||0,duration)),percent=duration?Math.round(available/duration*100):0;
   if(mode){
@@ -5738,28 +5996,97 @@ function watchLabRefresh(){
   }
 }
 function watchLabInit(){
-  if(!WATCH_RING_LAB_ACTIVE)return;const root=$('watch-lab'),panel=$('watch-lab-panel'),toggle=$('watch-lab-toggle'),collapse=$('watch-lab-collapse'),primary=$('watch-lab-primary');if(!root||!panel||!toggle)return;
-  root.hidden=false;panel.hidden=false;toggle.setAttribute('aria-expanded','true');watchLab.setOpen=open=>{panel.hidden=!open;toggle.setAttribute('aria-expanded',String(open));watchLabRefresh()};toggle.onclick=()=>watchLab.setOpen(panel.hidden);if(collapse)collapse.onclick=()=>watchLab.setOpen(false);
-  if(primary)primary.onclick=()=>{const action=primary.dataset.action;if(action==='remote'){watchLab.setOpen(false);const chip=$('chip-remote');if(chip)chip.click()}else if(action==='collapse')watchLab.setOpen(false);else if(action==='share')$('watch-lab-share').click()};
-  document.querySelectorAll('[data-lab-ring]').forEach(button=>button.addEventListener('click',()=>watchLabObservation('ring',button.dataset.labRing)));document.querySelectorAll('[data-lab-icon]').forEach(button=>button.addEventListener('click',()=>watchLabObservation('icon',button.dataset.labIcon)));const confirm=$('watch-lab-confirm');if(confirm)confirm.onclick=watchLabConfirmObservation;
-  const share=$('watch-lab-share');if(share)share.onclick=()=>{diag('watch.lab.share.tap',{labMode:WATCH_RING_LAB_MODE,technical:watchLabTechnicalSnapshot('share')});GRAVEI_DIAG.share().catch(err=>diag('watch.lab.share.error',{error:err}))};diag('watch.lab.boot',{build:'v2.09a-watch-activation-lab',base:'v2.05-ring-probe',guided:true,labMode:WATCH_RING_LAB_MODE,activationTargetPercent:WATCH_ACTIVATION_TARGET_PERCENT,fullHeartbeatMs:WATCH_RING_FULL_HEARTBEAT_MS,href:location.href,playProbe:false});watchLab.sampleTimer=setInterval(watchLabSample,1000);watchLab.refreshTimer=setInterval(watchLabRefresh,500);watchLabRefresh()
+  if(!WATCH_RING_LAB_ACTIVE)return;
+  const root=$('watch-lab'),panel=$('watch-lab-panel'),toggle=$('watch-lab-toggle'),collapse=$('watch-lab-collapse'),primary=$('watch-lab-primary');
+  if(!root||!panel||!toggle)return;
+  root.hidden=false;panel.hidden=false;toggle.setAttribute('aria-expanded','true');
+  watchLab.setOpen=open=>{panel.hidden=!open;toggle.setAttribute('aria-expanded',String(open));watchLabRefresh()};
+  toggle.onclick=()=>watchLab.setOpen(panel.hidden);
+  if(collapse)collapse.onclick=()=>watchLab.setOpen(false);
+  if(WATCH_RING_LAB_MODE==='d'){
+    const headTitle=root.querySelector('.watch-lab-head strong');
+    if(headTitle)headTitle.textContent='Teste de resistência do buffer';
+    const iconTitle=$('watch-lab-icon-title'),iconButtons=$('watch-lab-icon-buttons'),observation=$('watch-lab-observation');
+    if(iconTitle)iconTitle.hidden=true;
+    if(iconButtons)iconButtons.hidden=true;
+    const ringTitle=observation&&observation.querySelector('h3');
+    if(ringTitle)ringTitle.textContent='Como está o anel no relógio?';
+    const note=$('watch-lab-note');
+    if(note)note.textContent='Marque apenas o preenchimento do anel.';
+    panel.setAttribute('aria-label','Teste de resistência do buffer no Apple Watch')
+  }
+  if(primary)primary.onclick=async()=>{
+    const action=primary.dataset.action;
+    if(action==='activate'){
+      watchLab.setOpen(false);
+      const started=await startWatchRemote();
+      if(started)toast('Controle do relógio ativo','ok',1800)
+    }else if(action==='central'){
+      watchLab.setOpen(false);
+      const chip=$('chip-count');
+      if(chip)chip.click()
+    }else if(action==='recover'){
+      watchLab.setOpen(false);
+      await watchRemoteRecoverAfterLifecycle('lab.gesture',{fromGesture:true})
+    }else if(action==='remote'){
+      watchLab.setOpen(false);
+      const chip=$('chip-remote');
+      if(chip)chip.click()
+    }else if(action==='collapse')watchLab.setOpen(false);
+    else if(action==='share')$('watch-lab-share').click()
+  };
+  document.querySelectorAll('[data-lab-ring]').forEach(button=>button.addEventListener('click',()=>watchLabObservation('ring',button.dataset.labRing)));
+  document.querySelectorAll('[data-lab-icon]').forEach(button=>button.addEventListener('click',()=>watchLabObservation('icon',button.dataset.labIcon)));
+  const confirm=$('watch-lab-confirm');
+  if(confirm)confirm.onclick=watchLabConfirmObservation;
+  const share=$('watch-lab-share');
+  if(share)share.onclick=()=>{
+    diag('watch.lab.share.tap',{labMode:WATCH_RING_LAB_MODE,bufferLab:{...watchBufferLab},bufferLabPassed:WATCH_RING_LAB_MODE==='d'?watchBufferLabPassed():null,technical:watchLabTechnicalSnapshot('share')});
+    GRAVEI_DIAG.share().catch(err=>diag('watch.lab.share.error',{error:err}))
+  };
+  diag('watch.lab.boot',{build:'v2.10-buffer-stability-candidate',base:'v2.05-ring-probe',guided:true,labMode:WATCH_RING_LAB_MODE,activationTargetPercent:WATCH_ACTIVATION_TARGET_PERCENT,fullHeartbeatMs:WATCH_RING_FULL_HEARTBEAT_MS,href:location.href,playProbe:false});
+  watchLab.sampleTimer=setInterval(watchLabSample,1000);
+  watchLab.refreshTimer=setInterval(watchLabRefresh,500);
+  watchLabRefresh()
 }
 const watchLabCarrier=$('watch-carrier');
 for(const eventName of ['loadedmetadata','play','playing','pause','ended','waiting','stalled','error']){
   watchLabCarrier.addEventListener(eventName,()=>{if(WATCH_RING_LAB_ACTIVE)diag('watch.lab.carrier.event',{event:eventName,technical:watchLabTechnicalSnapshot('carrier-event')})})
 }
-if(WATCH_RING_LAB_MODE==='c')void watchRemotePreloadCarrier('boot');
+void watchRemotePreloadCarrier('boot');
 watchLabInit();
-$('watch-carrier').addEventListener('pause',()=>{if(watchRemote.active)setTimeout(()=>watchRemoteEnsureCarrier('pause'),0)});
-
-$('watch-carrier').addEventListener('ended',()=>{if(watchRemote.active)watchRemoteEnsureCarrier('ended')});
+$('watch-carrier').addEventListener('pause',()=>{
+  if(!watchRemote.active)return;
+  if(document.visibilityState==='hidden')watchRemoteNoteHidden('carrier.pause.hidden');
+  else{watchRemote.resumeAfterVisibility=true;setTimeout(()=>void watchRemoteRecoverAfterLifecycle('carrier.pause'),0)}
+});
+$('watch-carrier').addEventListener('ended',()=>{
+  if(!watchRemote.active)return;
+  watchRemote.resumeAfterVisibility=true;
+  if(document.visibilityState!=='hidden')void watchRemoteRecoverAfterLifecycle('carrier.ended')
+});
 $('pair-watch-toggle').onclick=async()=>{
   vibrate(20);
   if(watchRemote.active){stopWatchRemote('user');toast('Controle do relógio desativado','info',1800);return}
   const started=await startWatchRemote();
   if(started){closePair();toast('Controle do relógio ativo','ok',2200)}
 };
-window.addEventListener('pagehide',()=>stopWatchRemote('page.hide'));
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden')watchRemoteNoteHidden('visibility.hidden');
+  else if(watchRemote.active&&(watchRemote.resumeAfterVisibility||watchRemote.lifecycleNeedsGesture))void watchRemoteRecoverAfterLifecycle('visibility.visible')
+});
+window.addEventListener('pagehide',event=>{
+  if(event.persisted){watchRemoteNoteHidden('pagehide.persisted');return}
+  stopWatchRemote('page.hide')
+});
+window.addEventListener('pageshow',event=>{
+  if(!event.persisted||!watchRemote.active)return;
+  watchRemote.resumeAfterVisibility=true;
+  void watchRemoteRecoverAfterLifecycle('pageshow.persisted')
+});
+document.addEventListener('pointerdown',()=>{
+  if(watchRemote.active&&watchRemote.lifecycleNeedsGesture)void watchRemoteRecoverAfterLifecycle('gesture',{fromGesture:true})
+},{capture:true});
 /* ==================== CONTROLE REMOTO ====================
    Módulo isolado e à prova de falha: a biblioteca (PeerJS) é
    carregada sob demanda; sem internet ou com qualquer erro,
