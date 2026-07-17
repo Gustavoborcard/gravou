@@ -195,7 +195,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 #chip-remote:active{transform:scale(.95)}
 #chip-remote svg{width:22px;height:22px}
 
-/* overlay de pareamento v2.03 */
+/* overlay de pareamento v2.05-ring-probe */
  #pair{
    position:fixed;inset:0;z-index:30;display:none;align-items:flex-end;justify-content:center;
    padding-top:calc(var(--safe-t) + 12px);background:rgba(0,0,0,.64)
@@ -981,7 +981,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v2.03-buffer-phase2";
+  const VERSION = "v2.05-full98-probe";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -2842,10 +2842,9 @@ function setSaveRingProgress(percent){
   if(snap)ring.classList.add("ring-snap");
   ring.style.strokeDashoffset=String(100-next);
   ring.dataset.progress=String(next);
-  watchRemotePublishBufferProgress(next,'phone.ring');
   if(snap){void ring.getBoundingClientRect();ring.classList.remove("ring-snap")}
 }
-function startRing(){clearInterval(state.timerId);state.timerId=setInterval(()=>{const avail=Math.min(state.bufferSeconds,state.duration);setSaveRingProgress((avail/state.duration)*100);if(state.active&&document.visibilityState==='visible'&&state.captureRec&&state.captureRec.state==='recording'&&Date.now()-state.lastChunkAt>6500){restartCaptureRecorder("ring.stale");toast('Gravação retomada','info',2400)}},250)}
+function startRing(){clearInterval(state.timerId);state.timerId=setInterval(()=>{const avail=Math.min(state.bufferSeconds,state.duration);setSaveRingProgress((avail/state.duration)*100);watchRemoteSyncPosition('ring');if(state.active&&document.visibilityState==='visible'&&state.captureRec&&state.captureRec.state==='recording'&&Date.now()-state.lastChunkAt>6500){restartCaptureRecorder("ring.stale");toast('Gravação retomada','info',2400)}},250)}
 
 function flashOK(){
   const f = $("flash");
@@ -5075,17 +5074,14 @@ async function deliver(blob, name){
    Usa uma faixa de audio praticamente inaudivel apenas para manter
    uma sessao de midia reconhecivel por relogios. Os comandos chamam
    o mesmo saveReplay() do botao principal; nao existe segundo buffer. */
-const WATCH_BUFFER_PHASE2 = new URLSearchParams(location.search).get('watchbuffer') === '1';
-const WATCH_BUFFER_MIN_INTERVAL_MS = 600;
-const WATCH_BUFFER_MAX_FILL_PERCENT = 97.5;
-const WATCH_BUFFER_SLOWDOWN_PERCENT = 95;
-const WATCH_BUFFER_PROTECTED_RATE = 0.0001;
+const WATCH_REMOTE_PLAY_READY_PROBE = new URLSearchParams(location.search).get('watchplay') === '1';
+const WATCH_REMOTE_RING_PROBE = new URLSearchParams(location.search).get('watchring') === '1';
 const WATCH_REMOTE_ACTIONS = ['play','pause','previoustrack','nexttrack'];
 const watchRemote = {
   active:false, starting:false, acceptedActions:[], carrierUrl:null,
   healthTimer:null, readyTimer:null, failureTimer:null, lastCommandAt:0,
   resumeAfterCentral:false, awaitingCapture:false, startSerial:0,
-  carrierReady:false, lastPhoneBufferPercent:0, lastPositionAt:0,
+  presentation:'playing', lastAppliedPlaybackState:null,
   lastPositionSignature:null, positionFailed:false, positionSupportReported:false
 };
 
@@ -5095,37 +5091,33 @@ function watchRemoteSupported(){
 function watchRemotePositionSupported(){
   return !!(watchRemoteSupported() && typeof navigator.mediaSession.setPositionState === 'function');
 }
-function watchRemoteBufferSnapshot(phonePercent){
-  const numericPercent=Number(phonePercent),numericDuration=Number(state.duration);
-  const normalizedPercent=Number.isFinite(numericPercent)?Math.max(0,Math.min(100,numericPercent)):0;
-  if(!Number.isFinite(numericDuration)||numericDuration<=0)return null;
-  const watchPercent=Math.min(normalizedPercent,WATCH_BUFFER_MAX_FILL_PERCENT);
-  const playbackRate=watchPercent>=WATCH_BUFFER_SLOWDOWN_PERCENT?WATCH_BUFFER_PROTECTED_RATE:1;
+function watchRemotePositionSnapshot(){
+  const duration=Number(state.duration),rawAvailable=Number(state.bufferSeconds);
+  if(!Number.isFinite(duration)||duration<=0)return null;
+  const available=Number.isFinite(rawAvailable)?Math.max(0,Math.min(rawAvailable,duration)):0;
+  const full=available>=duration;
   return {
-    duration:numericDuration,
-    phonePercent:normalizedPercent,
-    watchPercent,
-    position:numericDuration*(watchPercent/100),
-    playbackRate
-  }
+    duration,
+    available,
+    position: full ? duration * 0.98 : available,
+    playbackRate: full ? 0.0001 : 1,
+    full,
+    progress:Number(((available/duration)*100).toFixed(1))
+  };
 }
-function watchRemotePublishBufferProgress(phonePercent,reason='buffer',force=false){
-  const numeric=Number(phonePercent);
-  watchRemote.lastPhoneBufferPercent=Number.isFinite(numeric)?Math.max(0,Math.min(100,numeric)):0;
-  if(!WATCH_BUFFER_PHASE2||!watchRemote.active||!watchRemote.carrierReady)return false;
+function watchRemoteSyncPosition(reason='buffer',force=false){
+  if(!WATCH_REMOTE_RING_PROBE||!watchRemote.active)return false;
   if(watchRemote.positionFailed)return false;
   if(!watchRemotePositionSupported()){
     if(!watchRemote.positionSupportReported){
       watchRemote.positionSupportReported=true;
-      diag('watch.buffer.unsupported',{reason,phase:'phase2'})
+      diag('watch.position.unsupported',{reason,probe:true});
     }
-    return false
+    return false;
   }
-  const snapshot=watchRemoteBufferSnapshot(watchRemote.lastPhoneBufferPercent);
+  const snapshot=watchRemotePositionSnapshot();
   if(!snapshot)return false;
-  const now=performance.now();
-  if(!force&&now-watchRemote.lastPositionAt<WATCH_BUFFER_MIN_INTERVAL_MS)return false;
-  const signature=[snapshot.duration.toFixed(3),snapshot.watchPercent.toFixed(2),snapshot.playbackRate].join('|');
+  const signature=[snapshot.duration.toFixed(3),snapshot.position.toFixed(3),snapshot.playbackRate,snapshot.full].join('|');
   if(!force&&signature===watchRemote.lastPositionSignature)return true;
   try{
     navigator.mediaSession.setPositionState({
@@ -5133,44 +5125,32 @@ function watchRemotePublishBufferProgress(phonePercent,reason='buffer',force=fal
       playbackRate:snapshot.playbackRate,
       position:snapshot.position
     });
-    watchRemote.lastPositionAt=now;
     watchRemote.lastPositionSignature=signature;
-    diag('watch.buffer.applied',{
+    diag('watch.position.applied',{
       reason,
-      phase:'phase2',
       duration:snapshot.duration,
-      phonePercent:Number(snapshot.phonePercent.toFixed(2)),
-      watchPercent:Number(snapshot.watchPercent.toFixed(2)),
+      available:Number(snapshot.available.toFixed(3)),
       position:Number(snapshot.position.toFixed(3)),
       playbackRate:snapshot.playbackRate,
-      force:!!force
+      progress:snapshot.progress,
+      full:snapshot.full,
+      fragments:state.fragments.length,
+      saving:state.saving
     });
-    return true
+    return true;
   }catch(err){
     watchRemote.positionFailed=true;
-    diag('watch.buffer.error',{reason,phase:'phase2',error:err});
-    return false
+    diag('watch.position.error',{reason,probe:true,error:err,snapshot});
+    return false;
   }
 }
-function watchRemoteInvalidateBufferPosition(reason='metadata'){
+function watchRemoteClearPosition(reason='clear'){
   watchRemote.lastPositionSignature=null;
-  if(watchRemote.carrierReady){
-    watchRemotePublishBufferProgress(watchRemote.lastPhoneBufferPercent,reason,true)
-  }
-}
-function watchRemoteClearBufferPosition(reason='clear'){
-  watchRemote.lastPositionAt=0;
-  watchRemote.lastPositionSignature=null;
-  watchRemote.positionFailed=false;
-  watchRemote.positionSupportReported=false;
-  watchRemote.carrierReady=false;
-  if(!WATCH_BUFFER_PHASE2||!watchRemotePositionSupported())return;
+  if(!WATCH_REMOTE_RING_PROBE||!watchRemotePositionSupported())return;
   try{
     navigator.mediaSession.setPositionState();
-    diag('watch.buffer.cleared',{reason,phase:'phase2'})
-  }catch(err){
-    diag('watch.buffer.clearError',{reason,phase:'phase2',error:err})
-  }
+    diag('watch.position.cleared',{reason});
+  }catch(err){diag('watch.position.clearError',{reason,error:err})}
 }
 function makeWatchCarrierUrl(){
   const sampleRate=8000,seconds=8,samples=sampleRate*seconds,bytesPerSample=2;
@@ -5184,8 +5164,31 @@ function makeWatchCarrierUrl(){
   for(let i=0;i<samples;i++)view.setInt16(44+i*2,Math.round(Math.sin(2*Math.PI*440*i/sampleRate)),true);
   return URL.createObjectURL(new Blob([buffer],{type:'audio/wav'}));
 }
-function watchRemoteSetMetadata(title,artist,album){
+function watchRemoteDesiredPlaybackState(presentation='busy'){
+  return WATCH_REMOTE_PLAY_READY_PROBE&&(presentation==='ready'||presentation==='saved'||presentation==='error')?'paused':'playing'
+}
+function watchRemoteApplyPlaybackState(reason='state',force=false){
   if(!watchRemote.active||!watchRemoteSupported())return false;
+  const desired=watchRemote.presentation||'playing';
+  try{
+    const before=navigator.mediaSession.playbackState;
+    navigator.mediaSession.playbackState=desired;
+    const after=navigator.mediaSession.playbackState;
+    const changed=watchRemote.lastAppliedPlaybackState!==desired||before!==desired||after!==desired;
+    watchRemote.lastAppliedPlaybackState=desired;
+    if(force||changed){
+      const carrier=$('watch-carrier');
+      diag('watch.playback.presentation',{reason,probe:WATCH_REMOTE_PLAY_READY_PROBE,desired,before,after,carrierPaused:carrier?carrier.paused:null,carrierEnded:carrier?carrier.ended:null})
+    }
+    return after===desired
+  }catch(err){
+    diag('watch.playback.presentationError',{reason,probe:WATCH_REMOTE_PLAY_READY_PROBE,desired,error:err});
+    return false
+  }
+}
+function watchRemoteSetMetadata(title,artist,album,presentation='busy'){
+  if(!watchRemote.active||!watchRemoteSupported())return false;
+  watchRemote.presentation=watchRemoteDesiredPlaybackState(presentation);
   const base={title,artist,album};
   try{
     navigator.mediaSession.metadata=new MediaMetadata({...base,artwork:[{src:'gravei-watch-artwork-512.png?v=1',sizes:'512x512',type:'image/png'}]});
@@ -5195,8 +5198,8 @@ function watchRemoteSetMetadata(title,artist,album){
     }
     diag('watch.metadata.artworkFallback',{error:err});
   }
-  try{navigator.mediaSession.playbackState='playing'}catch(_){}
-  watchRemoteInvalidateBufferPosition('metadata');
+  watchRemoteApplyPlaybackState('metadata.'+presentation,true);
+  watchRemoteSyncPosition('metadata.'+presentation,true);
   return true
 }
 function watchRemoteClearReadyTimer(){clearTimeout(watchRemote.readyTimer);watchRemote.readyTimer=null}
@@ -5210,29 +5213,29 @@ function watchRemoteScheduleReady(delay=2600){
 function watchRemoteShowReady(reason='state'){
   if(!watchRemote.active||state.saving)return;
   watchRemoteClearReadyTimer();
-  watchRemoteSetMetadata('Gravei · Replay','\u23EA\uFE0E  \u23EF\uFE0E  \u23E9\uFE0E salvam','Câmera ativa · '+state.duration+'s');
+  watchRemoteSetMetadata('Gravei · Replay','\u23EA\uFE0E  \u23EF\uFE0E  \u23E9\uFE0E salvam','Câmera ativa · '+state.duration+'s','ready');
   diag('watch.metadata.ready',{reason,duration:state.duration})
 }
 function watchRemoteShowSaving(duration=state.duration){
   if(!watchRemote.active)return;
   watchRemoteClearReadyTimer();
-  watchRemoteSetMetadata('Gravei · Salvando','Aguarde','Replay de '+duration+'s')
+  watchRemoteSetMetadata('Gravei · Salvando','Aguarde','Replay de '+duration+'s','busy')
 }
 function watchRemoteShowSaved(duration=state.duration,count=null){
   if(!watchRemote.active)return;
   const album=Number.isFinite(count)?count+' '+(count===1?'replay':'replays'):'Replay guardado';
-  watchRemoteSetMetadata('Replay salvo',duration+'s guardados',album);
+  watchRemoteSetMetadata('Replay salvo',duration+'s guardados',album,'saved');
   watchRemoteScheduleReady(2800)
 }
 function watchRemoteShowError(){
   if(!watchRemote.active)return;
-  watchRemoteSetMetadata('Erro ao salvar','Confira o iPhone','Gravei');
+  watchRemoteSetMetadata('Erro ao salvar','Confira o iPhone','Gravei','error');
   watchRemoteScheduleReady(3200)
 }
 function watchRemoteShowOpening(){
   if(!watchRemote.active)return;
   watchRemoteClearReadyTimer();
-  watchRemoteSetMetadata('Gravei · Replay','Abrindo câmera','Aguarde')
+  watchRemoteSetMetadata('Gravei · Replay','Abrindo câmera','Aguarde','busy')
 }
 function watchRemoteCaptureReady(){
   if(!watchRemote.active)return;
@@ -5262,8 +5265,10 @@ function watchRemoteCaptureCancelled(reason='capture.cancelled'){
   const carrier=$('watch-carrier');
   if(!carrier)return;
   try{
-    if(carrier.paused||carrier.ended)carrier.play().catch(err=>diag('watch.carrier.resumeError',{reason,error:err}));
-    navigator.mediaSession.playbackState='playing'
+    if(carrier.paused||carrier.ended){
+      Promise.resolve(carrier.play()).then(()=>watchRemoteApplyPlaybackState(reason+'.resumed',true)).catch(err=>diag('watch.carrier.resumeError',{reason,error:err}))
+    }
+    watchRemoteApplyPlaybackState(reason)
   }catch(err){diag('watch.carrier.healthError',{reason,error:err})}
 }
 function watchRemoteCommand(action){
@@ -5314,13 +5319,15 @@ function resumeWatchRemoteFromGesture(){
 function stopWatchRemote(reason='manual',options={}){
   const preserveResume=!!options.preserveResume;
   const wasActive=watchRemote.active||watchRemote.starting;
-  watchRemoteClearBufferPosition(reason);
   watchRemote.startSerial++;
   watchRemote.active=false;watchRemote.starting=false;watchRemote.awaitingCapture=false;watchRemote.acceptedActions=[];watchRemote.lastCommandAt=0;
+  watchRemote.presentation='playing';watchRemote.lastAppliedPlaybackState=null;
+  watchRemote.lastPositionSignature=null;watchRemote.positionFailed=false;watchRemote.positionSupportReported=false;
   if(!preserveResume)watchRemote.resumeAfterCentral=false;
   clearInterval(watchRemote.healthTimer);watchRemote.healthTimer=null;watchRemoteClearReadyTimer();
   clearTimeout(watchRemote.failureTimer);watchRemote.failureTimer=null;
   if(watchRemoteSupported()){
+    watchRemoteClearPosition(reason);
     for(const action of WATCH_REMOTE_ACTIONS){try{navigator.mediaSession.setActionHandler(action,null)}catch(_){}}
     try{navigator.mediaSession.metadata=null}catch(_){}
     try{navigator.mediaSession.playbackState='none'}catch(_){}
@@ -5343,9 +5350,8 @@ function startWatchRemote(options={}){
   watchRemote.starting=true;watchRemote.awaitingCapture=allowOpening;updateWatchRemoteUI();
   const serial=++watchRemote.startSerial;
   const carrier=$('watch-carrier');
-  watchRemote.carrierReady=false;watchRemote.lastPositionAt=0;watchRemote.lastPositionSignature=null;
-  watchRemote.positionFailed=false;watchRemote.positionSupportReported=false;
   try{
+    watchRemote.lastPositionSignature=null;watchRemote.positionFailed=false;watchRemote.positionSupportReported=false;
     watchRemote.acceptedActions=[];
     for(const action of WATCH_REMOTE_ACTIONS){
       try{navigator.mediaSession.setActionHandler(action,()=>watchRemoteCommand(action));watchRemote.acceptedActions.push(action)}
@@ -5360,12 +5366,11 @@ function startWatchRemote(options={}){
     return Promise.resolve(playResult).then(()=>{
       if(serial!==watchRemote.startSerial||!watchRemote.active)return false;
       watchRemote.starting=false;
-      watchRemote.carrierReady=true;
-      watchRemotePublishBufferProgress(watchRemote.lastPhoneBufferPercent,'start.play',true);
+      watchRemoteApplyPlaybackState('start.play',true);
       clearInterval(watchRemote.healthTimer);
       watchRemote.healthTimer=setInterval(()=>watchRemoteEnsureCarrier('interval'),2500);
       syncRemoteChip();updateWatchRemoteUI();
-      diag('watch.started',{actions:watchRemote.acceptedActions,resume,awaitingCapture:watchRemote.awaitingCapture,bufferPhase2:WATCH_BUFFER_PHASE2,positionSupported:watchRemotePositionSupported()});
+      diag('watch.started',{actions:watchRemote.acceptedActions,resume,awaitingCapture:watchRemote.awaitingCapture,ringProbe:WATCH_REMOTE_RING_PROBE,positionSupported:watchRemotePositionSupported()});
       return true
     }).catch(err=>{
       if(serial!==watchRemote.startSerial)return false;
