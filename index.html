@@ -163,7 +163,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
   display:flex;align-items:center;justify-content:center;gap:10px;z-index:5;pointer-events:none;
 }
 .badge{
-  display:flex;align-items:center;gap:8px;background:rgba(18,18,18,.88);
+  display:flex;align-items:center;gap:8px;min-height:44px;box-sizing:border-box;background:rgba(18,18,18,.88);
   border:1px solid rgba(255,255,255,.12);
   border-radius:999px;padding:8px 14px;font-size:14px;font-weight:700;
 }
@@ -193,7 +193,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 }
 #chip-remote.lit{color:var(--accent);border-color:rgba(255,59,48,.55)}
 #chip-remote:active{transform:scale(.95)}
-#chip-remote svg{width:22px;height:22px}
+#btn-flip svg,#chip-count svg,#chip-remote svg{width:22px;height:22px}
 
 /* overlay de pareamento v2.06 */
  #pair{
@@ -488,8 +488,8 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .replay-card:active{transform:scale(.992)}
 .replay-card.favorite-removing{opacity:0;transform:scale(.97);transition:opacity .16s ease,transform .16s ease}
 .replay-card.is-selected{border-color:var(--rec);box-shadow:0 0 0 2px rgba(255,59,48,.6),0 8px 24px rgba(0,0,0,.2)}
-.replay-card-select{position:absolute;top:10px;right:10px;z-index:4;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:2px solid rgba(255,255,255,.78);border-radius:50%;background:rgba(0,0,0,.48);color:#fff;opacity:0;transform:scale(.88);transition:opacity .14s ease,transform .14s ease,background .14s ease}
-.replay-card-select svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;opacity:0}
+.replay-card-select{position:absolute;top:10px;left:10px;right:auto;z-index:4;display:flex;align-items:center;justify-content:center;width:28px;height:28px;border:1.5px solid rgba(255,255,255,.78);border-radius:50%;background:rgba(0,0,0,.48);color:#fff;opacity:0;transform:scale(.88);transition:opacity .14s ease,transform .14s ease,background .14s ease}
+.replay-card-select svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;opacity:0}
 .selection-mode .replay-card-select{opacity:1;transform:scale(1)}
 .selection-mode .replay-card-favorite{pointer-events:none}
 .replay-card.is-selected .replay-card-select{background:var(--rec);border-color:var(--rec)}
@@ -622,10 +622,9 @@ a{color:var(--accent)}
   <video id="cam" autoplay playsinline muted></video>
   <div id="shade"></div>
   <div class="rec-top">
-    <div class="badge"><span class="rec-dot"></span>Gravando</div>
+    <div class="badge" aria-label="Gravando"><span class="rec-dot"></span>REC</div>
     <button type="button" class="badge time-chip" id="chip-dur" aria-label="Alterar duração do replay" aria-haspopup="dialog" aria-expanded="false">
       <span id="chip-dur-value">20s</span>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="7 10 12 15 17 10"/></svg>
     </button>
     <button class="badge" id="chip-count"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg><span id="count-n">0</span></button>
     <button class="badge" id="chip-remote" aria-label="Controle remoto" aria-haspopup="dialog" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><g transform="rotate(-8 10.5 13)" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="4.2" y="4.6" width="12.4" height="16.8" rx="3.4"/><circle cx="10.4" cy="9.2" r="1.6"/><circle cx="8.2" cy="14.1" r=".82" fill="currentColor" stroke="none"/><circle cx="12.6" cy="14.1" r=".82" fill="currentColor" stroke="none"/><path d="M8.2 17.7h4.4"/></g><path d="M17.1 6.3a3 3 0 0 1 1.8 1.8M17.7 3.5a5.6 5.6 0 0 1 3.3 3.3" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></svg></button>
@@ -981,7 +980,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v2.06";
+  const VERSION = "v2.07";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
