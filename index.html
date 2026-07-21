@@ -206,7 +206,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 #chip-remote:active{transform:scale(.95)}
 #btn-flip svg,#chip-count svg,#chip-remote svg{width:22px;height:22px}
 #chip-quality{pointer-events:auto;cursor:pointer;font:inherit;font-size:14px;font-weight:800;color:var(--text-dim)}
-#chip-quality.active{color:#fff;background:var(--rec);border-color:var(--rec)}
+#chip-quality.active{color:var(--accent);border-color:rgba(255,59,48,.55)}
 #chip-quality[hidden]{display:none!important}
 #chip-quality:active{transform:scale(.95)}
 @media (max-width:340px){.quality-lab .rec-top .badge{padding-left:10px;padding-right:10px}}
@@ -464,6 +464,8 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .central-preview-card.has-thumb .central-preview-visual{background:#000}
 .central-preview-card.has-thumb .central-preview-mark{display:none}
 .central-preview-duration{position:absolute;left:7px;bottom:7px;z-index:2;border-radius:6px;padding:4px 6px;background:rgba(0,0,0,.74);color:#fff;font-size:11px;font-weight:800;line-height:1}
+.replay-quality-badge{position:absolute;z-index:4;display:inline-flex;align-items:center;justify-content:center;border:1px solid rgba(255,59,48,.64);background:rgba(17,17,17,.84);color:var(--accent);font-family:'Inter',sans-serif;font-weight:850;line-height:1;letter-spacing:.04em;pointer-events:none}
+.central-preview-quality{top:7px;right:7px;min-width:25px;min-height:21px;padding:3px 5px;border-radius:6px;font-size:9px}
 .central-preview-more{display:flex;align-items:center;justify-content:center;border-color:var(--line);background:#171717;color:rgba(250,250,247,.68);font-size:18px;font-weight:800}
 .central-empty{min-height:116px;margin-top:9px;border:1px dashed var(--line);border-radius:12px;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center;color:var(--text-dim);font-size:14px;line-height:1.45}
 .central-empty[hidden]{display:none}
@@ -512,6 +514,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 .replay-card.favorite-removing{opacity:0;transform:scale(.97);transition:opacity .16s ease,transform .16s ease}
 .replay-card.is-selected{border-color:var(--rec);box-shadow:0 0 0 2px rgba(255,59,48,.6),0 8px 24px rgba(0,0,0,.2)}
 .replay-card-select{position:absolute;top:10px;left:10px;right:auto;z-index:4;display:flex;align-items:center;justify-content:center;width:28px;height:28px;border:1.5px solid rgba(255,255,255,.78);border-radius:50%;background:rgba(0,0,0,.48);color:#fff;opacity:0;transform:scale(.88);transition:opacity .14s ease,transform .14s ease,background .14s ease}
+.replay-card-quality{top:10px;right:10px;min-width:34px;min-height:25px;padding:4px 7px;border-radius:8px;font-size:11px}
 .replay-card-select svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;opacity:0}
 .selection-mode .replay-card-select{opacity:1;transform:scale(1)}
 .selection-mode .replay-card-favorite{pointer-events:none}
@@ -1025,7 +1028,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v2.08";
+  const VERSION = "v2.09";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -1314,9 +1317,61 @@ function replayItemSize(item){
   return 0;
 }
 
-function makeReplayMeta(replayId, item, requestedDuration = null){
+function qualityMetric(value, integer = false){
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return null;
+  return integer ? Math.round(number) : Math.round(number * 100) / 100;
+}
+
+function dimensionsProveHighQuality(width, height){
+  const w = qualityMetric(width, true), h = qualityMetric(height, true);
+  return !!(w && h && Math.max(w, h) >= 1920 && Math.min(w, h) >= 1080);
+}
+
+function normalizeReplayQualityMeta(input = null){
+  const source = input && typeof input === "object" ? input : {};
+  const captureWidth = qualityMetric(source.captureWidth, true);
+  const captureHeight = qualityMetric(source.captureHeight, true);
+  const hasDimensions = !!(captureWidth && captureHeight);
   return {
-    schemaVersion: 1,
+    qualityRequested: source.qualityRequested === "high" || source.qualityRequested === "balanced" ? source.qualityRequested : null,
+    captureWidth,
+    captureHeight,
+    captureFrameRate: qualityMetric(source.captureFrameRate),
+    videoBitrateRequested: qualityMetric(source.videoBitrateRequested, true),
+    qualityDelivered: hasDimensions ? (dimensionsProveHighQuality(captureWidth, captureHeight) ? "high" : "balanced") : "unknown"
+  };
+}
+
+function captureReplayQualitySnapshot(){
+  let settings = {};
+  try{
+    const track = state.stream && state.stream.getVideoTracks ? state.stream.getVideoTracks()[0] : null;
+    settings = track && typeof track.getSettings === "function" ? (track.getSettings() || {}) : {};
+  }catch(_){ settings = {}; }
+  return normalizeReplayQualityMeta({
+    qualityRequested: normalizeQualityProfile(state.qualityProfile),
+    captureWidth: settings.width,
+    captureHeight: settings.height,
+    captureFrameRate: settings.frameRate,
+    videoBitrateRequested: 2500000
+  });
+}
+
+function qualityMetaFromDecodedVideo(meta, width, height){
+  return normalizeReplayQualityMeta({
+    qualityRequested: meta && meta.qualityRequested,
+    captureWidth: width,
+    captureHeight: height,
+    captureFrameRate: meta && meta.captureFrameRate,
+    videoBitrateRequested: meta && meta.videoBitrateRequested
+  });
+}
+
+function makeReplayMeta(replayId, item, requestedDuration = null, qualityMeta = null){
+  const quality = normalizeReplayQualityMeta(qualityMeta);
+  return {
+    schemaVersion: 2,
     replayId,
     name: item && item.name ? item.name : "gravei-replay-" + replayId + ".mp4",
     type: item && item.type ? item.type : "video/mp4",
@@ -1327,6 +1382,12 @@ function makeReplayMeta(replayId, item, requestedDuration = null){
     width: null,
     height: null,
     orientation: null,
+    qualityRequested: quality.qualityRequested,
+    captureWidth: quality.captureWidth,
+    captureHeight: quality.captureHeight,
+    captureFrameRate: quality.captureFrameRate,
+    videoBitrateRequested: quality.videoBitrateRequested,
+    qualityDelivered: quality.qualityDelivered,
     favorite: false,
     thumbStatus: "none",
     thumbType: null,
@@ -3228,10 +3289,10 @@ async function flattenMp4(bytes){
     catch(err){diag("flatten.dispose.error",{error:err})}
   }
 }
-async function persistReplayBlob(blob, requestedDuration){
+async function persistReplayBlob(blob, requestedDuration, qualitySnapshot){
   const startedAt=performance.now();
   if(!blob||!blob.size)throw Error('Video vazio');
-  diag("persist.begin", { blobBytes: blob.size, requestedDuration });
+  diag("persist.begin", { blobBytes: blob.size, requestedDuration, quality:normalizeReplayQualityMeta(qualitySnapshot) });
   state.replayCount++;
   const d=new Date(),name='gravei-replay-'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+String(d.getSeconds()).padStart(2,'0')+'-'+state.replayCount+'.mp4';
   const bytes=await blob.arrayBuffer();
@@ -3250,7 +3311,7 @@ async function persistReplayBlob(blob, requestedDuration){
     return { count:null, replayId:null, fallback:true };
   }
   try{
-    const meta=makeReplayMeta(replayId,item,requestedDuration);
+    const meta=makeReplayMeta(replayId,item,requestedDuration,qualitySnapshot);
     if(actualDuration!==null)meta.actualDuration=actualDuration;
     await metadataWithTimeout(replayMeta.put(meta),1200);
   }catch(err){
@@ -3301,9 +3362,10 @@ async function saveReplay(){
   const saveId=state.diagSaveSeq=(state.diagSaveSeq||0)+1;
   const saveStartedAt=performance.now();
   const replayDuration=state.duration;
+  const replayQuality=captureReplayQualitySnapshot();
   state.saving=true;
   watchRemoteShowSaving(replayDuration);
-  diag("save.begin", { saveId, replayDuration, generation: state.captureGeneration, fragments: state.fragments.length, bufferSeconds: Number(state.bufferSeconds.toFixed(2)) });
+  diag("save.begin", { saveId, replayDuration, replayQuality, generation: state.captureGeneration, fragments: state.fragments.length, bufferSeconds: Number(state.bufferSeconds.toFixed(2)) });
   closeDurationPicker();
   closeQualityPicker();
   clearTimeout(state.saveGuard);
@@ -3320,7 +3382,7 @@ async function saveReplay(){
     diag("save.fmp4", { saveId, selected: selected.length, bytes: fmp4.byteLength, elapsedMs: Math.round(performance.now()-saveStartedAt) });
     const blob=await flattenMp4(fmp4);
     diag("save.flattened", { saveId, bytes: blob.size, elapsedMs: Math.round(performance.now()-saveStartedAt) });
-    persisted=await persistReplayBlob(blob,replayDuration);
+    persisted=await persistReplayBlob(blob,replayDuration,replayQuality);
     committed=true;
     diag("save.committed",{saveId,elapsedMs:Math.round(performance.now()-saveStartedAt)});
     const generationBeforeReset=state.captureGeneration;
@@ -3501,6 +3563,29 @@ let centralPreviewEntries = [];
 let centralPreviewCount = 0;
 let centralPreviewUrls = new Map();
 
+function replayHasHqBadge(meta){
+  return !!(meta
+    && meta.thumbStatus === "ready"
+    && thumbnailBytesLength(meta.thumbBytes) > 0
+    && meta.qualityDelivered === "high"
+    && dimensionsProveHighQuality(meta.captureWidth, meta.captureHeight));
+}
+
+function syncReplayQualityBadge(card, meta, extraClass){
+  if (!card) return false;
+  let badge = card.querySelector(".replay-quality-badge");
+  const showBadge = card.classList.contains("has-thumb") && replayHasHqBadge(meta);
+  if (!showBadge){ if (badge) badge.remove(); return false; }
+  if (!badge){
+    badge = document.createElement("span");
+    badge.className = "replay-quality-badge " + extraClass;
+    badge.textContent = "HQ";
+    badge.setAttribute("aria-hidden", "true");
+    card.appendChild(badge);
+  }
+  return true;
+}
+
 function centralFallbackMeta(replayId){
   return {
     replayId, createdAt: null, requestedDuration: null, actualDuration: null,
@@ -3585,6 +3670,7 @@ function attachCentralThumbnail(card, entry){
       visual.style.removeProperty("--thumb-backdrop");
       image.remove();
       card.classList.remove("has-thumb");
+      syncReplayQualityBadge(card, { ...meta, thumbStatus:"failed" }, "central-preview-quality");
       thumbnailFailedThisRun.add(entry.key);
       void markThumbnailFailure(entry);
     };
@@ -3604,7 +3690,8 @@ function updateCentralCardLabels(card, entry){
   const durationText = replayDurationText(entry.meta);
   const duration = card.querySelector(".central-preview-duration");
   if (duration) duration.textContent = durationText;
-  card.setAttribute("aria-label", "Abrir replay. " + durationText + ".");
+  const hq = syncReplayQualityBadge(card, entry.meta, "central-preview-quality");
+  card.setAttribute("aria-label", "Abrir replay" + (hq ? " em alta definição" : "") + ". " + durationText + ".");
 }
 
 function createCentralReplayCard(entry){
@@ -3628,6 +3715,7 @@ function createCentralReplayCard(entry){
   card.appendChild(visual);
   card.appendChild(duration);
   attachCentralThumbnail(card, entry);
+  updateCentralCardLabels(card, entry);
   return card;
 }
 
@@ -4373,6 +4461,7 @@ function attachThumbnailToCard(card, entry){
       visual.style.removeProperty("--thumb-backdrop");
       image.remove();
       card.classList.remove("has-thumb");
+      syncReplayQualityBadge(card, { ...meta, thumbStatus:"failed" }, "replay-card-quality");
       thumbnailFailedThisRun.add(entry.key);
       void markThumbnailFailure(entry);
     };
@@ -4393,7 +4482,8 @@ function updateGalleryCardLabels(card, entry){
   const date = card.querySelector(".replay-card-date");
   if (duration) duration.textContent = replayDurationText(entry.meta);
   if (date) date.textContent = replayDateText(entry.meta);
-  const details = replayDurationText(entry.meta) + ", " + replayDateText(entry.meta);
+  const hq = syncReplayQualityBadge(card, entry.meta, "replay-card-quality");
+  const details = replayDurationText(entry.meta) + ", " + replayDateText(entry.meta) + (hq ? ", alta definição" : "");
   if (gallerySelecting){
     card.setAttribute("aria-label", (selectedReplayKeys.has(entry.key) ? "Desmarcar " : "Selecionar ") + details);
   }else{
@@ -4543,8 +4633,10 @@ async function generateThumbnailForEntry(entry, generation){
         if (thumbnail.size > 500 * 1024) throw Error("Miniatura acima do limite");
         const thumbBytes = await thumbnail.arrayBuffer();
         if (generation !== thumbnailGeneration) throw thumbnailCancelError();
+        const decodedQuality = qualityMetaFromDecodedVideo(base, width, height);
         return {
           ...base,
+          ...decodedQuality,
           name: item.name || base.name,
           type: item.type || base.type,
           size: blob.size,
@@ -4804,9 +4896,9 @@ function renderGalleryCards(){
     card.appendChild(overlay);
     card.appendChild(selection);
     card.appendChild(favorite);
-    updateGalleryCardLabels(card, entry);
     box.appendChild(card);
     attachThumbnailToCard(card, entry);
+    updateGalleryCardLabels(card, entry);
   });
   updateSelectionUI();
   startThumbnailObservation();
@@ -5041,8 +5133,10 @@ async function enrichReplayFromPlayer(entry, video, token){
   const base = entry.meta && entry.meta.createdAt
     ? entry.meta
     : makeReplayMeta(entry.key, playerInfo, entry.meta && entry.meta.requestedDuration);
+  const decodedQuality = width && height ? qualityMetaFromDecodedVideo(base, width, height) : normalizeReplayQualityMeta(base);
   const updated = {
     ...base,
+    ...decodedQuality,
     name: playerInfo.name,
     type: playerInfo.type,
     size: playerBlob.size,
