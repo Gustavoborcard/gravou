@@ -195,7 +195,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 #chip-remote:active{transform:scale(.95)}
 #chip-remote svg{width:22px;height:22px}
 
-/* overlay de pareamento v2.05-sync-phase4 */
+/* overlay de pareamento v2.05-sync-phase4b */
  #pair{
    position:fixed;inset:0;z-index:30;display:none;align-items:flex-end;justify-content:center;
    padding-top:calc(var(--safe-t) + 12px);background:rgba(0,0,0,.64)
@@ -981,7 +981,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v2.05-sync-phase4";
+  const VERSION = "v2.05-sync-phase4b";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -5078,6 +5078,7 @@ const WATCH_REMOTE_PLAY_READY_PROBE = new URLSearchParams(location.search).get('
 const WATCH_REMOTE_RING_PROBE = new URLSearchParams(location.search).get('watchring') === '1';
 const WATCH_REMOTE_SYNC_PROBE = new URLSearchParams(location.search).get('watchsync') === '1';
 const WATCH_REMOTE_POSITION_TRANSITION_MS = 900;
+const WATCH_REMOTE_FULL_VIRTUAL_DURATION = 1000;
 const WATCH_REMOTE_FULL_POSITION_RATIO = 0.98;
 const WATCH_REMOTE_ACTIONS = ['play','pause','previoustrack','nexttrack'];
 const watchRemote = {
@@ -5089,7 +5090,7 @@ const watchRemote = {
   positionSettleTimer:null, positionLastAvailable:null, positionDuration:null,
   positionFrom:0, positionTo:0, positionStartedAt:0, positionPhase:'idle',
   positionRevision:0, positionReanchorTimer:null, positionReanchorSerial:0,
-  positionSuspended:false
+  positionSuspended:false, carrierLastTime:0, fullHoldLastDiagAt:0
 };
 
 function watchRemoteSupported(){
@@ -5132,12 +5133,12 @@ function watchRemotePositionSnapshot(now=performance.now()){
   if(!WATCH_REMOTE_SYNC_PROBE)return original;
   const nowMs=Number.isFinite(Number(now))?Number(now):performance.now();
   if(full){
-    const fullPosition=duration*WATCH_REMOTE_FULL_POSITION_RATIO;
+    const fullPosition=WATCH_REMOTE_FULL_VIRTUAL_DURATION*WATCH_REMOTE_FULL_POSITION_RATIO;
     clearTimeout(watchRemote.positionSettleTimer);watchRemote.positionSettleTimer=null;
     watchRemote.positionLastAvailable=available;watchRemote.positionDuration=duration;
     watchRemote.positionFrom=fullPosition;watchRemote.positionTo=fullPosition;
     watchRemote.positionStartedAt=nowMs;watchRemote.positionPhase='full';
-    return {...original,position:fullPosition,displayProgress:WATCH_REMOTE_FULL_POSITION_RATIO*100,syncPhase:'full',syncRevision:watchRemote.positionRevision,settleAfterMs:0}
+    return {...original,realDuration:duration,duration:WATCH_REMOTE_FULL_VIRTUAL_DURATION,position:fullPosition,displayProgress:WATCH_REMOTE_FULL_POSITION_RATIO*100,syncPhase:'full',syncRevision:watchRemote.positionRevision,settleAfterMs:0}
   }
   const reset=watchRemote.positionLastAvailable===null||
     watchRemote.positionDuration!==duration||
@@ -5196,21 +5197,27 @@ function watchRemoteApplyPositionSnapshot(snapshot,reason='buffer',force=false){
     });
     watchRemote.lastPositionSignature=signature;
     watchRemoteSchedulePositionSettle(snapshot);
-    diag('watch.position.applied',{
-      reason,
-      duration:snapshot.duration,
-      available:Number(snapshot.available.toFixed(3)),
-      position:Number(snapshot.position.toFixed(3)),
-      playbackRate:snapshot.playbackRate,
-      progress:snapshot.progress,
-      displayProgress:Number.isFinite(snapshot.displayProgress)?snapshot.displayProgress:snapshot.progress,
-      full:snapshot.full,
-      syncProbe:WATCH_REMOTE_SYNC_PROBE,
-      syncPhase:snapshot.syncPhase||'legacy',
-      syncRevision:Number.isFinite(snapshot.syncRevision)?snapshot.syncRevision:null,
-      fragments:state.fragments.length,
-      saving:state.saving
-    });
+    const quietFullHold=WATCH_REMOTE_SYNC_PROBE&&snapshot.full&&reason==='interval.fullHold';
+    const shouldLog=!quietFullHold||performance.now()-watchRemote.fullHoldLastDiagAt>=10000;
+    if(shouldLog){
+      if(quietFullHold)watchRemote.fullHoldLastDiagAt=performance.now();
+      diag('watch.position.applied',{
+        reason,
+        duration:Number.isFinite(snapshot.realDuration)?snapshot.realDuration:snapshot.duration,
+        positionDuration:snapshot.duration,
+        available:Number(snapshot.available.toFixed(3)),
+        position:Number(snapshot.position.toFixed(3)),
+        playbackRate:snapshot.playbackRate,
+        progress:snapshot.progress,
+        displayProgress:Number.isFinite(snapshot.displayProgress)?snapshot.displayProgress:snapshot.progress,
+        full:snapshot.full,
+        syncProbe:WATCH_REMOTE_SYNC_PROBE,
+        syncPhase:snapshot.syncPhase||'legacy',
+        syncRevision:Number.isFinite(snapshot.syncRevision)?snapshot.syncRevision:null,
+        fragments:state.fragments.length,
+        saving:state.saving
+      });
+    }
     return true
   }catch(err){
     watchRemote.positionFailed=true;
@@ -5413,7 +5420,24 @@ function watchRemoteCaptureCancelled(reason='capture.cancelled'){
   if(!watchRemote.active||!watchRemote.awaitingCapture)return;
   diag('watch.resume.cancelled',{reason});
   stopWatchRemote(reason)
-}function watchRemoteEnsureCarrier(reason='health'){
+}function watchRemoteBufferIsFull(){
+  const duration=Number(state.duration),available=Number(state.bufferSeconds);
+  return Number.isFinite(duration)&&duration>0&&Number.isFinite(available)&&available>=duration
+}
+function watchRemoteHandleCarrierTimeUpdate(){
+  if(!WATCH_REMOTE_SYNC_PROBE||!watchRemote.active)return;
+  const carrier=$('watch-carrier');
+  if(!carrier)return;
+  const current=Number(carrier.currentTime);
+  if(!Number.isFinite(current))return;
+  const previous=watchRemote.carrierLastTime;
+  watchRemote.carrierLastTime=current;
+  if(previous>0&&current+0.75<previous&&watchRemoteBufferIsFull()){
+    diag('watch.carrier.loop.full',{previous:Number(previous.toFixed(2)),current:Number(current.toFixed(2))});
+    watchRemoteSyncPosition('carrier.loop.full',true)
+  }
+}
+function watchRemoteEnsureCarrier(reason='health'){
   if(!watchRemote.active)return;
   const carrier=$('watch-carrier');
   if(!carrier)return;
@@ -5421,7 +5445,8 @@ function watchRemoteCaptureCancelled(reason='capture.cancelled'){
     if(carrier.paused||carrier.ended){
       Promise.resolve(carrier.play()).then(()=>watchRemoteApplyPlaybackState(reason+'.resumed',true)).catch(err=>diag('watch.carrier.resumeError',{reason,error:err}))
     }
-    watchRemoteApplyPlaybackState(reason)
+    watchRemoteApplyPlaybackState(reason);
+    if(WATCH_REMOTE_SYNC_PROBE&&watchRemoteBufferIsFull())watchRemoteSyncPosition(reason+'.fullHold',true)
   }catch(err){diag('watch.carrier.healthError',{reason,error:err})}
 }
 function watchRemoteCommand(action){
@@ -5476,7 +5501,7 @@ function stopWatchRemote(reason='manual',options={}){
   watchRemote.active=false;watchRemote.starting=false;watchRemote.awaitingCapture=false;watchRemote.acceptedActions=[];watchRemote.lastCommandAt=0;
   watchRemote.presentation='playing';watchRemote.lastAppliedPlaybackState=null;
   watchRemote.lastPositionSignature=null;watchRemote.positionFailed=false;watchRemote.positionSupportReported=false;
-  watchRemote.positionSuspended=false;
+  watchRemote.positionSuspended=false;watchRemote.carrierLastTime=0;watchRemote.fullHoldLastDiagAt=0;
   watchRemoteResetPositionPresentation('stop.'+reason);
   if(!preserveResume)watchRemote.resumeAfterCentral=false;
   clearInterval(watchRemote.healthTimer);watchRemote.healthTimer=null;watchRemoteClearReadyTimer();
@@ -5507,7 +5532,7 @@ function startWatchRemote(options={}){
   const carrier=$('watch-carrier');
   try{
     watchRemote.lastPositionSignature=null;watchRemote.positionFailed=false;watchRemote.positionSupportReported=false;
-    watchRemote.positionSuspended=false;
+    watchRemote.positionSuspended=false;watchRemote.carrierLastTime=0;watchRemote.fullHoldLastDiagAt=0;
     watchRemoteResetPositionPresentation('start');
     watchRemote.acceptedActions=[];
     for(const action of WATCH_REMOTE_ACTIONS){
@@ -5546,6 +5571,7 @@ function startWatchRemote(options={}){
 }
 $('watch-carrier').addEventListener('pause',()=>{if(watchRemote.active)setTimeout(()=>watchRemoteEnsureCarrier('pause'),0)});
 $('watch-carrier').addEventListener('ended',()=>{if(watchRemote.active)watchRemoteEnsureCarrier('ended')});
+$('watch-carrier').addEventListener('timeupdate',watchRemoteHandleCarrierTimeUpdate);
 $('pair-watch-toggle').onclick=async()=>{
   vibrate(20);
   if(watchRemote.active){stopWatchRemote('user');toast('Controle do relógio desativado','info',1800);return}
