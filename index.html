@@ -101,6 +101,17 @@ body{
 #s-time #chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;width:100%;max-width:320px}
 #s-time #chips .chip{width:100%;min-height:48px;padding:10px 8px;border-radius:12px;background:var(--surface-2);border-color:rgba(255,255,255,.10);color:var(--text-dim)}
 #s-time #chips .chip.sel{background:var(--rec);border-color:var(--rec);color:#fff;transform:none}
+#quality-setup{display:none;width:100%;max-width:320px;margin-top:22px;text-align:left}
+#quality-setup:not([hidden]){display:block}
+.quality-label{margin:0 0 10px;color:var(--text-dim);font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.quality-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.quality-choice{min-height:48px;padding:10px 12px;border:1px solid rgba(255,255,255,.10);border-radius:12px;background:var(--surface-2);color:var(--text-dim);font:inherit;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:7px;cursor:pointer}
+.quality-choice.sel{background:var(--rec);border-color:var(--rec);color:#fff}
+.quality-check{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;font-size:13px;line-height:1}
+.quality-hq-tag{padding:2px 5px;border:1px solid currentColor;border-radius:5px;font-size:9px;font-weight:900;letter-spacing:.06em}
+.quality-detail{margin:12px 0 0;text-align:left}
+.quality-detail .quality-spec{margin:0;color:var(--text);font-size:13px;font-weight:700}
+.quality-detail .quality-benefit{margin:4px 0 0;color:var(--text-dim);font-size:12px;line-height:1.4}
 
 /* ---- ícones de status ---- */
 .status-icon{width:76px;height:76px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:22px;font-size:34px;background:var(--surface-2)}
@@ -160,10 +171,10 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 
 .rec-top{
   position:fixed;top:calc(12px + var(--safe-t));left:0;right:0;
-  display:flex;align-items:center;justify-content:center;gap:10px;z-index:5;pointer-events:none;
+  display:flex;align-items:center;justify-content:space-evenly;gap:0;padding:0 2px;box-sizing:border-box;z-index:5;pointer-events:none;
 }
 .badge{
-  display:flex;align-items:center;gap:8px;min-height:44px;box-sizing:border-box;background:rgba(18,18,18,.88);
+  display:flex;align-items:center;gap:8px;min-height:40px;box-sizing:border-box;background:rgba(18,18,18,.88);
   border:1px solid rgba(255,255,255,.12);
   border-radius:999px;padding:8px 14px;font-size:14px;font-weight:700;
 }
@@ -194,6 +205,11 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 #chip-remote.lit{color:var(--accent);border-color:rgba(255,59,48,.55)}
 #chip-remote:active{transform:scale(.95)}
 #btn-flip svg,#chip-count svg,#chip-remote svg{width:22px;height:22px}
+#chip-quality{pointer-events:auto;cursor:pointer;font:inherit;font-size:14px;font-weight:800;color:var(--text-dim)}
+#chip-quality.active{color:#fff;background:var(--rec);border-color:var(--rec)}
+#chip-quality[hidden]{display:none!important}
+#chip-quality:active{transform:scale(.95)}
+@media (max-width:340px){.quality-lab .rec-top .badge{padding-left:10px;padding-right:10px}}
 
 /* overlay de pareamento v2.06 */
  #pair{
@@ -319,7 +335,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 @media (orientation:landscape){
   #btn-save{left:auto;right:calc(18px + env(safe-area-inset-right,0px));bottom:50%;transform:translateY(50%);width:min(280px,72vh,44vw);height:min(280px,72vh,44vw)}
   #btn-save:active{transform:translateY(50%) scale(.95)}
-  .rec-top{justify-content:flex-start;padding-left:calc(16px + env(safe-area-inset-left,0px))}
+  .rec-top{justify-content:space-evenly;padding:0 calc(4px + env(safe-area-inset-right,0px)) 0 calc(4px + env(safe-area-inset-left,0px));box-sizing:border-box}
   #btn-flip{top:auto;bottom:calc(24px + var(--safe-b));left:calc(16px + env(safe-area-inset-left,0px));right:auto}
 }
 
@@ -414,6 +430,13 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
   .duration-grab{margin-bottom:12px}
   #duration-picker .chips{margin-top:16px}
 }
+#quality-picker{position:fixed;inset:0;z-index:31;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.64)}
+#quality-picker.open{display:flex}
+.quality-sheet{width:100%;max-width:480px;max-height:calc(100dvh - var(--safe-t) - 12px);overflow-y:auto;background:rgba(26,26,26,.94);border:1px solid rgba(255,255,255,.10);border-bottom:0;border-radius:22px 22px 0 0;text-align:center;padding:12px calc(20px + env(safe-area-inset-right,0px)) calc(18px + var(--safe-b)) calc(20px + env(safe-area-inset-left,0px));box-shadow:0 -16px 48px -14px rgba(0,0,0,.68)}
+.quality-sheet .quality-options{width:100%;max-width:360px;margin:20px auto 0}
+.quality-sheet .quality-detail{width:100%;max-width:360px;margin:14px auto 0}
+.quality-sheet .quality-cancel{min-width:0;min-height:44px;padding:10px 20px;background:transparent;color:var(--text-dim);font-family:'Inter',sans-serif;font-size:14px;font-weight:600}
+@media (orientation:landscape){#quality-picker{align-items:center;padding:calc(14px + var(--safe-t)) calc(18px + env(safe-area-inset-right,0px)) calc(14px + var(--safe-b)) calc(18px + env(safe-area-inset-left,0px))}.quality-sheet{max-height:calc(100dvh - var(--safe-t) - var(--safe-b) - 28px);border:1px solid rgba(255,255,255,.10);border-radius:20px;padding-top:14px;padding-bottom:16px}}
 
 /* ---- Central de Replays: marca, prévias leves e ações ---- */
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
@@ -611,6 +634,14 @@ a{color:var(--accent)}
   <div class="eyebrow">Duração do replay</div>
   <h2>Quantos segundos<br>quer salvar?</h2>
   <div class="chips" id="chips"></div>
+  <div id="quality-setup" hidden>
+    <p class="quality-label">Qualidade do replay</p>
+    <div class="quality-options" role="group" aria-label="Qualidade da gravação">
+      <button type="button" class="quality-choice" data-quality="balanced" aria-pressed="false"><span class="quality-check" aria-hidden="true"></span><span>Equilibrada</span></button>
+      <button type="button" class="quality-choice" data-quality="high" aria-pressed="false"><span class="quality-check" aria-hidden="true"></span><span>Alta definição</span><span class="quality-hq-tag" aria-hidden="true">HQ</span></button>
+    </div>
+    <div class="quality-detail" aria-live="polite"><p class="quality-spec" data-quality-spec></p><p class="quality-benefit" data-quality-benefit></p></div>
+  </div>
   <div class="stack">
     <button class="btn btn-primary" id="b-go">Iniciar gravação</button>
   </div>
@@ -623,6 +654,7 @@ a{color:var(--accent)}
   <div id="shade"></div>
   <div class="rec-top">
     <div class="badge" aria-label="Gravando"><span class="rec-dot"></span>REC</div>
+    <button type="button" class="badge" id="chip-quality" aria-label="Alterar qualidade" aria-haspopup="dialog" aria-expanded="false" aria-pressed="false" hidden>HQ</button>
     <button type="button" class="badge time-chip" id="chip-dur" aria-label="Alterar duração do replay" aria-haspopup="dialog" aria-expanded="false">
       <span id="chip-dur-value">20s</span>
     </button>
@@ -813,7 +845,20 @@ a{color:var(--accent)}
     <div class="stack duration-actions"><button type="button" class="btn btn-ghost duration-cancel" id="duration-cancel">Cancelar</button></div>
   </div>
 </div>
-
+<!-- SELETOR DE QUALIDADE (LABORATÓRIO) -->
+<div id="quality-picker" role="dialog" aria-modal="true" aria-labelledby="quality-title" aria-hidden="true">
+  <div class="sheet quality-sheet">
+    <div class="duration-grab" aria-hidden="true"></div>
+    <p class="duration-kicker">Qualidade do replay</p>
+    <h2 id="quality-title">Como quer gravar?</h2>
+    <div class="quality-options">
+      <button type="button" class="quality-choice" data-quality="balanced" aria-pressed="false"><span class="quality-check" aria-hidden="true"></span><span>Equilibrada</span></button>
+      <button type="button" class="quality-choice" data-quality="high" aria-pressed="false"><span class="quality-check" aria-hidden="true"></span><span>Alta definição</span><span class="quality-hq-tag" aria-hidden="true">HQ</span></button>
+    </div>
+    <div class="quality-detail" aria-live="polite"><p class="quality-spec" data-quality-spec></p><p class="quality-benefit" data-quality-benefit></p></div>
+    <div class="stack duration-actions"><button type="button" class="btn btn-ghost quality-cancel" id="quality-cancel">Cancelar</button></div>
+  </div>
+</div>
 <!-- CONFIRMAÇÃO -->
 <div id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-msg" aria-hidden="true">
     <div class="confirm-dialog" role="document">
@@ -980,7 +1025,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v2.07";
+  const VERSION = "v2.08";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -1387,9 +1432,24 @@ function updateCountChip(n){
 const $ = id => document.getElementById(id);
 $("ver-label").textContent = GRAVEI_DIAG.version;
 const DURATIONS = [10,15,20,30,45,60];
+const QUALITY_LAB = new URLSearchParams(location.search).get("qualitylab") === "1";
+const QUALITY_STORAGE_KEY = "gravei-quality-profile-v1";
+const QUALITY_PROFILES = Object.freeze({
+  balanced:{ id:"balanced", label:"Equilibrada", spec:"720p · 30 fps", benefit:"Boa qualidade e arquivos mais leves." },
+  high:{ id:"high", label:"Alta definição", spec:"1080p · até 60 fps", benefit:"Mais detalhes em movimentos rápidos. Usa mais espaço e bateria." }
+});
+function normalizeQualityProfile(value){ return value === "high" ? "high" : "balanced"; }
+function readQualityPreference(){
+  try{ return normalizeQualityProfile(localStorage.getItem(QUALITY_STORAGE_KEY)); }
+  catch(_){ return "balanced"; }
+}
+function writeQualityPreference(value){
+  try{ localStorage.setItem(QUALITY_STORAGE_KEY, normalizeQualityProfile(value)); return true; }
+  catch(err){ diag("quality.lab.persist.error", { error:err }); return false; }
+}
 
 const state = {
- duration:20,facing:"user",cams:[],camIndex:-1,stream:null,mime:"",ext:"mp4",pendingShareKeys:null,
+ duration:20,qualityProfile:QUALITY_LAB?readQualityPreference():"balanced",facing:"user",cams:[],camIndex:-1,stream:null,mime:"",ext:"mp4",pendingShareKeys:null,
  captureRec:null,captureGeneration:0,initSegment:null,videoTrackId:null,defaultSampleFlags:{},lastReplaySelectionReason:"empty",keyframeOptionRead:false,keyframeRequestMode:"none",lastVideoKeyAt:0,videoKeyframesSeen:0,maxObservedKeyIntervalMs:0,dataEventSerial:0,processedEventSerial:0,fragments:[],fragmentQueue:Promise.resolve(),flushWaiters:[],
  lastChunkAt:0,bufferSeconds:0,bufferBytes:0,bufferLimitRecoveryPending:false,captureRecovering:false,formatProbeFailures:0,formatRejected:false,timerId:null,wakeLock:null,saving:false,replayCount:0,active:false,
  capturePhase:"idle",captureIntent:null,lastCaptureIntent:null,captureStartPromise:null,cameraAttemptSerial:0,cameraAttemptId:0,pendingCameraCancel:null,cameraPreviouslyWorked:false
@@ -1484,7 +1544,7 @@ function durationFocusable(){
   return [...$("duration-chips").querySelectorAll("button:not(:disabled)"), $("duration-cancel")];
 }
 function openDurationPicker(){
-  if (durationPickerOpen || !state.active || !$("rec-screen").classList.contains("active")) return false;
+  if (durationPickerOpen || qualityPickerOpen || !state.active || !$("rec-screen").classList.contains("active")) return false;
   if (state.saving){ toast("Aguarde este replay terminar", "info", 2200); return false; }
   durationReturnFocus = document.activeElement;
   durationPickerOpen = true;
@@ -1532,7 +1592,96 @@ document.addEventListener("keydown", event => {
   else if (event.shiftKey && document.activeElement === first){ event.preventDefault(); last.focus(); }
   else if (!event.shiftKey && document.activeElement === last){ event.preventDefault(); first.focus(); }
 });
-
+/* ---------- qualidade de gravação: laboratório de interface ---------- */
+let qualityPickerOpen = false;
+let qualityReturnFocus = null;
+function qualityProfileData(){ return QUALITY_PROFILES[normalizeQualityProfile(state.qualityProfile)]; }
+function syncQualityUI(){
+  const profile = qualityProfileData();
+  document.querySelectorAll("[data-quality]").forEach(button => {
+    const selected = button.dataset.quality === profile.id;
+    button.classList.toggle("sel", selected);
+    button.setAttribute("aria-pressed", selected ? "true" : "false");
+    const check = button.querySelector(".quality-check");
+    if (check) check.textContent = selected ? "✓" : "";
+  });
+  document.querySelectorAll("[data-quality-spec]").forEach(node => { node.textContent = profile.spec; });
+  document.querySelectorAll("[data-quality-benefit]").forEach(node => { node.textContent = profile.benefit; });
+  const chip = $("chip-quality");
+  chip.classList.toggle("active", profile.id === "high");
+  chip.setAttribute("aria-pressed", profile.id === "high" ? "true" : "false");
+  chip.setAttribute("aria-label", "Qualidade: " + profile.label + ". Alterar qualidade");
+}
+function setQualityProfile(profile, announce = false){
+  if (!QUALITY_LAB || !QUALITY_PROFILES[profile]) return false;
+  if (state.saving){ if (announce) toast("Aguarde este replay terminar", "info", 2200); return false; }
+  const previous = state.qualityProfile;
+  state.qualityProfile = normalizeQualityProfile(profile);
+  writeQualityPreference(state.qualityProfile);
+  syncQualityUI();
+  diag("quality.lab.selected", { previous, qualityProfile:state.qualityProfile, captureUnchanged:true, active:state.active });
+  if (announce) toast(qualityProfileData().label + " selecionada", "info", 2000);
+  return true;
+}
+function qualityFocusable(){ return [...$("quality-picker").querySelectorAll("button:not(:disabled)")]; }
+function openQualityPicker(){
+  if (!QUALITY_LAB || qualityPickerOpen || durationPickerOpen || !state.active || !$("rec-screen").classList.contains("active")) return false;
+  if (state.saving){ toast("Aguarde este replay terminar", "info", 2200); return false; }
+  qualityReturnFocus = document.activeElement;
+  qualityPickerOpen = true;
+  syncQualityUI();
+  disarmDim();
+  $("quality-picker").setAttribute("aria-hidden", "false");
+  $("quality-picker").classList.add("open");
+  $("chip-quality").setAttribute("aria-expanded", "true");
+  setTimeout(() => {
+    if (!qualityPickerOpen) return;
+    const selected = $("quality-picker").querySelector(".quality-choice.sel");
+    (selected || $("quality-cancel")).focus();
+  }, 0);
+  return true;
+}
+function closeQualityPicker(rearm = true, restoreFocus = true){
+  if (!qualityPickerOpen) return false;
+  qualityPickerOpen = false;
+  $("quality-picker").classList.remove("open");
+  $("quality-picker").setAttribute("aria-hidden", "true");
+  $("chip-quality").setAttribute("aria-expanded", "false");
+  const target = qualityReturnFocus;
+  qualityReturnFocus = null;
+  if (rearm && state.active && $("rec-screen").classList.contains("active")) armDim();
+  if (restoreFocus && durationCanRestoreFocus(target)) setTimeout(() => target.focus(), 0);
+  return true;
+}
+if (QUALITY_LAB){
+  $("quality-setup").hidden = false;
+  $("chip-quality").hidden = false;
+  document.documentElement.classList.add("quality-lab");
+}
+document.querySelectorAll("[data-quality]").forEach(button => {
+  button.onclick = () => {
+    const inPicker = !!button.closest("#quality-picker");
+    if (setQualityProfile(button.dataset.quality, inPicker) && inPicker) closeQualityPicker();
+  };
+});
+$("chip-quality").onclick = openQualityPicker;
+$("quality-cancel").onclick = () => closeQualityPicker();
+$("quality-picker").onclick = event => { if (event.target === $("quality-picker")) closeQualityPicker(); };
+document.addEventListener("keydown", event => {
+  if (!qualityPickerOpen) return;
+  if (event.key === "Escape"){ event.preventDefault(); closeQualityPicker(); return; }
+  if (event.key !== "Tab") return;
+  const focusable = qualityFocusable();
+  if (!focusable.length){ event.preventDefault(); return; }
+  const first = focusable[0], last = focusable[focusable.length - 1];
+  if (!$("quality-picker").contains(document.activeElement)){
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+  }else if (event.shiftKey && document.activeElement === first){ event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last){ event.preventDefault(); first.focus(); }
+});
+syncQualityUI();
+diag("quality.lab.mode", { enabled:QUALITY_LAB, qualityProfile:state.qualityProfile, captureUnchanged:true });
 /* ---------- confirmação genérica ---------- */
 let confirmFn = null;
   let confirmReturnFocus = null;
@@ -3156,6 +3305,7 @@ async function saveReplay(){
   watchRemoteShowSaving(replayDuration);
   diag("save.begin", { saveId, replayDuration, generation: state.captureGeneration, fragments: state.fragments.length, bufferSeconds: Number(state.bufferSeconds.toFixed(2)) });
   closeDurationPicker();
+  closeQualityPicker();
   clearTimeout(state.saveGuard);
   state.saveGuard=setTimeout(()=>{if(state.saving){diag("save.guard.30s",{saveId});toast('Ainda preparando o replay…','info',3000)}},30000);
   let snapshot=[],bufferDetached=false,committed=false,recorderReset=false,persisted=null;
