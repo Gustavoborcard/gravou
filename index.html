@@ -195,7 +195,7 @@ h2{font-family:'Poppins',sans-serif;font-size:24px;font-weight:700;letter-spacin
 #chip-remote:active{transform:scale(.95)}
 #chip-remote svg{width:22px;height:22px}
 
-/* overlay de pareamento v2.05-sync-phase4c */
+/* overlay de pareamento v2.05-sync-phase5 */
  #pair{
    position:fixed;inset:0;z-index:30;display:none;align-items:flex-end;justify-content:center;
    padding-top:calc(var(--safe-t) + 12px);background:rgba(0,0,0,.64)
@@ -981,7 +981,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v2.05-sync-phase4c";
+  const VERSION = "v2.05-sync-phase5";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -5077,7 +5077,7 @@ async function deliver(blob, name){
 const WATCH_REMOTE_PLAY_READY_PROBE = new URLSearchParams(location.search).get('watchplay') === '1';
 const WATCH_REMOTE_RING_PROBE = new URLSearchParams(location.search).get('watchring') === '1';
 const WATCH_REMOTE_SYNC_PROBE = new URLSearchParams(location.search).get('watchsync') === '1';
-const WATCH_REMOTE_POSITION_TRANSITION_MS = 900;
+const WATCH_REMOTE_POSITION_TRANSITION_MS = 1150;
 const WATCH_REMOTE_FULL_VIRTUAL_DURATION = 2000;
 const WATCH_REMOTE_FULL_POSITION_RATIO = 0.99;
 const WATCH_REMOTE_ACTIONS = ['play','pause','previoustrack','nexttrack'];
