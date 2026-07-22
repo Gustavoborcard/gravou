@@ -1028,7 +1028,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v2.09";
+  const VERSION = "v2.10";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -1354,7 +1354,7 @@ function captureReplayQualitySnapshot(){
     captureWidth: settings.width,
     captureHeight: settings.height,
     captureFrameRate: settings.frameRate,
-    videoBitrateRequested: 2500000
+    videoBitrateRequested: qualityMetric(state.captureVideoBitrateRequested, true)
   });
 }
 
@@ -1496,8 +1496,8 @@ const DURATIONS = [10,15,20,30,45,60];
 const QUALITY_LAB = new URLSearchParams(location.search).get("qualitylab") === "1";
 const QUALITY_STORAGE_KEY = "gravei-quality-profile-v1";
 const QUALITY_PROFILES = Object.freeze({
-  balanced:{ id:"balanced", label:"Equilibrada", spec:"720p · 30 fps", benefit:"Boa qualidade e arquivos mais leves." },
-  high:{ id:"high", label:"Alta definição", spec:"1080p · até 60 fps", benefit:"Mais detalhes em movimentos rápidos. Usa mais espaço e bateria." }
+  balanced:{ id:"balanced", label:"Equilibrada", spec:"720p · 30 fps", benefit:"Boa qualidade e arquivos mais leves.", videoBitsPerSecond:2500000 },
+  high:{ id:"high", label:"Alta definição", spec:"1080p · até 60 fps", benefit:"Mais detalhes em movimentos rápidos. Usa mais espaço e bateria.", videoBitsPerSecond:8000000 }
 });
 function normalizeQualityProfile(value){ return value === "high" ? "high" : "balanced"; }
 function readQualityPreference(){
@@ -1510,7 +1510,7 @@ function writeQualityPreference(value){
 }
 
 const state = {
- duration:20,qualityProfile:QUALITY_LAB?readQualityPreference():"balanced",facing:"user",cams:[],camIndex:-1,stream:null,mime:"",ext:"mp4",pendingShareKeys:null,
+ duration:20,qualityProfile:QUALITY_LAB?readQualityPreference():"balanced",captureQualityDelivered:"unknown",captureQualitySettings:null,captureQualityConstraintProfile:null,captureVideoBitrateRequested:2500000,qualitySwitching:false,facing:"user",cams:[],camIndex:-1,stream:null,mime:"",ext:"mp4",pendingShareKeys:null,
  captureRec:null,captureGeneration:0,initSegment:null,videoTrackId:null,defaultSampleFlags:{},lastReplaySelectionReason:"empty",keyframeOptionRead:false,keyframeRequestMode:"none",lastVideoKeyAt:0,videoKeyframesSeen:0,maxObservedKeyIntervalMs:0,dataEventSerial:0,processedEventSerial:0,fragments:[],fragmentQueue:Promise.resolve(),flushWaiters:[],
  lastChunkAt:0,bufferSeconds:0,bufferBytes:0,bufferLimitRecoveryPending:false,captureRecovering:false,formatProbeFailures:0,formatRejected:false,timerId:null,wakeLock:null,saving:false,replayCount:0,active:false,
  capturePhase:"idle",captureIntent:null,lastCaptureIntent:null,captureStartPromise:null,cameraAttemptSerial:0,cameraAttemptId:0,pendingCameraCancel:null,cameraPreviouslyWorked:false
@@ -1653,10 +1653,26 @@ document.addEventListener("keydown", event => {
   else if (event.shiftKey && document.activeElement === first){ event.preventDefault(); last.focus(); }
   else if (!event.shiftKey && document.activeElement === last){ event.preventDefault(); first.focus(); }
 });
-/* ---------- qualidade de gravação: laboratório de interface ---------- */
+/* ---------- qualidade de gravação: laboratório controlado ---------- */
 let qualityPickerOpen = false;
 let qualityReturnFocus = null;
+const QUALITY_SWITCH_CONTROLS = ["chip-quality","chip-dur","chip-count","chip-remote","btn-flip","btn-save"];
 function qualityProfileData(){ return QUALITY_PROFILES[normalizeQualityProfile(state.qualityProfile)]; }
+function captureFrameRateText(value){
+  const rate = qualityMetric(value);
+  if (!rate) return null;
+  return Math.abs(rate - Math.round(rate)) < .05 ? String(Math.round(rate)) : rate.toFixed(1).replace(".", ",");
+}
+function deliveredQualitySpec(settings){
+  const width = qualityMetric(settings && settings.width, true), height = qualityMetric(settings && settings.height, true);
+  const rate = captureFrameRateText(settings && settings.frameRate);
+  if (!width || !height) return null;
+  const shortSide = Math.min(width, height), resolution = shortSide >= 1080 ? "1080p" : shortSide >= 720 ? "720p" : Math.max(width, height) + " × " + shortSide;
+  return resolution + (rate ? " · " + rate + " fps" : "");
+}
+function qualityFallbackActive(){
+  return normalizeQualityProfile(state.qualityProfile) === "high" && !!state.stream && state.captureQualityDelivered !== "high";
+}
 function syncQualityUI(){
   const profile = qualityProfileData();
   document.querySelectorAll("[data-quality]").forEach(button => {
@@ -1666,27 +1682,91 @@ function syncQualityUI(){
     const check = button.querySelector(".quality-check");
     if (check) check.textContent = selected ? "✓" : "";
   });
-  document.querySelectorAll("[data-quality-spec]").forEach(node => { node.textContent = profile.spec; });
-  document.querySelectorAll("[data-quality-benefit]").forEach(node => { node.textContent = profile.benefit; });
+  const runtimeSpec = state.active ? deliveredQualitySpec(state.captureQualitySettings) : null;
+  const fallback = qualityFallbackActive();
+  document.querySelectorAll("[data-quality-spec]").forEach(node => { node.textContent = runtimeSpec || profile.spec; });
+  document.querySelectorAll("[data-quality-benefit]").forEach(node => { node.textContent = fallback ? "HQ indisponível nesta câmera. Usando Equilibrada." : profile.benefit; });
   const chip = $("chip-quality");
-  chip.classList.toggle("active", profile.id === "high");
-  chip.setAttribute("aria-pressed", profile.id === "high" ? "true" : "false");
-  chip.setAttribute("aria-label", "Qualidade: " + profile.label + ". Alterar qualidade");
+  const highActive = profile.id === "high" && (!state.stream || state.captureQualityDelivered === "high");
+  chip.classList.toggle("active", highActive);
+  chip.classList.toggle("fallback", fallback);
+  chip.setAttribute("aria-pressed", highActive ? "true" : "false");
+  chip.setAttribute("aria-label", fallback ? "Alta definição indisponível nesta câmera. Alterar qualidade" : "Qualidade: " + profile.label + ". Alterar qualidade");
+}
+function updateCaptureQualityState(settings, details = {}){
+  const normalized = normalizeReplayQualityMeta({
+    qualityRequested: details.requestedProfile || state.qualityProfile,
+    captureWidth: settings && settings.width,
+    captureHeight: settings && settings.height,
+    captureFrameRate: settings && settings.frameRate,
+    videoBitrateRequested: state.captureVideoBitrateRequested
+  });
+  state.captureQualityDelivered = normalized.qualityDelivered;
+  state.captureQualitySettings = {
+    width: normalized.captureWidth,
+    height: normalized.captureHeight,
+    frameRate: normalized.captureFrameRate,
+    facingMode: settings && settings.facingMode ? String(settings.facingMode) : null
+  };
+  state.captureQualityConstraintProfile = details.constraintProfile || null;
+  syncQualityUI();
+  diag("quality.capture.delivered", {
+    requestedProfile: normalized.qualityRequested,
+    deliveredProfile: normalized.qualityDelivered,
+    constraintProfile: state.captureQualityConstraintProfile,
+    width: normalized.captureWidth,
+    height: normalized.captureHeight,
+    frameRate: normalized.captureFrameRate
+  });
+  return normalized;
+}
+function setQualitySwitchUi(busy){
+  state.qualitySwitching = !!busy;
+  const screen = $("rec-screen");
+  screen.classList.toggle("quality-switching", !!busy);
+  if (busy) screen.setAttribute("aria-busy", "true"); else screen.removeAttribute("aria-busy");
+  QUALITY_SWITCH_CONTROLS.forEach(id => {
+    const control = $(id);
+    if (!control) return;
+    if (busy){
+      if (control.dataset.qualityWasDisabled === undefined) control.dataset.qualityWasDisabled = control.disabled ? "1" : "0";
+      control.disabled = true;
+    }else if (control.dataset.qualityWasDisabled !== undefined){
+      control.disabled = control.dataset.qualityWasDisabled === "1";
+      delete control.dataset.qualityWasDisabled;
+    }
+  });
+}
+function restartCaptureForQuality(previousProfile){
+  if (!state.active || previousProfile === state.qualityProfile) return false;
+  const nextProfile = state.qualityProfile;
+  setQualitySwitchUi(true);
+  diag("quality.capture.restart", { previousProfile, nextProfile, generation:state.captureGeneration });
+  stopSession({ preserveWatchIntent:true });
+  try{ resumeWatchRemoteFromGesture(); }catch(_){ }
+  const promise = requestRecordingStart("central", { qualityChange:true });
+  if (promise && typeof promise.finally === "function") promise.finally(() => setQualitySwitchUi(false));
+  else setQualitySwitchUi(false);
+  return true;
 }
 function setQualityProfile(profile, announce = false){
   if (!QUALITY_LAB || !QUALITY_PROFILES[profile]) return false;
-  if (state.saving){ if (announce) toast("Aguarde este replay terminar", "info", 2200); return false; }
+  if (state.saving || state.qualitySwitching || captureStartInProgress()){
+    if (announce) toast(state.saving ? "Aguarde este replay terminar" : "Aguarde a câmera ficar pronta", "info", 2200);
+    return false;
+  }
   const previous = state.qualityProfile;
   state.qualityProfile = normalizeQualityProfile(profile);
   writeQualityPreference(state.qualityProfile);
   syncQualityUI();
-  diag("quality.lab.selected", { previous, qualityProfile:state.qualityProfile, captureUnchanged:true, active:state.active });
-  if (announce) toast(qualityProfileData().label + " selecionada", "info", 2000);
+  const restarted = restartCaptureForQuality(previous);
+  diag("quality.lab.selected", { previous, qualityProfile:state.qualityProfile, captureRestarted:restarted, active:state.active });
+  if (announce && !restarted) toast(qualityProfileData().label + " selecionada", "info", 2000);
   return true;
 }
 function qualityFocusable(){ return [...$("quality-picker").querySelectorAll("button:not(:disabled)")]; }
 function openQualityPicker(){
-  if (!QUALITY_LAB || qualityPickerOpen || durationPickerOpen || !state.active || !$("rec-screen").classList.contains("active")) return false;
+  if (!QUALITY_LAB || qualityPickerOpen || durationPickerOpen || !state.active || state.qualitySwitching || !$("rec-screen").classList.contains("active")) return false;
   if (state.saving){ toast("Aguarde este replay terminar", "info", 2200); return false; }
   qualityReturnFocus = document.activeElement;
   qualityPickerOpen = true;
@@ -1742,7 +1822,7 @@ document.addEventListener("keydown", event => {
   else if (!event.shiftKey && document.activeElement === last){ event.preventDefault(); first.focus(); }
 });
 syncQualityUI();
-diag("quality.lab.mode", { enabled:QUALITY_LAB, qualityProfile:state.qualityProfile, captureUnchanged:true });
+diag("quality.lab.mode", { enabled:QUALITY_LAB, qualityProfile:state.qualityProfile, captureEnabled:QUALITY_LAB });
 /* ---------- confirmação genérica ---------- */
 let confirmFn = null;
   let confirmReturnFocus = null;
@@ -2009,6 +2089,7 @@ function failCaptureFormat(){
 /* ---------- inicio seguro da captura v89 ---------- */
 function normalizeTransientCaptureUi(reason = "capture-start"){
   const durationWasOpen = !!(durationPickerOpen || $("duration-picker").classList.contains("open"));
+  const qualityWasOpen = !!(qualityPickerOpen || $("quality-picker").classList.contains("open"));
   const pairWasOpen = !!(pairOpen || $("pair").classList.contains("open"));
   const confirmWasOpen = $("modal").classList.contains("open");
   if (confirmWasOpen && confirmBusy){
@@ -2023,6 +2104,13 @@ function normalizeTransientCaptureUi(reason = "capture-start"){
     $("chip-dur").setAttribute("aria-expanded", "false");
   }catch(_){}
   try{
+    qualityPickerOpen = false;
+    qualityReturnFocus = null;
+    $("quality-picker").classList.remove("open");
+    $("quality-picker").setAttribute("aria-hidden", "true");
+    $("chip-quality").setAttribute("aria-expanded", "false");
+  }catch(_){}
+  try{
     pairOpen = false;
     pairReturnFocus = null;
     $("pair").classList.remove("open");
@@ -2032,7 +2120,7 @@ function normalizeTransientCaptureUi(reason = "capture-start"){
   if (confirmWasOpen){
     try{ finishConfirm(false, true); }catch(_){}
   }
-  diag("capture.ui.normalized", { reason, durationWasOpen, pairWasOpen, confirmWasOpen });
+  diag("capture.ui.normalized", { reason, durationWasOpen, qualityWasOpen, pairWasOpen, confirmWasOpen });
   return true;
 }
 const CAMERA_OPEN_TIMEOUT_MS = 15000;
@@ -2109,17 +2197,18 @@ function cancelCaptureStart(reason = "user"){
 function requestRecordingStart(source, options = {}){
   if (state.active){
     diag("capture.start.ignored", { source, reason: "already-recording" });
-    return;
+    return null;
   }
   if (captureStartInProgress()){
     cancelCaptureStart("button");
-    return;
+    return null;
   }
   const promise = startRecording(source, options);
   state.captureStartPromise = promise;
   promise.catch(err => diag("capture.start.unhandled", { source, error: err })).finally(() => {
     if (state.captureStartPromise === promise) state.captureStartPromise = null;
   });
+  return promise;
 }
 function clearCameraRecovery(){
   try{ sessionStorage.removeItem(CAMERA_RECOVERY_KEY); }catch(_){}
@@ -2250,7 +2339,9 @@ async function startRecording(source = "duration", options = {}){
     fromReload: !!options.fromReload,
     cancelled: false,
     duration: state.duration,
-    facing: state.facing
+    facing: state.facing,
+    qualityProfile: normalizeQualityProfile(state.qualityProfile),
+    qualityChange: !!options.qualityChange
   };
   state.captureIntent = intent;
   state.lastCaptureIntent = { source: intent.source, recoveryCount: intent.recoveryCount };
@@ -2260,7 +2351,8 @@ async function startRecording(source = "duration", options = {}){
   toast(intent.fromReload ? "Religando a c\u00e2mera\u2026" : "Abrindo a c\u00e2mera\u2026", "info", 0);
   diag("recording.start.begin", {
     intentId: intent.id, source: intent.source, recoveryCount: intent.recoveryCount,
-    active: state.active, saving: state.saving, generation: state.captureGeneration, hasStream: !!state.stream
+    active: state.active, saving: state.saving, generation: state.captureGeneration, hasStream: !!state.stream,
+    qualityProfile: intent.qualityProfile, qualityChange: intent.qualityChange
   });
   updateDurLabels();
   const picked = pickMime();
@@ -2282,7 +2374,8 @@ async function startRecording(source = "duration", options = {}){
     if (!captureIntentCurrent(intent)) break;
     try{
       const opened = await openStream(state.cams[state.camIndex] || undefined, {
-        purpose: "recording-start", maxAttempts: 1, timeoutMs: CAMERA_OPEN_TIMEOUT_MS, intentId: intent.id
+        purpose: "recording-start", maxAttempts: 1, timeoutMs: CAMERA_OPEN_TIMEOUT_MS, intentId: intent.id,
+        qualityProfile: intent.qualityProfile
       });
       if (!captureIntentCurrent(intent)) throw new CameraAttemptCancelledError();
       setCapturePhase("checking", { intentId: intent.id, localAttempt, generation: opened.generation });
@@ -2290,6 +2383,7 @@ async function startRecording(source = "duration", options = {}){
       if (!captureIntentCurrent(intent)) throw new CameraAttemptCancelledError();
 
       state.active = true;
+      syncQualityUI();
       state.everRecorded = true;
       state.cameraPreviouslyWorked = true;
       clearCameraRecovery();
@@ -2300,6 +2394,8 @@ async function startRecording(source = "duration", options = {}){
       startRing();
       requestWakeLock();
       show("rec-screen");
+      if (qualityFallbackActive()) toast("HQ indisponível nesta câmera", "info", 3200);
+      else if (intent.qualityChange) toast(qualityProfileData().label + " ativa", "ok", 2200);
       if (intent.source === "central") releaseCentralPreviewUrls();
       armDim();
       watchCamera();
@@ -2487,7 +2583,8 @@ function getUserMediaWithDeadline(constraints, meta = {}){
   const timeoutMs = Number(meta.timeoutMs || CAMERA_OPEN_TIMEOUT_MS);
   const purpose = meta.purpose || "camera";
   const tryN = Number(meta.tryN || 0);
-  diag("camera.getUserMedia.begin", { openId, tryN, purpose, timeoutMs, explicitDevice: !!(constraints.video && constraints.video.deviceId) });
+  const qualityRequest = meta.qualityRequest || null;
+  diag("camera.getUserMedia.begin", { openId, tryN, purpose, timeoutMs, qualityRequest, explicitDevice: !!(constraints.video && constraints.video.deviceId) });
   let settled = false;
   let timer = null;
   let cancel = null;
@@ -2527,7 +2624,7 @@ function getUserMediaWithDeadline(constraints, meta = {}){
       settled = true;
       detach();
       diag("camera.getUserMedia.resolved", {
-        openId, tryN, purpose, videoTracks: stream.getVideoTracks().length, audioTracks: stream.getAudioTracks().length
+        openId, tryN, purpose, qualityRequest, videoTracks: stream.getVideoTracks().length, audioTracks: stream.getAudioTracks().length
       });
       resolve(stream);
     }, err => {
@@ -2613,6 +2710,24 @@ async function applyWidestZoom(stream){
   }catch(_){ /* sem suporte a zoom: segue com o padrão */ }
 }
 
+function captureVideoConstraints(videoBase, profile){
+  const requested = normalizeQualityProfile(profile);
+  const quality = requested === "high"
+    ? { width:{ ideal:1920 }, height:{ ideal:1080 }, frameRate:{ ideal:60, max:60 } }
+    : { width:{ ideal:1280 }, height:{ ideal:720 }, frameRate:{ ideal:30 } };
+  return Object.assign(quality, videoBase || {});
+}
+function captureConstraintPlan(videoBase, requestedProfile){
+  const requested = QUALITY_LAB ? normalizeQualityProfile(requestedProfile) : "balanced";
+  const plan = [{ profile:requested, video:captureVideoConstraints(videoBase, requested) }];
+  if (requested === "high") plan.push({ profile:"balanced", video:captureVideoConstraints(videoBase, "balanced") });
+  return plan;
+}
+function captureConstraintErrorIsFatal(error, profile){
+  if (isCameraTimeout(error) || isCameraCancelled(error)) return true;
+  if (error && (error.name === "NotAllowedError" || error.name === "SecurityError")) return true;
+  return !!(error && error.name === "NotSupportedError" && profile === "balanced");
+}
 /* Abre uma câmera. Sem argumento: usa facingMode (1ª abertura).
    Com um item de state.cams: abre aquele dispositivo específico. */
 async function openStream(cam, options = {}){
@@ -2620,14 +2735,19 @@ async function openStream(cam, options = {}){
   const maxAttempts = Math.max(1, Number(options.maxAttempts || 2));
   const timeoutMs = Number(options.timeoutMs || CAMERA_OPEN_TIMEOUT_MS);
   const diagOpenAt = performance.now();
+  const requestedQuality = QUALITY_LAB ? normalizeQualityProfile(options.qualityProfile || state.qualityProfile) : "balanced";
   releaseCamera("open.replace");
+  state.captureQualityDelivered = "unknown";
+  state.captureQualitySettings = null;
+  state.captureQualityConstraintProfile = null;
   await sleep(300);                                  // Android: espera a camera ser liberada
 
   const openId = ++state.cameraAttemptSerial;
   state.cameraAttemptId = openId;
   diag("camera.open.begin", {
     openId, intentId: options.intentId || null, purpose, side: cam ? cam.side : state.facing,
-    active: state.active, saving: state.saving, generation: state.captureGeneration, maxAttempts
+    active: state.active, saving: state.saving, generation: state.captureGeneration, maxAttempts,
+    requestedQuality
   });
 
   let mirror = false;
@@ -2642,20 +2762,30 @@ async function openStream(cam, options = {}){
 
   let stream = null;
   let lastErr = null;
+  let selectedQualityRequest = null;
+  const qualityPlan = captureConstraintPlan(videoBase, requestedQuality);
+  let tryN = 0;
   try{
-    for (let tryN = 0; tryN < maxAttempts && !stream; tryN++){
-      try{
-        stream = await getUserMediaWithDeadline({
-          video: Object.assign({ width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, videoBase),
-          audio: true
-        }, { openId, tryN, purpose, timeoutMs });
-      }catch(err){
-        lastErr = err;
-        if (isCameraTimeout(err) || isCameraCancelled(err) ||
-            (err && (err.name === "NotAllowedError" || err.name === "SecurityError" || err.name === "NotSupportedError"))){
-          throw err;
+    for (let planIndex = 0; planIndex < qualityPlan.length && !stream; planIndex++){
+      const candidate = qualityPlan[planIndex];
+      const attemptsForCandidate = candidate.profile === "high" ? 1 : maxAttempts;
+      for (let localTry = 0; localTry < attemptsForCandidate && !stream; localTry++){
+        const currentTry = tryN++;
+        try{
+          stream = await getUserMediaWithDeadline({ video:candidate.video, audio:true }, {
+            openId, tryN:currentTry, purpose, timeoutMs, qualityRequest:candidate.profile
+          });
+          selectedQualityRequest = candidate.profile;
+        }catch(err){
+          lastErr = err;
+          diag("quality.capture.constraintError", { openId, requestedQuality, constraintProfile:candidate.profile, planIndex, localTry, error:err });
+          if (captureConstraintErrorIsFatal(err, candidate.profile)) throw err;
+          const hasAnotherTry = localTry + 1 < attemptsForCandidate || planIndex + 1 < qualityPlan.length;
+          if (hasAnotherTry) await sleep(500);
         }
-        if (tryN + 1 < maxAttempts) await sleep(500);
+      }
+      if (!stream && candidate.profile === "high" && planIndex + 1 < qualityPlan.length){
+        diag("quality.capture.constraintFallback", { openId, requestedQuality, from:"high", to:"balanced", error:lastErr });
       }
     }
     if (!stream) throw lastErr || new Error("camera");
@@ -2673,13 +2803,18 @@ async function openStream(cam, options = {}){
       throw new CameraAttemptCancelledError();
     }
 
-    try{
-      const settings = stream.getVideoTracks()[0].getSettings();
-      diag("camera.stream.acquired", {
-        openId, elapsedMs: Math.round(performance.now() - diagOpenAt),
-        width: settings.width, height: settings.height, frameRate: settings.frameRate, facingMode: settings.facingMode
-      });
-    }catch(_){}
+    let captureSettings = {};
+    try{ captureSettings = stream.getVideoTracks()[0].getSettings() || {}; }catch(_){ captureSettings = {}; }
+    const deliveredQuality = updateCaptureQualityState(captureSettings, {
+      requestedProfile:requestedQuality,
+      constraintProfile:selectedQualityRequest
+    });
+    diag("camera.stream.acquired", {
+      openId, elapsedMs: Math.round(performance.now() - diagOpenAt),
+      width: deliveredQuality.captureWidth, height: deliveredQuality.captureHeight,
+      frameRate: deliveredQuality.captureFrameRate, facingMode: captureSettings.facingMode,
+      requestedQuality, selectedQualityRequest, deliveredQuality:deliveredQuality.qualityDelivered
+    });
 
     const syncCameraList = async () => {
       try{
@@ -2824,21 +2959,22 @@ function fragmentVideoStartKey(a){
   return null
 }
 function settleFlush(force=false){const keep=[];for(const x of state.flushWaiters){if(force||state.processedEventSerial>=x.target){clearTimeout(x.timer);x.resolve()}else keep.push(x)}state.flushWaiters=keep}
-const MAX_KEYFRAME_LOOKBACK_SECONDS=90,MAX_CAPTURE_BUFFER_BYTES=40*1024*1024;
+const MAX_KEYFRAME_LOOKBACK_SECONDS=90,MAX_CAPTURE_BUFFER_BYTES=40*1024*1024,MAX_CAPTURE_BUFFER_BYTES_HIGH=80*1024*1024;
+function captureBufferByteLimit(){return state.captureQualityDelivered==="high"?MAX_CAPTURE_BUFFER_BYTES_HIGH:MAX_CAPTURE_BUFFER_BYTES}
 function updateBuffer(){
   const a=state.fragments[0],b=state.fragments[state.fragments.length-1];
   state.bufferSeconds=a&&b?Math.max(0,(b.endAt-a.startAt)/1000):0;
   state.bufferBytes=state.fragments.reduce((sum,fragment)=>sum+(fragment.bytes?fragment.bytes.byteLength:0),0)
 }
 function bufferLimitReason(){
-  if(state.bufferBytes>MAX_CAPTURE_BUFFER_BYTES)return"bytes";
+  if(state.bufferBytes>captureBufferByteLimit())return"bytes";
   if(state.bufferSeconds>state.duration+MAX_KEYFRAME_LOOKBACK_SECONDS)return"time";
   return""
 }
 function scheduleBufferLimitRecovery(reason,delayMs=0){
   if(state.bufferLimitRecoveryPending)return;
   state.bufferLimitRecoveryPending=true;
-  diag("buffer.limit.scheduled",{reason,delayMs,fragments:state.fragments.length,bufferSeconds:Number(state.bufferSeconds.toFixed(2)),bufferBytes:state.bufferBytes,maxSeconds:state.duration+MAX_KEYFRAME_LOOKBACK_SECONDS,maxBytes:MAX_CAPTURE_BUFFER_BYTES});
+  diag("buffer.limit.scheduled",{reason,delayMs,fragments:state.fragments.length,bufferSeconds:Number(state.bufferSeconds.toFixed(2)),bufferBytes:state.bufferBytes,maxSeconds:state.duration+MAX_KEYFRAME_LOOKBACK_SECONDS,maxBytes:captureBufferByteLimit()});
   const attempt=()=>{
     if(state.saving){setTimeout(attempt,500);return}
     state.bufferLimitRecoveryPending=false;
@@ -2933,14 +3069,20 @@ async function ingestChunk(blob,generation){
   diag("fragment.ingested", { generation, chunkBytes: a.byteLength, moofs: moofs.length, keyStarts: moofs.length?state.fragments.slice(-moofs.length).map(x=>x.videoStartKey):[], fragments: state.fragments.length, bufferSeconds: Number(state.bufferSeconds.toFixed(2)), bufferBytes: state.bufferBytes });
 }
 const RECORDER_TIMESLICE_MS=1000;
+function recorderVideoBitrateForCurrentCapture(){
+  const effectiveProfile = state.captureQualityDelivered === "high" ? "high" : "balanced";
+  return QUALITY_PROFILES[effectiveProfile].videoBitsPerSecond;
+}
 function makeRecorder(stream){
-  const baseOptions={videoBitsPerSecond:2500000,mimeType:state.mime},requestedOptions={...baseOptions};
+  const videoBitsPerSecond=recorderVideoBitrateForCurrentCapture();
+  state.captureVideoBitrateRequested=videoBitsPerSecond;
+  const baseOptions={videoBitsPerSecond,mimeType:state.mime},requestedOptions={...baseOptions};
   let optionRead=false;
   Object.defineProperty(requestedOptions,"videoKeyFrameIntervalDuration",{enumerable:true,get(){optionRead=true;return RECORDER_TIMESLICE_MS}});
   try{
     const recorder=new MediaRecorder(stream,requestedOptions);
     state.keyframeOptionRead=optionRead;state.keyframeRequestMode="requested";
-    diag("recorder.keyframeOption",{mode:"requested",optionRead,intervalMs:RECORDER_TIMESLICE_MS});
+    diag("recorder.keyframeOption",{mode:"requested",optionRead,intervalMs:RECORDER_TIMESLICE_MS,videoBitsPerSecond});
     return recorder
   }catch(optionError){
     state.keyframeOptionRead=optionRead;
@@ -2952,6 +3094,7 @@ function makeRecorder(stream){
     }catch(secondError){
       try{
         const recorder=new MediaRecorder(stream,{mimeType:state.mime});
+        state.captureVideoBitrateRequested=null;
         state.keyframeRequestMode="fallback-mime";
         return recorder
       }catch(_){
@@ -2990,7 +3133,7 @@ function startCaptureRecorder(){
   };
   try{
     rec.start(RECORDER_TIMESLICE_MS);state.lastChunkAt=Date.now();
-    diag("recorder.started", { generation: gen, mime: rec.mimeType || state.mime, keyframeRequestMode: state.keyframeRequestMode, keyframeOptionRead: state.keyframeOptionRead });
+    diag("recorder.started", { generation: gen, mime: rec.mimeType || state.mime, keyframeRequestMode: state.keyframeRequestMode, keyframeOptionRead: state.keyframeOptionRead, videoBitsPerSecondRequested:state.captureVideoBitrateRequested, videoBitsPerSecondActual:qualityMetric(rec.videoBitsPerSecond,true) });
   }catch(err){
     diag("recorder.start.error", { generation: gen, error: err });
     throw err;
@@ -3164,7 +3307,7 @@ $("btn-flip").onclick = async () => {
 
   try{
     await openStream(cam, { purpose: "camera-flip", maxAttempts: 2 });
-    toast(camName(cam) + " ativa", "info", 2200);
+    toast(qualityFallbackActive() ? "HQ indisponível nesta câmera" : camName(cam) + " ativa", "info", qualityFallbackActive() ? 3200 : 2200);
     watchCamera();
     sentinelStart();
   }catch(err){
