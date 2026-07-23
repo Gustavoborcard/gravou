@@ -156,6 +156,7 @@ html[data-home-intro="long"] #s-home.home-intro-pending .home-brand-wordmark{opa
 @keyframes home-long-version-in{from{opacity:0}to{opacity:.7}}
 @media (max-height:620px){html[data-home-intro="long"] #s-home.home-intro-pending .home-brand{transform:translateY(92px)}#s-home.home-intro-long .home-brand{animation-name:home-long-settle-compact}@keyframes home-long-settle-compact{0%,82%{transform:translateY(92px)}100%{transform:translateY(0)}}}
 @media (prefers-reduced-motion:reduce){html[data-home-intro="long"] #s-home.home-intro-pending .home-brand{transform:none!important}html[data-home-intro="long"] #s-home.home-intro-pending .home-symbol-wrap{transform:none!important}#s-home.home-intro-long .home-brand,#s-home.home-intro-long .home-symbol-wrap,#s-home.home-intro-long .home-brand-spinner,#s-home.home-intro-long .home-brand-stroke,#s-home.home-intro-long .home-brand-wordmark,#s-home.home-intro-long .home-splash-line,#s-home.home-intro-long .home-body,#s-home.home-intro-long .home-version{animation:none!important}#s-home .home-splash-line{opacity:0!important}}
+#s-home.home-intro-final .home-body{pointer-events:auto}
 /* ---- FIM FASE 3: ANIMACAO LONGA ---- */
 .eyebrow{font-size:12px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--text-dim);margin-bottom:14px}
 .tagline{color:var(--text);font-size:17px;line-height:1.5;max-width:300px;margin-top:14px}
@@ -737,7 +738,7 @@ a{color:var(--accent)}
       <p class="hint home-hint">É só abrir, gravar e usar.</p>
       <button class="link-btn" id="b-remote">Usar este dispositivo como controle</button>
     </div>
-    <p class="home-version" id="ver-label">v2.24</p>
+    <p class="home-version" id="ver-label">v2.25</p>
   </div>
 </section>
 
@@ -1181,7 +1182,7 @@ if (typeof module === "object" && typeof module.exports === "object") Object.ass
    O histórico é circular, limitado e persiste após uma atualização. */
 const GRAVEI_DIAG = (() => {
   const KEY = "gravei-diagnostic-v1";
-  const VERSION = "v2.24";
+  const VERSION = "v2.25";
   const MAX_EVENTS = 500;
   const MAX_CHARS = 180000;
   const session = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
