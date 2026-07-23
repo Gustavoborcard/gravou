@@ -92,26 +92,27 @@ body{
 /* ---- FIM FASE 1: HOME ESTATICA ---- */
 /* ---- FASE 2: ANIMACAO CURTA ---- */
 #s-home .home-body{width:100%;display:flex;flex-direction:column;align-items:center;flex-shrink:0}
+#s-home .home-brand-symbol{overflow:visible}
 #s-home .home-brand-spinner{transform-origin:12px 12px;transform-box:view-box}
 #s-home .home-brand-center-dot{transform-origin:center;transform-box:fill-box}
-#s-home.home-intro-pending .home-brand,#s-home.home-intro-short .home-brand{transform:translateY(104px)}
+
 #s-home.home-intro-pending .home-brand-symbol,#s-home.home-intro-short .home-brand-symbol{transform:scaleY(-1) scale(1.18)}
 #s-home.home-intro-pending .home-brand-stroke,#s-home.home-intro-short .home-brand-stroke{opacity:0}
 #s-home.home-intro-pending .home-brand-wordmark,#s-home.home-intro-short .home-brand-wordmark{opacity:0;transform:translateY(4px)}
 #s-home.home-intro-pending .home-body,#s-home.home-intro-short .home-body{opacity:0;transform:translateY(10px);pointer-events:none}
 #s-home.home-intro-pending .home-version,#s-home.home-intro-short .home-version{opacity:0;pointer-events:none}
-#s-home.home-intro-short .home-brand{animation:home-short-settle 1.72s cubic-bezier(.2,.7,.25,1) both}
+
 #s-home.home-intro-short .home-brand-symbol{animation:home-short-symbol-size 1.72s cubic-bezier(.2,.7,.25,1) both}
-#s-home.home-intro-short .home-brand-spinner{animation:home-short-spin 1.18s cubic-bezier(.16,.7,.3,1) .26s both}
+#s-home.home-intro-short .home-brand-spinner{animation:home-short-spin 1.35s cubic-bezier(.16,.7,.3,1) .26s both}
 #s-home.home-intro-short .home-brand-stroke{animation:home-short-stroke-in .24s ease-out .26s both}
 
 #s-home.home-intro-short .home-brand-wordmark{animation:home-short-wordmark .38s ease-out 1.22s both}
 #s-home.home-intro-short .home-body{animation:home-short-home-in .40s ease-out 1.48s both}
 #s-home.home-intro-short .home-version{animation:home-short-version-in .28s ease-out 1.58s both}
-@keyframes home-short-spin{0%{transform:rotate(-371deg)}82%{transform:rotate(5deg)}100%{transform:rotate(0)}}
+@keyframes home-short-spin{0%{transform:rotate(-371deg)}74%{transform:rotate(6deg)}82%{transform:rotate(6deg)}100%{transform:rotate(0)}}
 @keyframes home-short-stroke-in{from{opacity:0}to{opacity:1}}
 
-@keyframes home-short-settle{0%,68%{transform:translateY(104px)}100%{transform:translateY(0)}}
+
 @keyframes home-short-symbol-size{0%,68%{transform:scaleY(-1) scale(1.18)}100%{transform:scaleY(-1) scale(1)}}
 @keyframes home-short-wordmark{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 @keyframes home-short-home-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
