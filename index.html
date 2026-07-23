@@ -92,9 +92,10 @@ body{
 /* ---- FIM FASE 1: HOME ESTATICA ---- */
 /* ---- FASE 2: ANIMACAO CURTA ---- */
 #s-home .home-body{width:100%;display:flex;flex-direction:column;align-items:center;flex-shrink:0}
-#s-home .home-brand-symbol{overflow:visible}
+#s-home .home-brand-symbol{overflow:visible;transform-origin:12px 12px;transform-box:view-box}
+#s-home .home-brand-wordmark{overflow:visible}
 #s-home .home-brand-spinner{transform-origin:12px 12px;transform-box:view-box}
-#s-home .home-brand-center-dot{transform-origin:center;transform-box:fill-box}
+#s-home .home-brand-center-dot{transform:none;transform-origin:12px 12px;transform-box:view-box}
 
 #s-home.home-intro-pending .home-brand-symbol,#s-home.home-intro-short .home-brand-symbol{transform:scaleY(-1) scale(1.18)}
 #s-home.home-intro-pending .home-brand-stroke,#s-home.home-intro-short .home-brand-stroke{opacity:0}
